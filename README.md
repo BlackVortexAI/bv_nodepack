@@ -62,9 +62,11 @@ A config-driven carrier node that forwards one pipe connection while exposing na
 - Lets you override individual slots, while everything else passes through
 
 **Override example**
+
 ![BV Pipe Override](docs/screenshots/bv_pipe_override.png)
 
 **Subgraph example**
+
 ![BV Pipe Subgraph](docs/screenshots/bv_pipe_subgraph.png)
 
 ---
