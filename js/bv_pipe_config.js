@@ -16,8 +16,6 @@ app.registerExtension({
     };
 
     node.widgets?.forEach(hook);
-
-    // initial propagate after load
     defer(() => propagateFrom(node));
   },
 });

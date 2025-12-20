@@ -16,6 +16,6 @@ Documentation = "https://github.com/BlackVortexAI/bv_nodepack/wiki"
 
 
 [tool.comfy]
-PublisherId = "BlackVortexAI"
+PublisherId = "blackvortex"
 DisplayName = "BV-NodePack"
 Icon = ""

@@ -8,19 +8,9 @@ import {
   updatePipeNodeUI,
 } from "./bv_pipe_shared.js";
 
-/**
- * Returns true if the node has NO connections at all.
- * We use this to "collapse" new nodes to only the pipe input/output,
- * but do NOT touch nodes loaded from a workflow that already have links.
- */
-function isCompletelyUnconnected(node) {
-  // Any input linked?
-  const hasInputLinks = (node.inputs || []).some((inp) => inp?.link != null);
-
-  // Any output linked?
-  const hasOutputLinks = (node.outputs || []).some((out) => (out?.links?.length || 0) > 0);
-
-  return !hasInputLinks && !hasOutputLinks;
+function hasAnyRealConfig(node) {
+  const cfg = resolveCfgByPipeLinksNoCache(node) || getCfgFromNodeWithFallback(node);
+  return !!cfg && (cfg.count ?? 0) > 0;
 }
 
 app.registerExtension({
@@ -28,30 +18,25 @@ app.registerExtension({
   async nodeCreated(node) {
     if (node.comfyClass !== "BV Pipe") return;
 
-    // 1) Immediately collapse NEW nodes (no connections) to only show pipe in/out
-    //    This runs after the node is created so we can inspect connections safely.
+    // Collapse if we cannot resolve a config (important for subgraphs where pipe is connected to a bridge)
     defer(() => {
-      if (isCompletelyUnconnected(node)) {
-        // shrink to 0 dynamic slots -> leaves only "pipe" input/output
+      const cfg = resolveCfgByPipeLinksNoCache(node) || getCfgFromNodeWithFallback(node);
+
+      if (!cfg) {
+        // no cfg resolved yet -> collapse to only pipe in/out
         updatePipeNodeUI(node, { namesRaw: "", names: [], count: 0 });
+      } else {
+        updatePipeNodeUI(node, cfg);
       }
     });
 
-    // 2) Initial apply on workflow load:
-    //    - If connected, prefer resolving upstream config.
-    //    - If disconnected but cached, use fallback.
-    defer(async () => {
-      const cfg = resolveCfgByPipeLinksNoCache(node) || getCfgFromNodeWithFallback(node);
-      if (cfg) updatePipeNodeUI(node, cfg);
-    });
-
-    // 3) Refresh on pipe connect
+    // refresh on pipe connect / changes (still useful outside subgraphs)
     const orig = node.onConnectionsChange;
     node.onConnectionsChange = function (type, index, connected, link_info) {
       orig?.call(this, type, index, connected, link_info);
 
       // pipe input is index 0
-      if (type === 1 && index === 0 && connected) {
+      if (type === 1 && index === 0) {
         defer(() => refreshPipeNodeFromUpstream(node));
       }
     };
