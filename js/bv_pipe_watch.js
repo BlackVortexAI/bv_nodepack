@@ -1,76 +1,46 @@
 // bv_pipe_watch.js
 import { app } from "../../scripts/app.js";
-import { defer, refreshPipeNodeFromUpstream } from "./bv_pipe_shared.js";
-
-function getAllNodes(graph) {
-  return graph?._nodes || graph?.nodes || [];
-}
-
-function installGraphWatcher(graph) {
-  if (!graph || graph.__bv_pipe_watch_installed) return;
-  graph.__bv_pipe_watch_installed = true;
-
-  let scheduled = false;
-
-  const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-
-    defer(() => {
-      scheduled = false;
-
-      // refresh all BV Pipe nodes in this graph
-      for (const n of getAllNodes(graph)) {
-        if (n?.comfyClass === "BV Pipe") {
-          refreshPipeNodeFromUpstream(n);
-        }
-      }
-    });
-  };
-
-  const origAfter = graph.onAfterChange;
-  graph.onAfterChange = function (...args) {
-    try { origAfter?.apply(this, args); } catch (e) {}
-    schedule();
-  };
-
-  const origChange = graph.onChange;
-  graph.onChange = function (...args) {
-    try { origChange?.apply(this, args); } catch (e) {}
-    schedule();
-  };
-
-  // run once
-  schedule();
-}
+import { defer, refreshAllPipesEverywhere, isGraphLike } from "./bv_pipe_shared.js";
 
 app.registerExtension({
   name: "bv_nodepack.bv_pipe_watch",
   async setup() {
-    installGraphWatcher(app.graph);
-
-    // `app.graph` changes when entering/leaving subgraphs -> hook the active graph too
-    let lastGraph = app.graph;
+    const lastVer = new WeakMap();
+    let lastGraph = null;
 
     setInterval(() => {
       const g = app.graph;
       if (!g) return;
 
+      // On graph switch (enter/exit subgraph) do a global refresh once
       if (g !== lastGraph) {
         lastGraph = g;
-        installGraphWatcher(g);
-
-        // immediate refresh when switching graphs
-        defer(() => {
-          for (const n of getAllNodes(g)) {
-            if (n?.comfyClass === "BV Pipe") {
-              refreshPipeNodeFromUpstream(n);
-            }
-          }
-        });
-      } else {
-        installGraphWatcher(g);
+        defer(() => refreshAllPipesEverywhere(g));
       }
-    }, 500);
+
+      // Detect link changes even if onChange hooks are not reliable
+      const v = typeof g._version === "number" ? g._version : null;
+      const prev = lastVer.get(g);
+
+      if (v != null && prev !== v) {
+        lastVer.set(g, v);
+        defer(() => refreshAllPipesEverywhere(g));
+      } else if (v == null && prev == null) {
+        // fallback if _version not present
+        lastVer.set(g, 1);
+        defer(() => refreshAllPipesEverywhere(g));
+      }
+
+      // Optional: if some builds store a root pointer, refresh that too
+      const root = g?._root;
+      if (root && isGraphLike(root)) {
+        const vr = typeof root._version === "number" ? root._version : null;
+        const pr = lastVer.get(root);
+        if (vr != null && pr !== vr) {
+          lastVer.set(root, vr);
+          defer(() => refreshAllPipesEverywhere(root));
+        }
+      }
+    }, 250);
   },
 });

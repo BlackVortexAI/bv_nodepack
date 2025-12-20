@@ -19,14 +19,26 @@ function getGraphFromNode(node) {
 
 /**
  * Root graph capture:
- * Used for locating subgraph container nodes when the subgraph implementation
- * does not provide a direct parent pointer.
+ * used for scanning container/subgraphs when no parent pointers exist.
  */
 const ROOT_GRAPH =
   window.__BV_PIPE_ROOT_GRAPH || (window.__BV_PIPE_ROOT_GRAPH = app.graph);
 
 // Cache: innerGraph -> { parentNode, parentGraph }
 const PARENT_CACHE = new WeakMap();
+
+// GraphId cache (critical): graphs need stable unique IDs for visited keys
+const GRAPH_ID = new WeakMap();
+let GRAPH_ID_SEQ = 1;
+function getGraphId(graph) {
+  if (!graph || typeof graph !== "object") return 0;
+  let id = GRAPH_ID.get(graph);
+  if (!id) {
+    id = GRAPH_ID_SEQ++;
+    GRAPH_ID.set(graph, id);
+  }
+  return id;
+}
 
 function getAllNodes(graph) {
   return graph?._nodes || graph?.nodes || [];
@@ -50,9 +62,9 @@ export function getConfigFromConfigNode(cfgNode) {
   return { namesRaw, names, count: names.length };
 }
 
-// ---------- subgraph parent discovery (robust) ----------
+// ---------- graph/subgraph utilities (exported global refresh uses these) ----------
 
-function isGraphLike(obj) {
+export function isGraphLike(obj) {
   if (!obj || typeof obj !== "object") return false;
   const hasNodes = Array.isArray(obj._nodes) || Array.isArray(obj.nodes);
   const hasLinks = obj.links && typeof obj.links === "object";
@@ -60,10 +72,6 @@ function isGraphLike(obj) {
   return hasNodes && hasLinks && hasGetNodeById;
 }
 
-/**
- * Recursively collect any graph-like objects reachable from `root`.
- * This catches subgraph implementations that store inner graphs in node.properties.* etc.
- */
 function collectGraphsDeep(root, maxDepth = 3) {
   const found = new Set();
   const seen = new Set();
@@ -140,9 +148,7 @@ function getParentRefForSubGraph(subGraph) {
   const cached = PARENT_CACHE.get(subGraph);
   if (cached) return cached;
 
-  // Scan from both root and current active graph (safe)
   const candidates = [ROOT_GRAPH, app.graph].filter(Boolean);
-
   for (const start of candidates) {
     const found = findParentByScanning(start, subGraph);
     if (found) {
@@ -152,6 +158,39 @@ function getParentRefForSubGraph(subGraph) {
   }
 
   return null;
+}
+
+/**
+ * Exported: refresh ALL BV Pipe nodes across the whole workflow,
+ * including nested subgraphs.
+ */
+export function refreshAllPipesEverywhere(startGraph) {
+  const root = (startGraph && isGraphLike(startGraph)) ? startGraph : ROOT_GRAPH || app.graph;
+  if (!root) return;
+
+  const visitedGraphs = new Set();
+  const queue = [root];
+
+  while (queue.length) {
+    const g = queue.shift();
+    if (!g || visitedGraphs.has(g)) continue;
+    visitedGraphs.add(g);
+
+    const nodes = getAllNodes(g);
+
+    // refresh BV Pipe in this graph
+    for (const n of nodes) {
+      if (n?.comfyClass === "BV Pipe") {
+        refreshPipeNodeFromUpstream(n);
+      }
+    }
+
+    // enqueue nested subgraphs
+    for (const n of nodes) {
+      const inner = getInnerGraphFromNode(n);
+      if (inner && !visitedGraphs.has(inner)) queue.push(inner);
+    }
+  }
 }
 
 // ---------- link helpers ----------
@@ -174,13 +213,6 @@ function getUpstreamByInput(node, inputIndex) {
   };
 }
 
-/**
- * Jump from a subgraph "graph input" (origin_id negative, e.g. -10) to the parent graph origin node.
- * Uses:
- * - parent container node input named "pipe" if present (most robust)
- * - else index = subInputIndex
- * - else index = 0
- */
 function jumpFromSubgraphGraphInputToParentOrigin(subGraph, subInputIndex) {
   const parentRef = getParentRefForSubGraph(subGraph);
   if (!parentRef) return null;
@@ -209,7 +241,7 @@ export function resolveCfgByPipeLinksNoCache(node, visited = new Set()) {
   if (!node) return null;
 
   const g = getGraphFromNode(node);
-  const vkey = `${String(g)}:${node.id}`;
+  const vkey = `${getGraphId(g)}:${node.id}`;
   if (visited.has(vkey)) return null;
   visited.add(vkey);
 
@@ -217,16 +249,14 @@ export function resolveCfgByPipeLinksNoCache(node, visited = new Set()) {
     return getConfigFromConfigNode(node);
   }
 
-  // Follow pipe input[0] upstream
   const up = getUpstreamByInput(node, 0);
   if (!up) return null;
 
-  // Normal case: origin exists in this graph
   if (up.originNode) {
     return resolveCfgByPipeLinksNoCache(up.originNode, visited);
   }
 
-  // Subgraph graph-input case (origin_id negative -> no originNode)
+  // subgraph graph-input case (origin_id negative -> no originNode)
   const jumped = jumpFromSubgraphGraphInputToParentOrigin(up.graph, up.originSlot);
   if (!jumped) return null;
 
@@ -237,7 +267,7 @@ export function getCfgFromNodeWithFallback(node) {
   return resolveCfgByPipeLinksNoCache(node) || node.__pipe_cfg || null;
 }
 
-// ---------- safe remove helpers (graph-aware) ----------
+// ---------- safe remove helpers ----------
 
 function removeInputSafely(node, index) {
   const graph = getGraphFromNode(node);
@@ -331,7 +361,7 @@ export function updatePipeNodeUI(pipeNode, cfg) {
   pipeNode.setDirtyCanvas(true, true);
 }
 
-// ---------- propagation (same-graph) ----------
+// ---------- propagation (same-graph only) ----------
 
 export function propagateFrom(startNode) {
   const graph = getGraphFromNode(startNode);
