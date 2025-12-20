@@ -1,94 +1,92 @@
-# 🌀 BV Pipe Nodes (ComfyUI)
+# BV Node Pack (ComfyUI)
 
-This node pack introduces a **config-driven “pipe”** concept for ComfyUI.
-A *pipe* is a single connection that can carry **up to 100 values** (any type), identified by **user-defined names**.
+A small collection of quality-of-life nodes for ComfyUI.
 
-The goal is to keep graphs clean: instead of wiring many individual lines, you can pass a single `pipe` and still access named slots.
-
----
-
-## Included Nodes
-
-### 🌀 BV Pipe Config
-**Node key:** `BV Pipe Config`
-Creates a new pipe configuration (slot names).
-
-**Inputs**
-- `names` *(STRING, multiline)*
-  One slot name per line.
-  - Empty lines are ignored
-  - Commas are treated like new lines
-  - Max: 100 names
-
-**Outputs**
-- `pipe` *(BV_PIPE)*
-  A pipe object containing:
-  - `_cfg.names_raw` (original text)
-  - `_cfg.names` (parsed list of names)
-  - `items` (values list)
-  - `map` (name → value)
-
-**Notes**
-- The number of *active slots* equals the number of non-empty lines in `names`.
+> ⚠️ Note: This pack includes UI logic (JavaScript) for dynamic node updates (also works in Subgraphs/Subflows).
 
 ---
 
-### 🌀 BV Pipe
-**Node key:** `BV Pipe`
-**Category:** `🌀 BV Node Pack/pipe`
+## Installation
 
-A dynamic “carrier” node that provides:
-- `pipe` input/output (forwarded)
-- up to **100 optional inputs** (`v_001` … `v_100`)
-- up to **100 outputs** (`out_001` … `out_100`)
+Clone into your ComfyUI `custom_nodes` folder:
 
-The **UI is driven by the connected pipe config**:
-- Only as many slots as configured are shown.
-- Slot labels are taken from `BV Pipe Config` lines.
+```bash
+cd ComfyUI/custom_nodes
+git clone <YOUR_REPO_URL> bv_node_pack
+```
 
-**Inputs**
-- `pipe` *(BV_PIPE)*
-  The incoming pipe.
-- `v_001` … `v_100` *(ANY, optional)*
-  Optional overrides for the corresponding slot.
+Restart ComfyUI and (if needed) hard refresh the browser: **Ctrl+F5**
 
-**Outputs**
-- `pipe` *(BV_PIPE)*
-  Updated pipe containing final values.
-- `out_001` … `out_100` *(ANY)*
-  Mirrors the final resolved values.
+### Uninstall
+- Delete the folder in `custom_nodes`
+- Hard refresh the browser (Ctrl+F5)
 
 ---
 
-## Behavior Details
+## Update
 
-### Slot naming / labels
-- Internal socket names stay stable:
-  - Inputs: `v_001` … `v_100`
-  - Outputs: `out_001` … `out_100`
-- Only the **visible label** changes to your configured names.
-- This keeps ComfyUI validation stable and preserves “optional input” behavior.
+```bash
+cd ComfyUI/custom_nodes/bv_node_pack
+git pull
+```
 
-### Passthrough logic
-For each configured slot `i`:
-- If the input `v_###` is connected/provided → it **overrides** the value.
-- Otherwise the node **passes through** the value from the upstream pipe (`pipe.items[i]`).
-
-This makes chaining pipes possible:
-
-`BV Pipe Config → BV Pipe → BV Pipe → ...`
-
-The values continue downstream unless explicitly overridden.
-
-### Collapsed by default (optional UI behavior)
-If you implemented the “collapsed new node” behavior in JS:
-- A newly created `BV Pipe` node starts with only `pipe in/out` visible.
-- Once a pipe config is connected, it expands to the configured slots.
+Restart ComfyUI (recommended).
 
 ---
 
-## Recommended Usage
+## Nodes / Features
 
-### 1) Create a configuration
-1. Add **🌀 BV Pipe Config**
-2. Enter slot names, one per line, e.g.
+### BV Pipe Config
+Defines the slot layout (names) for a BV Pipe.
+
+![BV Pipe Config](docs/screenshots/bv_pipe_config.png)
+
+**What it does**
+- Define slot names (1 per line, max 100)
+- Outputs a single `BV_PIPE` object ("the pipe") used downstream
+
+**How to use**
+1. Add **BV Pipe Config**
+2. Enter slot names (one per line)
+3. Connect its `pipe` output to **BV Pipe**
+
+---
+
+### BV Pipe
+A config-driven carrier node that forwards one pipe connection while exposing named slots.
+
+![BV Pipe Connected](docs/screenshots/bv_pipe_connected.png)
+
+**What it does**
+- Shows only the slots defined by the connected **BV Pipe Config**
+- Lets you override individual slots, while everything else passes through
+
+**Override example**
+![BV Pipe Override](docs/screenshots/bv_pipe_override.png)
+
+**Subgraph example**
+![BV Pipe Subgraph](docs/screenshots/bv_pipe_subgraph.png)
+
+---
+
+## Quick Start (Pipe)
+
+1. Add **BV Pipe Config** and enter names, e.g.:
+
+```txt
+model
+clip
+vae
+seed
+prompt
+```
+
+2. Connect: `BV Pipe Config (pipe)` → `BV Pipe (pipe)`
+
+3. Optional: connect something to a slot input to override only that slot.
+
+---
+
+## Notes
+- Pipes update dynamically (including Subgraphs/Subflows).
+- Slot socket IDs stay stable internally (`v_001…v_100`, `out_001…out_100`) while labels come from your config.
