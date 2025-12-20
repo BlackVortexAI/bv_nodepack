@@ -1,6 +1,6 @@
 [project]
 name = "bv_nodepack"
-version = "0.0.2"
+version = "0.0.3"
 description = "Collection of supply nodes (pipes, etc.) for better workflow management."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
