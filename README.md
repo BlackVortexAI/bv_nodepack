@@ -82,6 +82,12 @@ Designed to work well inside **Subgraphs/Subflows**: when exposed, the header is
 
 ![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading_subgraph.png)
 
+**Change Header text**
+
+Click on the header to change the text.
+
+![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading_edit.png)
+
 **Inputs**
 - `value` (STRING) — the header text
 - `font_size` (INT) — font size used for rendering
@@ -114,6 +120,12 @@ A UI-only spacer node to add vertical whitespace in your graph or inside Subgrap
 
 ![BV Spacer](docs/screenshots/bv_spacer_subgraph.png)
 
+**Change Spacer height**
+
+Click on the spacer to change the height.
+
+![BV Spacer](docs/screenshots/bv_spacer_edit.png)
+
 **Inputs**
 - `height` (INT) — spacer height in pixels
 - `scale` (FLOAT, optional) — multiplier for the height (useful for quick global spacing adjustments)
@@ -137,6 +149,12 @@ A UI-only divider node that draws a horizontal line to visually separate section
 ![BV Divider](docs/screenshots/bv_divider_in_subgraph.png)
 
 ![BV Divider](docs/screenshots/bv_divider_subgraph.png)
+
+**Change Divide thickness**
+
+Click on the divider to change the thickness.
+
+![BV Divider](docs/screenshots/bv_divider_edit.png)
 
 **Inputs**
 - `thickness` (INT) — line thickness
