@@ -358,6 +358,27 @@ function jumpFromParentToSubgraphOutputOrigin(parentNode, parentSlotIndex) {
   return null;
 }
 
+function fallbackDirectMappedCfgFromInnerGraph(parentNode) {
+  const innerGraph = getInnerGraphFromNode(parentNode);
+  if (!innerGraph) return null;
+
+  const nodes = getAllNodes(innerGraph);
+
+  // Your observed case: subgraph contains ONLY the BV Pipe Config node
+  if (nodes.length === 1 && nodes[0]?.comfyClass === "BV Pipe Config") {
+    return { node: nodes[0], graph: innerGraph };
+  }
+
+  // Slightly more permissive fallback: if there is exactly one config node inside, use it
+  const cfgNodes = nodes.filter(n => n?.comfyClass === "BV Pipe Config");
+  if (cfgNodes.length === 1) {
+    return { node: cfgNodes[0], graph: innerGraph };
+  }
+
+  return null;
+}
+
+
 // ---------- config resolution ----------
 
 export function resolveCfgByPipeLinksNoCache(node, visited = new Set()) {
@@ -384,16 +405,23 @@ export function resolveCfgByPipeLinksNoCache(node, visited = new Set()) {
   }
 
   if (up.originNode) {
-    // If originNode is a Subgraph, jump into it to find the source of the config
-    const inner = getInnerGraphFromNode(up.originNode);
-    if (inner) {
-        const jumped = jumpFromParentToSubgraphOutputOrigin(up.originNode, up.originSlot);
-        if (jumped) {
-            return resolveCfgByPipeLinksNoCache(jumped.node, visited);
-        }
+  // If originNode is a Subgraph/container, jump into it to find the source of the config
+  const inner = getInnerGraphFromNode(up.originNode);
+  if (inner) {
+    const jumped = jumpFromParentToSubgraphOutputOrigin(up.originNode, up.originSlot);
+    if (jumped) {
+      return resolveCfgByPipeLinksNoCache(jumped.node, visited);
     }
-    return resolveCfgByPipeLinksNoCache(up.originNode, visited);
+
+    // ✅ Fallback for "direct mapped" subgraphs (like your 1-node BV Pipe Config subgraph)
+    const direct = fallbackDirectMappedCfgFromInnerGraph(up.originNode);
+    if (direct) {
+      return resolveCfgByPipeLinksNoCache(direct.node, visited);
+    }
   }
+
+  return resolveCfgByPipeLinksNoCache(up.originNode, visited);
+}
 
   // subgraph graph-input case (origin_id negative -> no originNode)
   const jumped = jumpFromSubgraphGraphInputToParentOrigin(up.graph, up.originSlot);
