@@ -72,6 +72,87 @@ A config-driven carrier node that forwards one pipe connection while exposing na
 
 ---
 
+### BV Subgraph Heading
+A UI node that renders a bold header text inside the node.
+Designed to work well inside **Subgraphs/Subflows**: when exposed, the header is also rendered on the Subgraph node in the main graph.
+
+![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading.png)
+
+![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading_in_subgraph.png)
+
+![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading_subgraph.png)
+
+**Inputs**
+- `value` (STRING) — the header text
+- `font_size` (INT) — font size used for rendering
+- `show_divider` (BOOLEAN) — optional divider line below the heading
+
+**What it does**
+- Displays a clean header label for visual separation
+- Dynamically adjusts its node height to avoid text overlap/clipping
+- Optional divider line for stronger section separation
+
+![BV Subgraph Heading](docs/screenshots/bv_subgraph_heading_divider.png)
+
+**How to use**
+1. Add **BV Subgraph Heading**
+2. Set the title via `value`
+3. (Optional) increase `font_size`
+4. (Optional) enable `show_divider`
+
+**Subgraph usage**
+- Place it inside a Subgraph/Subflow and expose the widget input to show the same heading on the Subgraph node.
+
+---
+
+### BV Spacer
+A UI-only spacer node to add vertical whitespace in your graph or inside Subgraphs/Subflows.
+
+![BV Spacer](docs/screenshots/bv_spacer.png)
+
+![BV Spacer](docs/screenshots/bv_spacer_in_subgraph.png)
+
+![BV Spacer](docs/screenshots/bv_spacer_subgraph.png)
+
+**Inputs**
+- `height` (INT) — spacer height in pixels
+- `scale` (FLOAT, optional) — multiplier for the height (useful for quick global spacing adjustments)
+
+**What it does**
+- Reserves vertical space without rendering text
+- Updates its node height dynamically (also in Subgraphs/Subflows)
+
+**How to use**
+1. Add **BV Spacer**
+2. Adjust `height` to the desired spacing
+3. (Optional) use `scale` for fine-tuning
+
+---
+
+### BV Divider
+A UI-only divider node that draws a horizontal line to visually separate sections.
+
+![BV Divider](docs/screenshots/bv_divider.png)
+
+![BV Divider](docs/screenshots/bv_divider_in_subgraph.png)
+
+![BV Divider](docs/screenshots/bv_divider_subgrpah.png)
+
+**Inputs**
+- `thickness` (INT) — line thickness
+- `padding` (INT) — left/right padding
+- `alpha` (FLOAT) — line opacity
+
+**What it does**
+- Draws a horizontal separator line
+- Dynamically updates when inputs change (also in Subgraphs/Subflows)
+
+**How to use**
+1. Add **BV Divider**
+2. Adjust `thickness`, `padding`, and `alpha` to match your layout
+
+---
+
 ## Quick Start (Pipe)
 
 1. Add **BV Pipe Config** and enter names, e.g.:
@@ -93,7 +174,6 @@ prompt
 ## Notes
 - Pipes update dynamically (including Subgraphs/Subflows).
 - Slot socket IDs stay stable internally (`v_001…v_100`, `out_001…out_100`) while labels come from your config.
+- UI nodes (**Heading / Spacer / Divider**) use JavaScript rendering and support being exposed through Subgraphs/Subflows.
 
-
-## Known issues
-If a pipe config is within a subgraph and this generated pipe is connected to a pipe node in the maingraph or another subgraph, the values are only applied when the config is edited.
+---

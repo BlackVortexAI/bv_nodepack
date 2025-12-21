@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
-version = "0.0.5"
-description = "A ComfyUI node pack providing a growing set of utility and workflow nodes, including a flexible config-driven Pipe system."
+version = "0.0.6"
+description = "A ComfyUI node pack with utility and workflow nodes: a flexible config-driven Pipe system plus Subgraph-friendly UI nodes (Heading, Spacer, Divider) with dynamic JavaScript rendering."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]
