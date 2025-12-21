@@ -12,13 +12,14 @@ Clone into your ComfyUI `custom_nodes` folder:
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone <YOUR_REPO_URL> bv_node_pack
+git clone https://github.com/BlackVortexAI/bv_nodepack.git
 ```
 
 Restart ComfyUI and (if needed) hard refresh the browser: **Ctrl+F5**
 
 ### Uninstall
 - Delete the folder in `custom_nodes`
+- Restart ComfyUI
 - Hard refresh the browser (Ctrl+F5)
 
 ---
