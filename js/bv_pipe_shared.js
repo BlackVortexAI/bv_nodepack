@@ -101,20 +101,35 @@ function collectGraphsDeep(root, maxDepth = 3) {
 }
 
 function getInnerGraphFromNode(node) {
+  if (!node) return null;
+
+  // Skip BV nodes to avoid false positives from internal properties
+  if (node.comfyClass === "BV Pipe" || node.comfyClass === "BV Pipe Config") {
+    return null;
+  }
+
   const direct =
-    node?.subgraph ||
-    node?._subgraph ||
-    node?.inner_graph ||
-    node?.graph_inside ||
-    node?.subgraph_graph ||
-    node?.subgraphGraph ||
-    null;
+    node.subgraph ||
+    node._subgraph ||
+    node.inner_graph ||
+    node.graph_inside ||
+    node.subgraph_graph ||
+    node.subgraphGraph ||
+    (typeof node.getInnerGraph === "function" ? node.getInnerGraph() : null);
 
   if (direct && isGraphLike(direct)) return direct;
 
-  // robust deep search inside node + properties
-  const graphs = collectGraphsDeep({ node, props: node?.properties }, 3);
-  for (const g of graphs) return g;
+  // Check properties or widgets that might hold a graph reference
+  if (node.properties?.subgraph && isGraphLike(node.properties.subgraph)) return node.properties.subgraph;
+
+  // Only perform deep search for nodes that are likely to be containers
+  const possibleContainers = ["Subgraph", "Workflow", "Group", "GroupNode", "Subflow", "Recursive"];
+  const isLikelyContainer = possibleContainers.some(c => node.comfyClass?.includes(c)) || node.getInnerGraph;
+
+  if (isLikelyContainer) {
+    const graphs = collectGraphsDeep({ node, props: node?.properties }, 3);
+    for (const g of graphs) return g;
+  }
 
   return null;
 }
@@ -219,9 +234,9 @@ function jumpFromSubgraphGraphInputToParentOrigin(subGraph, subInputIndex) {
 
   const { parentNode, parentGraph } = parentRef;
 
+  // Search for the input that corresponds to the given index or is named "pipe"
   const parentInp =
-    parentNode.inputs?.find((i) => i?.name === "pipe") ||
-    parentNode.inputs?.[subInputIndex] ||
+    parentNode.inputs?.find((i, idx) => i?.name === "pipe" || i?.label === "pipe" || idx === subInputIndex) ||
     parentNode.inputs?.[0];
 
   if (!parentInp?.link) return null;
@@ -233,6 +248,114 @@ function jumpFromSubgraphGraphInputToParentOrigin(subGraph, subInputIndex) {
   if (!origin) return null;
 
   return { node: origin, graph: parentGraph };
+}
+
+function jumpFromParentToSubgraphInput(parentNode, parentSlotIndex) {
+  const innerGraph = getInnerGraphFromNode(parentNode);
+  if (!innerGraph) return null;
+
+  const allNodes = getAllNodes(innerGraph);
+  const inputNodeClasses = [
+    "SubgraphInput", "PrimitiveInput", "InputNode", "GraphInput", "Input", "GroupInput",
+    "InternalInput", "ProxyInput", "CustomNodeInput", "WorkflowInput", "PipeInput", "SubflowInput"
+  ];
+  const inputNodes = allNodes.filter((n) => inputNodeClasses.includes(n.comfyClass) || n.comfyClass?.toLowerCase().includes("input"));
+
+  // Try to find by property 'index' or widget value
+  let targetNode = inputNodes.find(
+    (n) => n.properties?.index === parentSlotIndex ||
+           n.widgets?.find((w) => (w.name === "index" || w.name === "input_index") && w.value === parentSlotIndex)
+  );
+
+  // Fallback: try by name/label match
+  if (!targetNode && parentNode.inputs?.[parentSlotIndex]) {
+    const parentInpName = parentNode.inputs[parentSlotIndex].name?.toLowerCase();
+    targetNode = inputNodes.find(n => n.title?.toLowerCase() === parentInpName || n.widgets?.find(w => w.name === "name" && w.value?.toLowerCase() === parentInpName));
+  }
+
+  if (!targetNode && parentSlotIndex === 0) {
+    targetNode = inputNodes[0];
+  }
+
+  // Fallback: if we found NO input node but there are BV Pipes inside, maybe it's a direct mapping?
+  if (!targetNode && inputNodes.length === 0) {
+    const bvPipesInside = allNodes.filter(n => n.comfyClass === "BV Pipe");
+    if (bvPipesInside.length === 1) {
+       targetNode = bvPipesInside[0];
+    }
+  }
+
+  return targetNode ? { node: targetNode, graph: innerGraph } : null;
+}
+
+function jumpFromSubgraphOutputToParent(subGraph, subOutputIndex, outputNode) {
+  const parentRef = getParentRefForSubGraph(subGraph);
+  if (!parentRef) return null;
+
+  const { parentNode, parentGraph } = parentRef;
+
+  let slotIdx = 0;
+
+  if (outputNode && outputNode.properties && typeof outputNode.properties.index === "number") {
+    slotIdx = outputNode.properties.index;
+  } else if (outputNode && outputNode.widgets) {
+    const indexW = outputNode.widgets.find(w => w.name === "index" || w.name === "output_index");
+    if (indexW && typeof indexW.value === "number") {
+      slotIdx = indexW.value;
+    }
+  } else {
+    const allNodes = getAllNodes(subGraph);
+    const outClasses = [
+        "SubgraphOutput", "OutputNode", "GraphOutput", "Output", "GroupOutput",
+        "InternalOutput", "ProxyOutput", "CustomNodeOutput", "WorkflowOutput", "PipeOutput", "SubflowOutput"
+    ];
+    const outputNodes = allNodes.filter(n => outClasses.includes(n.comfyClass) || n.comfyClass?.toLowerCase().includes("output")).sort((a, b) => a.id - b.id);
+    const foundIdx = outputNodes.indexOf(outputNode);
+    if (foundIdx !== -1) {
+      slotIdx = foundIdx;
+    } else {
+      slotIdx = Number.isFinite(subOutputIndex) ? subOutputIndex : 0;
+    }
+  }
+
+  return { node: parentNode, graph: parentGraph, slot: slotIdx };
+}
+
+function jumpFromParentToSubgraphOutputOrigin(parentNode, parentSlotIndex) {
+  const innerGraph = getInnerGraphFromNode(parentNode);
+  if (!innerGraph) return null;
+
+  const allNodes = getAllNodes(innerGraph);
+  const outClasses = [
+    "SubgraphOutput", "OutputNode", "GraphOutput", "Output", "GroupOutput",
+    "InternalOutput", "ProxyOutput", "CustomNodeOutput", "WorkflowOutput", "PipeOutput", "SubflowOutput"
+  ];
+  const outputNodes = allNodes.filter(n => outClasses.includes(n.comfyClass) || n.comfyClass?.toLowerCase().includes("output"));
+
+  let targetNode = outputNodes.find(
+    (n) => n.properties?.index === parentSlotIndex ||
+           n.widgets?.find((w) => (w.name === "index" || w.name === "output_index") && w.value === parentSlotIndex)
+  );
+
+  // Fallback: try by name/label match
+  if (!targetNode && parentNode.outputs?.[parentSlotIndex]) {
+    const parentOutName = parentNode.outputs[parentSlotIndex].name?.toLowerCase();
+    targetNode = outputNodes.find(n => n.title?.toLowerCase() === parentOutName || n.widgets?.find(w => w.name === "name" && w.value?.toLowerCase() === parentOutName));
+  }
+
+  if (!targetNode && parentSlotIndex === 0) {
+    targetNode = outputNodes[0];
+  }
+
+  if (targetNode) {
+    // We found the internal Output node, but we need to find what's connected to its INPUT (upstream)
+    const up = getUpstreamByInput(targetNode, 0);
+    if (up && up.originNode) {
+        return { node: up.originNode, graph: innerGraph };
+    }
+  }
+
+  return null;
 }
 
 // ---------- config resolution ----------
@@ -250,15 +373,38 @@ export function resolveCfgByPipeLinksNoCache(node, visited = new Set()) {
   }
 
   const up = getUpstreamByInput(node, 0);
-  if (!up) return null;
+  if (!up) {
+    // Check if this node itself is inside a subgraph and might be a "direct mapped" input
+    const parentRef = getParentRefForSubGraph(g);
+    if (parentRef) {
+       // If we are at the "entry" of a subgraph but found no link, try to look at the parent
+       return resolveCfgByPipeLinksNoCache(parentRef.parentNode, visited);
+    }
+    return null;
+  }
 
   if (up.originNode) {
+    // If originNode is a Subgraph, jump into it to find the source of the config
+    const inner = getInnerGraphFromNode(up.originNode);
+    if (inner) {
+        const jumped = jumpFromParentToSubgraphOutputOrigin(up.originNode, up.originSlot);
+        if (jumped) {
+            return resolveCfgByPipeLinksNoCache(jumped.node, visited);
+        }
+    }
     return resolveCfgByPipeLinksNoCache(up.originNode, visited);
   }
 
   // subgraph graph-input case (origin_id negative -> no originNode)
   const jumped = jumpFromSubgraphGraphInputToParentOrigin(up.graph, up.originSlot);
-  if (!jumped) return null;
+  if (!jumped) {
+    // Fallback: maybe the link just points outside the current graph scope?
+    const parentRef = getParentRefForSubGraph(up.graph);
+    if (parentRef) {
+        return resolveCfgByPipeLinksNoCache(parentRef.parentNode, visited);
+    }
+    return null;
+  }
 
   return resolveCfgByPipeLinksNoCache(jumped.node, visited);
 }
@@ -364,33 +510,62 @@ export function updatePipeNodeUI(pipeNode, cfg) {
 // ---------- propagation (same-graph only) ----------
 
 export function propagateFrom(startNode) {
-  const graph = getGraphFromNode(startNode);
   const visited = new Set();
-  const queue = [startNode];
+  const startCfg = getCfgFromNodeWithFallback(startNode);
+  const queue = [{ node: startNode, graph: getGraphFromNode(startNode), outputSlot: -1, cfg: startCfg }];
 
   while (queue.length) {
-    const cur = queue.shift();
-    if (!cur || visited.has(cur.id)) continue;
-    visited.add(cur.id);
+    const { node: cur, graph, outputSlot, cfg: curCfg } = queue.shift();
+    if (!cur) continue;
 
-    const cfg = getCfgFromNodeWithFallback(cur);
+    const vkey = `${getGraphId(graph)}:${cur.id}${outputSlot >= 0 ? ":" + outputSlot : ""}`;
+    if (visited.has(vkey)) continue;
+    visited.add(vkey);
 
-    const out0 = cur.outputs?.[0];
-    const links = out0?.links ? [...out0.links] : [];
-    if (!links.length) continue;
+    const cfg = curCfg || getCfgFromNodeWithFallback(cur);
 
-    for (const linkId of links) {
-      const link = graph.links?.[linkId];
-      if (!link) continue;
+    const slotsToProcess = outputSlot >= 0 ? [outputSlot] : [0];
 
-      const target = graph.getNodeById(link.target_id);
-      if (!target) continue;
+    for (const slotIdx of slotsToProcess) {
+      const out = cur.outputs?.[slotIdx];
+      const links = out?.links ? [...out.links] : [];
+      if (!links.length) continue;
 
-      if (cfg && target.comfyClass === "BV Pipe") {
-        updatePipeNodeUI(target, cfg);
+      for (const linkId of links) {
+        const link = graph.links?.[linkId];
+        if (!link) continue;
+
+        let target = graph.getNodeById(link.target_id);
+
+        if (!target || target.comfyClass === "SubgraphOutput" || link.target_id < 0) {
+          const jumped = jumpFromSubgraphOutputToParent(graph, link.origin_slot, target);
+          if (jumped) {
+            queue.push({ node: jumped.node, graph: jumped.graph, outputSlot: jumped.slot, cfg });
+            continue;
+          }
+        }
+
+        if (!target) continue;
+
+        // If target is a subgraph node, jump into it
+        const inner = getInnerGraphFromNode(target);
+        if (inner) {
+          const jumpedIn = jumpFromParentToSubgraphInput(target, link.target_slot);
+          if (jumpedIn) {
+            // CRITICAL FIX: Update the internal node immediately when jumping in
+            if (cfg && jumpedIn.node.comfyClass === "BV Pipe") {
+              updatePipeNodeUI(jumpedIn.node, cfg);
+            }
+            queue.push({ node: jumpedIn.node, graph: jumpedIn.graph, outputSlot: -1, cfg });
+          }
+        }
+
+        if (cfg && target.comfyClass === "BV Pipe") {
+          updatePipeNodeUI(target, cfg);
+        }
+
+        queue.push({ node: target, graph: graph, outputSlot: -1, cfg });
       }
-
-      queue.push(target);
     }
   }
 }

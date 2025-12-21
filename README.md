@@ -93,3 +93,7 @@ prompt
 ## Notes
 - Pipes update dynamically (including Subgraphs/Subflows).
 - Slot socket IDs stay stable internally (`v_001…v_100`, `out_001…out_100`) while labels come from your config.
+
+
+## Known issues
+If a pipe config is within a subgraph and this generated pipe is connected to a pipe node in the maingraph or another subgraph, the values are only applied when the config is edited.
