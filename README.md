@@ -136,7 +136,7 @@ A UI-only divider node that draws a horizontal line to visually separate section
 
 ![BV Divider](docs/screenshots/bv_divider_in_subgraph.png)
 
-![BV Divider](docs/screenshots/bv_divider_subgrpah.png)
+![BV Divider](docs/screenshots/bv_divider_subgraph.png)
 
 **Inputs**
 - `thickness` (INT) — line thickness
