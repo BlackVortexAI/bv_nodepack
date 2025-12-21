@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   publish-node:
-    name: Publish Custom Node to registry
+    name: PV-NodePack
     runs-on: ubuntu-latest
     if: ${{ github.repository_owner == 'BlackVortexAI' }}
     steps:
