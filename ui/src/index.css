@@ -1,0 +1,33 @@
+:root {
+    --bv-primary-color: #3498db;
+    --bv-secondary-color: #2c3e50;
+    --bv-text-color: #ecf0f1;
+    --bv-accent-color: #e74c3c;
+    --bv-bg-color: #34495e;
+    --bv-border-color: #7f8c8d;
+    --bv-muted-text-color: #95a5a6;
+}
+
+:root.comfy-theme-light #bv-root {
+    --bv-primary-color: #2980b9;
+    --bv-secondary-color: #34495e;
+    --bv-text-color: #2c3e50;
+    --bv-accent-color: #c0392b;
+    --bv-bg-color: #ecf0f1;
+    --bv-border-color: #bdc3c7;
+    --bv-muted-text-color: #7f8c8d;
+}
+
+#bv-root {
+    height: 100%;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    box-sizing: border-box;
+    color: var(--bv-text-color);
+    background: var(--bv-bg-color);
+}
+
+#bv-root * {
+    box-sizing: border-box;
+}
+
+
