@@ -171,6 +171,7 @@ Click on the divider to change the thickness.
 
 ---
 
+
 ## Quick Start (Pipe)
 
 1. Add **BV Pipe Config** and enter names, e.g.:
@@ -195,3 +196,49 @@ prompt
 - UI nodes (**Heading / Spacer / Divider**) use JavaScript rendering and support being exposed through Subgraphs/Subflows.
 
 ---
+
+# Beta Nodes
+
+## BV Control Center
+
+The **BV Control Center** node is used to manage and control groups of nodes at runtime.
+It allows you to assign a **mute** or **bypass** state to multiple graph groups and toggle these states dynamically.
+
+Groups are defined and bundled via a separate configuration dialog.
+Each configured group is exposed as a boolean control on the BV Control Center node, allowing centralized control of complex graph setups.
+
+The BV Control Center fully supports **subgraphs**.
+Its boolean control inputs can be exposed through a subgraph interface, enabling group states to be controlled from outside the subgraph without breaking encapsulation.
+
+**Configuration**
+
+![BV Divider](docs/screenshots/bv_controllconfig_button.png)
+
+**UI**
+
+Select group:
+
+![BV Divider](docs/screenshots/bv_controllconfig_dialog1.png)
+
+Define status:
+
+![BV Divider](docs/screenshots/bv_controllconfig_dialog2.png)
+
+Columns are automatically expanded:
+
+![BV Divider](docs/screenshots/bv_controllconfig_dialog3.png)
+
+After saving the configuration, the BV Control Center Node updates itself.
+
+
+![BV Divider](docs/screenshots/bv_controllconfig_dialog4.png)
+![BV Divider](docs/screenshots/bv_controllconfig_graph1.png)
+
+Here is an example if, for example, Only Preview is active
+
+
+![BV Divider](docs/screenshots/bv_controllconfig_graph2.png)
+
+# This node and UI is still in beta! Exposing inputs from a subgraph is still a little buggy. #
+
+

@@ -12,8 +12,6 @@ let setPortalOpenExternal: ((open: boolean) => void) | null = null;
 
 function BVRoot() {
     const [portalOpen, setPortalOpen] = useState(false);
-    console.log("BVRoot rendered");
-    console.log(comfyApp);
 
     useEffect(() => {
         setPortalOpenExternal = (open: boolean) => setPortalOpen(open);
@@ -58,7 +56,7 @@ comfyApp.registerExtension({
     actionBarButtons: [
         {
             icon: "pi pi-wrench",
-            tooltip: "BV Tools",
+            tooltip: "BV Tools Configuration (Beta)",
             onClick: () => {
                 ensureMountedOnce();
                 setPortalOpenExternal?.(true);

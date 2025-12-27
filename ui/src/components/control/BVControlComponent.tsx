@@ -1,9 +1,9 @@
-
 import * as React from 'react';
 import {BVControlRow, readConfig, writeConfig} from "../../util/control/configHandler";
 import BVControlRowComponent from "./BVControlRowComponent";
+import {FC} from "react";
 
-const BVControlComponent = () => {
+const BVControlComponent: FC<{onClose() : void}> = ({onClose}) => {
 
     const [config, setConfig] = React.useState(readConfig());
 
@@ -81,10 +81,11 @@ const BVControlComponent = () => {
                     ))}
                 </div>
             }
-            <div className={"grid grid-cols-3 gap-4 p-4"}>
+            <div className={"grid grid-cols-1 gap-4 p-4"}>
                 <button onClick={addRow}>Add Row</button>
                 <button onClick={saveConfig}>Save Config</button>
                 <button onClick={clearConfig}>Clear Config</button>
+                <button onClick={onClose}>Close</button>
             </div>
         </div>
     );

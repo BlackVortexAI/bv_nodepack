@@ -36,14 +36,11 @@ const BvPortal: FC<IBVPortalProps> = ({open, onClose, children}) => {
 
     if (!open) return null;
 
-    console.log("GROUPS ",collectAllGroups(comfyApp));
-
     return (
         <div
             role="dialog"
             aria-modal="true"
             onMouseDown={(e) => {
-                // Klick auf Backdrop schließt, Klick im Dialog nicht
                 if (e.target === e.currentTarget) onClose();
             }}
 
@@ -53,7 +50,7 @@ const BvPortal: FC<IBVPortalProps> = ({open, onClose, children}) => {
                 display: "grid",
                 placeItems: "center",
                 background: "rgba(0,0,0,0.45)",
-                zIndex: 2147483647, // maximal hoch, hilft in Plugin-Umgebungen oft
+                zIndex: 2147483647,
             }}
         >
             <div
@@ -71,7 +68,7 @@ const BvPortal: FC<IBVPortalProps> = ({open, onClose, children}) => {
                 onMouseDown={(e) => e.stopPropagation()}
             >
 
-                <BVControl />
+                <BVControl onClose={() => onClose()} />
 
 
                 {/*{collectAllGroups(comfyApp).map((group) => (*/}

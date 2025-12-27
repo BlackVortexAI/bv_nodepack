@@ -16,7 +16,7 @@ class BVControlCenterNode:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("config",)
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/control"
+    CATEGORY = "🌀 BV Node Pack/beta/control"
 
     def run(self, config_json):
         try:
