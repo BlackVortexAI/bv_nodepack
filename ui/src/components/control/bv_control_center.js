@@ -73,7 +73,9 @@ function normalizeGroupTitle(entry) {
 }
 
 /**
- * Apply action using your stateHandler
+ * Apply action using your stateHandler.
+ * enabled=true means "apply bypass/mute now"
+ * enabled=false means "restore (unbypass/unmute)"
  */
 function applyEntry(appOrGraph, groupTitle, action, enabled) {
     if (!groupTitle) return;
@@ -92,16 +94,78 @@ function applyEntry(appOrGraph, groupTitle, action, enabled) {
 }
 
 /**
+ * Determine the "mode label" for a row based on its entries.
+ * - If all entries are bypass -> BYPASSED
+ * - If all entries are mute   -> MUTED
+ * - If mixed                 -> DISABLED
+ */
+function getRowDisableLabel(row) {
+    const entries =
+        (Array.isArray(row?.entries) && row.entries) ||
+        (Array.isArray(row?.groups) && row.groups) ||
+        (Array.isArray(row?.items) && row.items) ||
+        (Array.isArray(row?.actions) && row.actions) ||
+        (Array.isArray(row?.targets) && row.targets) ||
+        [];
+
+    const actions = new Set(
+        entries.map((e) => normalizeAction(e?.action ?? e?.mode ?? e?.operation ?? e?.type))
+    );
+
+    if (actions.size === 1) {
+        const only = [...actions][0];
+        return only === "bypass" ? "BYPASSED" : "MUTED";
+    }
+
+    // either mixed or no entries
+    return actions.size === 0 ? "DISABLED" : "DISABLED";
+}
+
+/**
+ * Build user-facing label based on current ACTIVE state.
+ * true  -> "... — ACTIVE"
+ * false -> "... — MUTED / BYPASSED / DISABLED"
+ */
+function buildStateLabel(row, isActive, fallbackKey) {
+    const base = (row?.title ?? fallbackKey).toString();
+    if (isActive) return `${base} — ACTIVE`;
+    return `${base} — ${getRowDisableLabel(row)}`;
+}
+
+function getBoolWidget(node, key) {
+    return (node?.widgets || []).find((w) => w?.name === key) ?? null;
+}
+
+function getOriginalInput(node, key) {
+    return (node?.inputs || []).find((x) => x?.__bv_original_name === key || x?.name === key) ?? null;
+}
+
+/**
+ * Update label on the node widget AND the node input port name.
+ * (Port name affects Subgraph exposed ports.)
+ */
+function applyLabelToNode(node, key, row, isActive) {
+    const w = getBoolWidget(node, key);
+    if (w) {
+        w.label = buildStateLabel(row, isActive, key);
+    }
+
+    const inp = getOriginalInput(node, key);
+    if (inp) {
+        inp.__bv_original_name ??= key;
+        inp.name = buildStateLabel(row, isActive, key);
+    }
+}
+
+/**
  * IMPORTANT UX FIX:
  * - Do NOT force node.setSize(computeSize()) on every refresh.
- * - Only autosize when the UI structure actually changed (rows shown/hidden or labels changed).
+ * - Only autosize when the UI structure actually changed.
  */
 function updateNodeUIFromConfig(node, cfg, allowAutosize = false) {
     hideConfigJson(node);
 
     const rows = cfg?.rows;
-
-    // Track if something structural changed
     let changed = false;
 
     for (let i = 1; i <= 100; i++) {
@@ -111,17 +175,24 @@ function updateNodeUIFromConfig(node, cfg, allowAutosize = false) {
         const widgets = findWidgetsByName(node, key);
         const hasRow = !!row;
 
-        const title = hasRow ? (row?.title ?? key).toString() : key;
+        // Determine current state (INVERTED semantics):
+        // true  -> ACTIVE
+        // false -> DISABLED (mute/bypass)
+        const w0 = widgets[0];
+        const currentValue = !!(w0?.value);
+        const isActive = currentValue;
 
-        // 1) widget label + store row
+        const labelText = hasRow ? buildStateLabel(row, isActive, key) : key;
+
+        // 1) widget visibility + label + store row
         for (const w of widgets) {
             const nextHidden = !hasRow;
             if (w.hidden !== nextHidden) changed = true;
             setWidgetHidden(w, nextHidden);
 
             if (hasRow) {
-                if (w.label !== title) changed = true;
-                w.label = title;
+                if (w.label !== labelText) changed = true;
+                w.label = labelText;
 
                 if (w.__bv_row !== row) changed = true;
                 w.__bv_row = row;
@@ -132,7 +203,6 @@ function updateNodeUIFromConfig(node, cfg, allowAutosize = false) {
         }
 
         // 2) hide unused input pins (structural)
-        // NOTE: we detect changes by comparing the input.hidden value
         const inputs = node?.inputs || [];
         for (const inp of inputs) {
             if (inp?.name === key) {
@@ -147,13 +217,12 @@ function updateNodeUIFromConfig(node, cfg, allowAutosize = false) {
         if (inp) {
             inp.__bv_original_name ??= key;
 
-            const nextName = hasRow ? title : key;
+            const nextName = hasRow ? labelText : key;
             if (inp.name !== nextName) changed = true;
             inp.name = nextName;
         }
     }
 
-    // Only autosize when explicitly allowed AND something changed
     if (allowAutosize && changed) {
         const newSize = node.computeSize?.();
         if (newSize) node.setSize?.(newSize);
@@ -183,14 +252,29 @@ function hookBooleanWidgetHandlers(node) {
             const row = w.__bv_row;
             if (!row) return;
 
-            const enabled = !!value;
-            const entries = Array.isArray(row.entries) ? row.entries : [];
+            // INVERTED semantics:
+            // true  -> ACTIVE (do NOT apply bypass/mute)
+            // false -> DISABLED (apply bypass/mute)
+            const isActive = !!value;
+            const applyDisable = !isActive;
+
+            // Update label (node + subgraph port) immediately for UX
+            applyLabelToNode(node, w.name, row, isActive);
+
+            const entries =
+                (Array.isArray(row.entries) && row.entries) ||
+                (Array.isArray(row.groups) && row.groups) ||
+                (Array.isArray(row.items) && row.items) ||
+                (Array.isArray(row.actions) && row.actions) ||
+                (Array.isArray(row.targets) && row.targets) ||
+                [];
 
             for (const entry of entries) {
                 const groupTitle = normalizeGroupTitle(entry);
-                const action = normalizeAction(entry?.action ?? entry?.mode ?? entry?.operation);
+                const action = normalizeAction(entry?.action ?? entry?.mode ?? entry?.operation ?? entry?.type);
+                if (!groupTitle) continue;
 
-                applyEntry(appOrGraph, groupTitle, action, enabled);
+                applyEntry(appOrGraph, groupTitle, action, applyDisable);
             }
 
             getRootGraph()?.setDirtyCanvas?.(true, true);
@@ -224,21 +308,21 @@ function startConfigWatcher(node) {
         const cfg = readControlConfigFromGraph();
         const sig = stableStringify(cfg);
 
-        // ✅ Autosize ONLY when config signature really changed
+        // Autosize ONLY when config signature really changed
         if (sig !== lastSig) {
             lastSig = sig;
 
-            updateNodeUIFromConfig(node, cfg, true);  // allowAutosize = true
+            updateNodeUIFromConfig(node, cfg, true);
             hookBooleanWidgetHandlers(node);
             hookWidgetChanged(node);
             return;
         }
 
-        // ✅ For "force refresh" (canvas dirty), update UI but DO NOT autosize
+        // For "force refresh" (canvas dirty), update UI but DO NOT autosize
         if (node.__bv_force_refresh) {
             node.__bv_force_refresh = false;
 
-            updateNodeUIFromConfig(node, cfg, false); // allowAutosize = false
+            updateNodeUIFromConfig(node, cfg, false);
             hookBooleanWidgetHandlers(node);
             hookWidgetChanged(node);
         }
@@ -277,7 +361,12 @@ function hookWidgetChanged(node) {
         const row = w.__bv_row;
         if (!row) return r;
 
-        const enabled = !!value;
+        // INVERTED semantics:
+        const isActive = !!value;
+        const applyDisable = !isActive;
+
+        // Update label (node + subgraph port) immediately for UX
+        applyLabelToNode(this, name, row, isActive);
 
         const entries =
             (Array.isArray(row.entries) && row.entries) ||
@@ -291,13 +380,10 @@ function hookWidgetChanged(node) {
             const groupTitle = normalizeGroupTitle(entry);
             const actionRaw = entry?.action ?? entry?.mode ?? entry?.operation ?? entry?.type;
 
-            if (!groupTitle) {
-                console.warn(`[${EXT_NAME}] Entry has no groupTitle`, entry);
-                continue;
-            }
+            if (!groupTitle) continue;
 
             const action = normalizeAction(actionRaw);
-            applyEntry(app, groupTitle, action, enabled);
+            applyEntry(app, groupTitle, action, applyDisable);
         }
 
         getRootGraph()?.setDirtyCanvas?.(true, true);
