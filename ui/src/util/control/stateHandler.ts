@@ -1,4 +1,8 @@
-import type { ComfyApp, LGraph, LGraphGroup, LGraphNode } from "@comfyorg/comfyui-frontend-types";
+// @ts-ignore
+// import type { ComfyApp, LGraph, LGraphGroup, LGraphNode } from "@comfyorg/comfyui-frontend-types";
+
+
+import type { ComfyApp, LGraph, LGraphGroup, LGraphNode } from "../../types/comfyui-frontend-types.augment";
 
 /** LiteGraph node modes (typical) */
 export enum NodeMode {
@@ -34,14 +38,7 @@ function getGraphGroups(graph: LGraph): LGraphGroup[] {
 }
 
 function getNodeSubgraph(node: LGraphNode): LGraph | null {
-    if (node.subgraph && typeof node.subgraph === "object") return node.subgraph as LGraph;
-    if (typeof node.getSubgraph === "function") {
-        try {
-            return node.getSubgraph() ?? null;
-        } catch {
-            return null;
-        }
-    }
+    if(node.isSubgraphNode()) return node.graph;
     return null;
 }
 

@@ -239,6 +239,11 @@ Here is an example if, for example, Only Preview is active
 
 ![BV Divider](docs/screenshots/bv_controllconfig_graph2.png)
 
-# This node and UI is still in beta! Exposing inputs from a subgraph is still a little buggy. #
+# This node and UI is still in BETA! State changes via exposed inputs from a subgraph do not update the state label due to event handling issues. #
+
+
+# CHANGE LOG #
+
+- 2025-12-29 - v0.0.7: Reworked the Code of BV Control Center node to make the Node more stable an change to TypeScript Code.
 
 

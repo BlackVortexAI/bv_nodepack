@@ -5,20 +5,14 @@ class BVControlCenterNode:
 
     @classmethod
     def INPUT_TYPES(cls):
-        # Default all booleans to True (ACTIVE by default)
-        optional = {
-            f"b_{i:03d}": ("BOOLEAN", {"default": True})
-            for i in range(1, 101)
-        }
         return {
-            "required": {
+            "hidden": {
                 "config_json": ("STRING", {"default": "{}", "multiline": True}),
             },
-            "optional": optional,
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("config",)
+    RETURN_TYPES = ()
+    OUTPUT_NODE = True
     FUNCTION = "run"
     CATEGORY = "🌀 BV Node Pack/beta/control"
 
