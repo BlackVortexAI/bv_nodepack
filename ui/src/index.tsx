@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 import { getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
 const comfyApp = getApp();
-import "./index.css";
 import "./util/control/stateHandler";
 import "./components/control/bv_control_center";
 

@@ -38,7 +38,7 @@ function getGraphGroups(graph: LGraph): LGraphGroup[] {
 }
 
 function getNodeSubgraph(node: LGraphNode): LGraph | null {
-    if(node.isSubgraphNode()) return node.graph;
+    if(node.isSubgraphNode()) return node.subgraph as LGraph;
     return null;
 }
 

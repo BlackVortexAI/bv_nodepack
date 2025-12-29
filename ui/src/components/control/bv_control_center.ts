@@ -642,24 +642,115 @@ function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTri
 
 retryPatchAllSubgraphs({ intervalMs: 150, maxAttempts: 80 });
 
+let __bvSingletonCheckScheduled = false;
 
+let singletonRemovalScheduled = false;
+const pendingSingletonAdds: Array<{ node: any; graph: any }> = [];
+
+function scheduleRemoveJustAddedSingletons() {
+    if (singletonRemovalScheduled) return;
+    singletonRemovalScheduled = true;
+
+    // next tick: let ComfyUI finish subgraph conversion / internal moves
+    setTimeout(() => {
+        singletonRemovalScheduled = false;
+
+        const root = getApp()?.rootGraph;
+        if (!root) return;
+
+        // collect all singleton nodes across entire workflow (root + subgraphs)
+        const all: Array<{ node: any; graph: any }> = [];
+        const walk = (g: any) => {
+            for (const n of g?.nodes ?? []) {
+                if (!n) continue;
+                if (n.type === BV_SINGLETON_TYPE) all.push({ node: n, graph: g });
+                if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
+            }
+        };
+        walk(root);
+
+        if (all.length <= 1) {
+            pendingSingletonAdds.length = 0;
+            return;
+        }
+
+        // Prefer keeping an "old" one: keep the one with the smallest id (usually the existing one)
+        all.sort((a, b) => (a.node?.id ?? 0) - (b.node?.id ?? 0));
+        const keep = all[0].node;
+
+        // Remove everything else, but especially remove the ones that were just added by the user
+        let removedAny = false;
+
+        for (const entry of all.slice(1)) {
+            const n = entry.node;
+            const g = entry.graph;
+
+            if (n === keep) continue;
+
+            try { g.remove(n); }
+            catch {
+                const idx = g.nodes?.indexOf(n);
+                if (idx >= 0) g.nodes.splice(idx, 1);
+            }
+
+            removedAny = true;
+        }
+
+        if (removedAny) {
+            showErrorToast("BV Control Center is already in the workflow.");
+            root.setDirtyCanvas?.(true, true);
+        }
+
+        pendingSingletonAdds.length = 0;
+    }, 0);
+}
+
+function scheduleSingletonEnforce() {
+    if (__bvSingletonCheckScheduled) return;
+    __bvSingletonCheckScheduled = true;
+
+    // next macrotask is usually enough; increase to 0/RAF if needed
+    setTimeout(() => {
+        __bvSingletonCheckScheduled = false;
+        enforceSingletonKeepNewest(); // or keep oldest, your choice
+    }, 0);
+}
+
+function enforceSingletonKeepNewest() {
+    const root = getApp()?.rootGraph;
+    if (!root) return;
+
+    const found: any[] = [];
+
+    const walk = (g: any) => {
+        for (const n of g?.nodes ?? []) {
+            if (!n) continue;
+            if (n.type === BV_SINGLETON_TYPE) found.push({ node: n, graph: g });
+            if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
+        }
+    };
+
+    walk(root);
+    if (found.length <= 1) return;
+
+    // Keep the newest one (highest id) - tends to be the "inner" one during subgraph creation
+    found.sort((a, b) => (b.node.id ?? 0) - (a.node.id ?? 0));
+    const keep = found[0].node;
+
+    for (let i = 1; i < found.length; i++) {
+        const { node, graph } = found[i];
+        if (node === keep) continue;
+        try { graph.remove(node); } catch {
+            const idx = graph.nodes?.indexOf(node);
+            if (idx >= 0) graph.nodes.splice(idx, 1);
+        }
+    }
+
+    root.setDirtyCanvas?.(true, true);
+}
 
 const BV_SINGLETON_TYPE = "BV Control Center";
 
-function hasSingletonInGraph(graph: any): boolean {
-    const walk = (g: any): boolean => {
-        for (const n of g?.nodes ?? []) {
-            if (!n) continue;
-            if (n.type === BV_SINGLETON_TYPE) return true;
-            if (n.isSubgraphNode?.() && n.subgraph) {
-                if (walk(n.subgraph)) return true;
-            }
-        }
-        return false;
-    };
-
-    return walk(getApp()?.rootGraph);
-}
 
 function patchGraphAddSingletonGuard() {
     const LGraphCtor: any = (window as any).LGraph;
@@ -678,16 +769,14 @@ function patchGraphAddSingletonGuard() {
     const origAdd = proto[addFnName];
 
     proto[addFnName] = function (node: any) {
+        const r = origAdd.apply(this, arguments);
+
         if (node?.type === BV_SINGLETON_TYPE) {
-            // If there is already one anywhere in the whole workflow, block
-            if (hasSingletonInGraph(getApp()?.rootGraph)) {
-                console.warn("[BV] Singleton blocked: BV Control Center already exists");
-                // Optional: show user toast if you have a notifier
-                showErrorToast("BV Control Center is already in the workflow.")
-                return node;
-            }
+            pendingSingletonAdds.push({ node, graph: this });
+            scheduleRemoveJustAddedSingletons();
         }
-        return origAdd.apply(this, arguments);
+
+        return r;
     };
 
     console.log("[BV] Patched LGraph add with singleton guard");
