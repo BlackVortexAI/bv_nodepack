@@ -244,6 +244,6 @@ Here is an example if, for example, Only Preview is active
 
 # CHANGE LOG #
 
-- 2025-12-29 - v0.0.7: Reworked the Code of BV Control Center node to make the Node more stable an change to TypeScript Code.
+- 2025-12-29 - v0.0.8: Reworked the Code of BV Control Center node to make the Node more stable an change to TypeScript Code.
 
 
