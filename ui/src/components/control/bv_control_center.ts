@@ -1,5 +1,5 @@
 import {getApp} from "../../appHelper.js";
-import {BVControlConfig, BVControlEntry, BVControlRow, readConfig} from "../../util/control/configHandler";
+import {BVControlConfig, BVControlEntry, readConfig} from "../../util/control/configHandler";
 import {IBaseWidget, LGraphNode, Subgraph, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
 import {
     bypassGroupsByTitle,
@@ -11,7 +11,8 @@ import {
 const comfyApp = getApp();
 
 let configWatcherStarted = false;
-function startConfigWatcher(){
+
+function startConfigWatcher() {
     if (configWatcherStarted) return;
     configWatcherStarted = true;
 
@@ -31,39 +32,39 @@ function startConfigWatcher(){
     }, 500);
 }
 
-function hookSubgraphWidgetChanged(node: SubgraphNode){
+function hookSubgraphWidgetChanged(node: SubgraphNode) {
 
     let found = false
     let foundNode: LGraphNode | undefined;
 
     node.subgraph.inputs.forEach((input) => {
         input.getLinks().forEach((link) => {
-            if(!found){
+            if (!found) {
                 foundNode = getNodeHelper(link.target_id as number, node.graph)
-                if(!found && foundNode?.type == "BV Control Center"){
+                if (!found && foundNode?.type == "BV Control Center") {
                     found = true
                 }
             }
         })
     })
 
-    if(!foundNode){
+    if (!foundNode) {
         return
     }
 
     const config = readConfig();
 
-    if(!config) return;
+    if (!config) return;
 
-    setTimeout(()=>{
+    setTimeout(() => {
         updateSingleControlNode(foundNode, config)
 
 
-    },100)
+    }, 100)
 
 }
 
-function showErrorToast(msg: string){
+function showErrorToast(msg: string) {
     getApp().extensionManager.toast.add({
         severity: "error",
         summary: "Error",
@@ -72,22 +73,22 @@ function showErrorToast(msg: string){
     });
 }
 
-function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string){
+function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string) {
 
 
     let label = slotName
-    if(!slotName){
+    if (!slotName) {
         // @ts-ignore
         label = node.inputs[slotNumber].label
-        if(!label) label = node.inputs[slotNumber].name
+        if (!label) label = node.inputs[slotNumber].name
     }
 
 
-    if(!label) return false;
+    if (!label) return false;
 
 
-    try{
-        if(node.getInputLink(slotNumber)) {
+    try {
+        if (node.getInputLink(slotNumber)) {
 
             if (node.graph?._subgraphs) {
                 const subgraph = node.graph as Subgraph
@@ -107,7 +108,7 @@ function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?
 
         }
 
-    }catch(e){
+    } catch (e) {
 
         console.error("Error renaming subgraph input slot (LINK)", e)
         return false;
@@ -137,9 +138,9 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         const inputName = `v_${String(i).padStart(3, "0")}`;
         let label = config.rows[i].title;
 
-        if (getWidgetValue(node, i)){
+        if (getWidgetValue(node, i)) {
             label = label + " - (ACTIVE)"
-        }else{
+        } else {
             label = label + " - (MUTE/BYPASS)"
         }
 
@@ -147,7 +148,7 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
             label,
             nameLocked: true,
             default: true,
-            widget: { name: inputName }
+            widget: {name: inputName}
         });
 
         const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
@@ -177,9 +178,9 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
     for (let i = 0; i < desiredCount; i++) {
         let label = config.rows[i].title;
 
-        if (getWidgetValue(node, i)){
+        if (getWidgetValue(node, i)) {
             label = label + " - (ACTIVE)"
-        }else{
+        } else {
             label = label + " - (MUTE/BYPASS)"
         }
 
@@ -209,12 +210,12 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         }
 
         if (node.inputs[i]) {
-            node.inputs[i].widget = { name: inputName };
+            node.inputs[i].widget = {name: inputName};
             // @ts-ignore
             node.inputs[i]._widget = w;
         }
         const gNode = getNodeHelper(node.id, node.graph)
-        if(gNode){
+        if (gNode) {
             renameSubGraphInputSlot(gNode, i, label.split(" - ")[0])
         }
     }
@@ -247,9 +248,9 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             const rawLabel = config.rows[i].title;
 
 
-            if (getWidgetValue(node, i)){
+            if (getWidgetValue(node, i)) {
                 label = label + " - (ACTIVE)"
-            }else{
+            } else {
                 label = label + " - (MUTE/BYPASS)"
             }
 
@@ -280,16 +281,14 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
                 }
             }
 
-            node.inputs[i].widget = { name: inputName } as any;
+            node.inputs[i].widget = {name: inputName} as any;
             // @ts-ignore
             node.inputs[i]._widget = widget;
 
-            //BV Node
             renameSubGraphInputSlot(node, i, rawLabel)
 
         }
 
-        // remove extras
         if (node.inputs.length > config.rows.length) {
             for (let i = node.inputs.length - 1; i >= config.rows.length; i--) {
                 const inputName = `v_${String(i).padStart(3, "0")}`;
@@ -302,9 +301,9 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
         } else if (node.inputs.length < config.rows.length) {
             for (let i = node.inputs.length; i < config.rows.length; i++) {
                 let label = config.rows[i].title;
-                if (getWidgetValue(node, i)){
+                if (getWidgetValue(node, i)) {
                     label = label + " - (ACTIVE)"
-                }else{
+                } else {
                     label = label + " - (MUTE/BYPASS)"
                 }
                 const inputName = `v_${String(i).padStart(3, "0")}`;
@@ -313,7 +312,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
                     label,
                     nameLocked: true,
                     default: true,
-                    widget: { name: inputName }
+                    widget: {name: inputName}
                 });
 
                 const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
@@ -338,12 +337,12 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
 
 function crawlSubgraphForNode(nodes: any[]) {
     const controlNodes: LGraphNode[] = [];
-    nodes.forEach((node: any) =>{
+    nodes.forEach((node: any) => {
 
-        if(node.isSubgraphNode && node.isSubgraphNode()) {
+        if (node.isSubgraphNode && node.isSubgraphNode()) {
             const sGraph = node as SubgraphNode;
             controlNodes.push(...crawlSubgraphForNode(sGraph.subgraph.nodes))
-        }else {
+        } else {
             if (node.type === "BV Control Center") {
                 controlNodes.push(node);
             }
@@ -352,31 +351,31 @@ function crawlSubgraphForNode(nodes: any[]) {
     return controlNodes;
 }
 
-function getNodeHelper(nodeId: number, graph: any, subgraph: boolean = false){
+function getNodeHelper(nodeId: number, graph: any, subgraph: boolean = false) {
 
     if (!graph?.nodes) return;
 
     let foundNode: LGraphNode | undefined;
 
-    graph.nodes.forEach((node: any) =>{
+    graph.nodes.forEach((node: any) => {
 
 
-        if(!foundNode){
-            if(node.id == nodeId){
+        if (!foundNode) {
+            if (node.id == nodeId) {
 
-                if(subgraph){
+                if (subgraph) {
                     foundNode = node;
-                    if(node.subgraph && !node.type){
+                    if (node.subgraph && !node.type) {
                         foundNode = node;
                     }
-                }else{
-                    if(!node.subgraph){
+                } else {
+                    if (!node.subgraph) {
                         foundNode = node;
                     }
                 }
 
             }
-            if(!foundNode && node.isSubgraphNode){
+            if (!foundNode && node.isSubgraphNode) {
                 foundNode = getNodeHelper(nodeId, node.subgraph)
             }
         }
@@ -387,7 +386,7 @@ function getNodeHelper(nodeId: number, graph: any, subgraph: boolean = false){
     return foundNode;
 }
 
-function hookWidgetChanged(node: any){
+function hookWidgetChanged(node: any) {
     if (node.__bv_onWidgetChanged_patched) return;
     node.__bv_onWidgetChanged_patched = true;
 
@@ -398,7 +397,8 @@ function hookWidgetChanged(node: any){
         try {
             // @ts-ignore
             r = original?.apply(this, arguments);
-        } catch { }
+        } catch {
+        }
 
 
         const config = readConfig();
@@ -416,10 +416,9 @@ function hookWidgetChanged(node: any){
 }
 
 
-function getWidgetValue(node: LGraphNode, slot: number){
-    const graph = node.graph;
+function getWidgetValue(node: LGraphNode, slot: number) {
     const inputSlot = node.getInputInfo(slot)
-    if(!inputSlot) return;
+    if (!inputSlot) return;
     return node.getWidgetFromSlot(inputSlot)?.value as boolean;
 }
 
@@ -427,12 +426,12 @@ function normalizeGroupTitle(entry: BVControlEntry) {
     return entry.ref.title
 }
 
-function normalizeAction(value: "bypass"| "mute") {
+function normalizeAction(value: "bypass" | "mute") {
     const v = (value ?? "").toString().toLowerCase().trim();
     return v === "bypass" ? "bypass" : "mute";
 }
 
-function applyEntry(groupTitle: string, action: "bypass"| "mute", enabled: boolean) {
+function applyEntry(groupTitle: string, action: "bypass" | "mute", enabled: boolean) {
     if (!groupTitle) return;
     const appOrGraph = getApp()
 
@@ -444,7 +443,6 @@ function applyEntry(groupTitle: string, action: "bypass"| "mute", enabled: boole
         return;
     }
 
-    // default: mute
     if (enabled) muteGroupsByTitle(appOrGraph, groupTitle, "overlap");
     else unmuteGroupsByTitle(appOrGraph, groupTitle, "overlap");
 }
@@ -525,12 +523,12 @@ comfyApp.registerExtension({
             this.serialize_widgets = true;
 
             // @ts-ignore
-            if(node.type && !node.subgraph ){
+            if (node.type && !node.subgraph) {
                 showErrorToast("BV Control Center can only be connected to a Subgraph.")
                 return false
             }
 
-            if(this.type == "BV Control Center"){
+            if (this.type == "BV Control Center") {
 
                 ensureSubgraphContainerPatchedFromInnerNodeRetry(this);
 
@@ -543,26 +541,24 @@ comfyApp.registerExtension({
                 const retries = 20
 
                 function retry(n = 0) {
-                    if(n >= retries) return;
+                    if (n >= retries) return;
                     const gNode = getNodeHelper(id, getApp().rootGraph)
 
 
-                    if(gNode){
+                    if (gNode) {
 
                         const suc = renameSubGraphInputSlot(gNode, target_slot)
 
-                        if(suc) return;
+                        if (suc) return;
 
                     }
 
-
-                    setTimeout(()=>{retry(n+1)},50)
+                    setTimeout(() => {
+                        retry(n + 1)
+                    }, 50)
                 }
 
                 retry()
-
-
-
                 return r;
 
             }
@@ -587,13 +583,47 @@ function findAllSubgraphContainers(graph: any): any[] {
     return result;
 }
 
+function getOuterNode(innerNode: LGraphNode) {
+    if (innerNode.graph?.subgraphs) {
+        const subgraph = innerNode.graph as Subgraph;
+
+        function walk(graph: any, type: string): LGraphNode | undefined {
+
+            let foundNode: LGraphNode | undefined;
+
+            for (const node of graph.nodes) {
+                if (!foundNode) {
+
+                    if (node.isSubgraphNode()) {
+                        if (type == node.type) {
+                            return node;
+                        } else {
+                            foundNode = walk(node.subgraph, type)
+                            if (foundNode) return foundNode;
+                        }
+                    }
+                } else {
+                    return foundNode;
+                }
+            }
+            return foundNode;
+        }
+
+        return walk(getApp().rootGraph, subgraph.id)
+    }
+    return undefined;
+}
+
 function patchSubgraphContainerPrototype(subgraphNode: any) {
 
-
     const proto = subgraphNode?.constructor?.prototype;
+
+    if (!proto) return false;
+    if (proto.__bv_patched) return false;
     if (!proto || proto.__bv_patched) return false;
 
     proto.__bv_patched = true;
+
 
     proto.onWidgetChanged = function (
         name: string,
@@ -602,7 +632,12 @@ function patchSubgraphContainerPrototype(subgraphNode: any) {
         widget: any
     ) {
 
-        console.debug("onWidgetChangedSubgraph", name, value, old_value, widget)
+        let r;
+        try {
+            // @ts-ignore
+            r = original?.apply(this, arguments);
+        } catch {
+        }
 
         const graph = getApp()?.rootGraph;
 
@@ -612,7 +647,7 @@ function patchSubgraphContainerPrototype(subgraphNode: any) {
 
         executeChange(widget.label, value);
 
-        return
+        return r
     };
 
     return true;
@@ -648,8 +683,7 @@ function retryPatchAllSubgraphs(opts?: {
     const tick = () => {
         attempt++;
 
-        const patchedCount = patchAllSubgraphs(); // <-- return number patched!
-        // patchAllSubgraphs should return how many prototypes were newly patched this run
+        const patchedCount = patchAllSubgraphs();
 
         if (stopWhenPatched && patchedCount > 0) return;
         if (attempt >= maxAttempts) return;
@@ -664,25 +698,19 @@ function ensureSubgraphContainerPatchedFromInnerNode(innerNode: any) {
     const g: any = innerNode?.graph;
     if (!g) return false;
 
-    // Container draußen (dein “Subgraph-Node” außen)
-    // const container: any = g._subgraph_node;
-    const container = getNodeHelper(innerNode.id, g, true)
+    const container = getOuterNode(innerNode)
     if (!container) return false;
 
-    // <-- HIER patchst du NICHT über registry,
-    // sondern über die echte Instanz / constructor prototype
-    const patchingResult = patchSubgraphContainerPrototype(container);
-    return patchingResult;
+    return patchSubgraphContainerPrototype(container);
 
-    // return true;
 }
 
-function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTries = 30) {
+function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTries = 20) {
     let tries = 0;
 
     const tick = () => {
 
-        console.log("Retrying patching subgraph container from inner node", innerNode.id, tries)
+        console.debug("Retrying patching subgraph container from inner node", innerNode.id, tries)
         tries++;
         if (ensureSubgraphContainerPatchedFromInnerNode(innerNode)) return;
         if (tries >= maxTries) return;
@@ -693,8 +721,7 @@ function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTri
 }
 
 
-
-retryPatchAllSubgraphs({ intervalMs: 150, maxAttempts: 80 });
+retryPatchAllSubgraphs({intervalMs: 150, maxAttempts: 80});
 
 let __bvSingletonCheckScheduled = false;
 
@@ -717,7 +744,7 @@ function scheduleRemoveJustAddedSingletons() {
         const walk = (g: any) => {
             for (const n of g?.nodes ?? []) {
                 if (!n) continue;
-                if (n.type === BV_SINGLETON_TYPE) all.push({ node: n, graph: g });
+                if (n.type === BV_SINGLETON_TYPE) all.push({node: n, graph: g});
                 if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
             }
         };
@@ -741,8 +768,9 @@ function scheduleRemoveJustAddedSingletons() {
 
             if (n === keep) continue;
 
-            try { g.remove(n); }
-            catch {
+            try {
+                g.remove(n);
+            } catch {
                 const idx = g.nodes?.indexOf(n);
                 if (idx >= 0) g.nodes.splice(idx, 1);
             }
@@ -779,7 +807,7 @@ function enforceSingletonKeepNewest() {
     const walk = (g: any) => {
         for (const n of g?.nodes ?? []) {
             if (!n) continue;
-            if (n.type === BV_SINGLETON_TYPE) found.push({ node: n, graph: g });
+            if (n.type === BV_SINGLETON_TYPE) found.push({node: n, graph: g});
             if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
         }
     };
@@ -792,9 +820,11 @@ function enforceSingletonKeepNewest() {
     const keep = found[0].node;
 
     for (let i = 1; i < found.length; i++) {
-        const { node, graph } = found[i];
+        const {node, graph} = found[i];
         if (node === keep) continue;
-        try { graph.remove(node); } catch {
+        try {
+            graph.remove(node);
+        } catch {
             const idx = graph.nodes?.indexOf(node);
             if (idx >= 0) graph.nodes.splice(idx, 1);
         }
@@ -816,7 +846,6 @@ function patchGraphAddSingletonGuard() {
 
     const addFnName = proto.add ? "add" : (proto.addNode ? "addNode" : null);
     if (!addFnName) {
-        console.warn("[BV] LGraph.add/addNode not found");
         return false;
     }
 
@@ -826,14 +855,13 @@ function patchGraphAddSingletonGuard() {
         const r = origAdd.apply(this, arguments);
 
         if (node?.type === BV_SINGLETON_TYPE) {
-            pendingSingletonAdds.push({ node, graph: this });
+            pendingSingletonAdds.push({node, graph: this});
             scheduleRemoveJustAddedSingletons();
         }
 
         return r;
     };
 
-    console.log("[BV] Patched LGraph add with singleton guard");
     return true;
 }
 
