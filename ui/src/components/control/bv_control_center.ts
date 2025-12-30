@@ -74,30 +74,48 @@ function showErrorToast(msg: string){
 
 function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string){
 
+
     let label = slotName
     if(!slotName){
         // @ts-ignore
         label = node.inputs[slotNumber].label
+        if(!label) label = node.inputs[slotNumber].name
     }
 
-    if(!label) return;
 
-    if(node.getInputLink(slotNumber)) {
+    if(!label) return false;
 
-        if (node.graph?._subgraphs) {
-            const subgraph = node.graph as Subgraph
 
-            const link = node.getInputLink(slotNumber);
-            const orgingId = link?.origin_id
-            const orgingSlot = link?.origin_slot;
-            if (subgraph.inputNode.id == orgingId && typeof orgingSlot === 'number') {
-                const slot = subgraph.inputNode.allSlots[orgingSlot]
-                subgraph.renameInput(slot, label.split(" - ")[0])
+    try{
+        if(node.getInputLink(slotNumber)) {
 
+            if (node.graph?._subgraphs) {
+                const subgraph = node.graph as Subgraph
+
+                const link = node.getInputLink(slotNumber);
+                const orgingId = link?.origin_id
+                const orgingSlot = link?.origin_slot;
+                if (subgraph.inputNode.id == orgingId && typeof orgingSlot === 'number') {
+                    const slot = subgraph.inputNode.allSlots[orgingSlot]
+                    subgraph.renameInput(slot, label.split(" - ")[0])
+                    return true;
+
+                }
+                return false
             }
+            return true;
+
         }
 
+    }catch(e){
+
+        console.error("Error renaming subgraph input slot (LINK)", e)
+        return false;
+
     }
+
+
+    return false
 
 }
 
@@ -266,6 +284,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             // @ts-ignore
             node.inputs[i]._widget = widget;
 
+            //BV Node
             renameSubGraphInputSlot(node, i, rawLabel)
 
         }
@@ -333,21 +352,37 @@ function crawlSubgraphForNode(nodes: any[]) {
     return controlNodes;
 }
 
-function getNodeHelper(nodeId: number, graph: any){
+function getNodeHelper(nodeId: number, graph: any, subgraph: boolean = false){
+
     if (!graph?.nodes) return;
 
     let foundNode: LGraphNode | undefined;
 
     graph.nodes.forEach((node: any) =>{
+
+
         if(!foundNode){
             if(node.id == nodeId){
-                foundNode = node;
-            }else if(node.isSubgraphNode){
+
+                if(subgraph){
+                    foundNode = node;
+                    if(node.subgraph && !node.type){
+                        foundNode = node;
+                    }
+                }else{
+                    if(!node.subgraph){
+                        foundNode = node;
+                    }
+                }
+
+            }
+            if(!foundNode && node.isSubgraphNode){
                 foundNode = getNodeHelper(nodeId, node.subgraph)
             }
         }
 
     })
+
 
     return foundNode;
 }
@@ -505,13 +540,28 @@ comfyApp.registerExtension({
 
                 const id = this.id;
 
-                setTimeout(()=>{
+                const retries = 20
+
+                function retry(n = 0) {
+                    if(n >= retries) return;
                     const gNode = getNodeHelper(id, getApp().rootGraph)
 
-                    if(!gNode) return;
 
-                    renameSubGraphInputSlot(gNode, target_slot)
-                },100)
+                    if(gNode){
+
+                        const suc = renameSubGraphInputSlot(gNode, target_slot)
+
+                        if(suc) return;
+
+                    }
+
+
+                    setTimeout(()=>{retry(n+1)},50)
+                }
+
+                retry()
+
+
 
                 return r;
 
@@ -539,7 +589,6 @@ function findAllSubgraphContainers(graph: any): any[] {
 
 function patchSubgraphContainerPrototype(subgraphNode: any) {
 
-    const node = subgraphNode as SubgraphNode;
 
     const proto = subgraphNode?.constructor?.prototype;
     if (!proto || proto.__bv_patched) return false;
@@ -553,7 +602,11 @@ function patchSubgraphContainerPrototype(subgraphNode: any) {
         widget: any
     ) {
 
-        const node = getNodeHelper(this.id, this.graph) as SubgraphNode
+        console.debug("onWidgetChangedSubgraph", name, value, old_value, widget)
+
+        const graph = getApp()?.rootGraph;
+
+        const node = getNodeHelper(this.id, graph, true) as SubgraphNode
 
         hookSubgraphWidgetChanged(node)
 
@@ -613,14 +666,15 @@ function ensureSubgraphContainerPatchedFromInnerNode(innerNode: any) {
 
     // Container draußen (dein “Subgraph-Node” außen)
     // const container: any = g._subgraph_node;
-    const container = getNodeHelper(innerNode.id, g)
+    const container = getNodeHelper(innerNode.id, g, true)
     if (!container) return false;
 
     // <-- HIER patchst du NICHT über registry,
     // sondern über die echte Instanz / constructor prototype
-    patchSubgraphContainerPrototype(container);
+    const patchingResult = patchSubgraphContainerPrototype(container);
+    return patchingResult;
 
-    return true;
+    // return true;
 }
 
 function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTries = 30) {
