@@ -787,52 +787,6 @@ function scheduleRemoveJustAddedSingletons() {
     }, 0);
 }
 
-function scheduleSingletonEnforce() {
-    if (__bvSingletonCheckScheduled) return;
-    __bvSingletonCheckScheduled = true;
-
-    // next macrotask is usually enough; increase to 0/RAF if needed
-    setTimeout(() => {
-        __bvSingletonCheckScheduled = false;
-        enforceSingletonKeepNewest(); // or keep oldest, your choice
-    }, 0);
-}
-
-function enforceSingletonKeepNewest() {
-    const root = getApp()?.rootGraph;
-    if (!root) return;
-
-    const found: any[] = [];
-
-    const walk = (g: any) => {
-        for (const n of g?.nodes ?? []) {
-            if (!n) continue;
-            if (n.type === BV_SINGLETON_TYPE) found.push({node: n, graph: g});
-            if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
-        }
-    };
-
-    walk(root);
-    if (found.length <= 1) return;
-
-    // Keep the newest one (highest id) - tends to be the "inner" one during subgraph creation
-    found.sort((a, b) => (b.node.id ?? 0) - (a.node.id ?? 0));
-    const keep = found[0].node;
-
-    for (let i = 1; i < found.length; i++) {
-        const {node, graph} = found[i];
-        if (node === keep) continue;
-        try {
-            graph.remove(node);
-        } catch {
-            const idx = graph.nodes?.indexOf(node);
-            if (idx >= 0) graph.nodes.splice(idx, 1);
-        }
-    }
-
-    root.setDirtyCanvas?.(true, true);
-}
-
 const BV_SINGLETON_TYPE = "BV Control Center";
 
 
