@@ -1,4 +1,4 @@
-import type { ComfyApp, LGraph, LGraphGroup, LGraphNode } from "@comfyorg/comfyui-frontend-types";
+import type { ComfyApp, LGraph, LGraphGroup, LGraphNode } from "../../types/comfyui-frontend-types.augment";
 
 type AnyObj = Record<string, unknown>;
 
@@ -48,7 +48,7 @@ function getGraphGroups(graph: LGraph): LGraphGroup[] {
     return (graph._groups ?? graph.groups ?? []) as LGraphGroup[];
 }
 
-function getNodeSubgraph(node: LGraphNode): LGraph | null {
+function getNodeSubgraph(node: any): LGraph | null {
     if (node.subgraph && typeof node.subgraph === "object") return node.subgraph as LGraph;
 
     if (typeof node.getSubgraph === "function") {
@@ -137,7 +137,6 @@ function nodeMatchesType(node: LGraphNode, typeOrPredicate: string | NodePredica
     const candidates = [
         node.type,
         node.comfyClass,
-        node.ComfyClass,
         node.title,
         (node as any).constructor?.name,
     ]

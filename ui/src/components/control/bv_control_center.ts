@@ -1,12 +1,25 @@
 import {getApp} from "../../appHelper.js";
 import {BVControlConfig, BVControlEntry, readConfig} from "../../util/control/configHandler";
-import {IBaseWidget, LGraphNode, Subgraph, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
+import {IBaseWidget, LGraphNode, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
 import {
     bypassGroupsByTitle,
     muteGroupsByTitle,
     unbypassGroupsByTitle,
     unmuteGroupsByTitle
 } from "../../util/control/stateHandler";
+import {
+    crawlSubgraphForNode,
+    getNodeHelper,
+    getWidgetValue,
+    showErrorToast
+} from "../../util/control/controlHelper";
+import {
+    ensureSubgraphContainerPatchedFromInnerNodeRetry,
+    findAllSubgraphContainers,
+    patchSubgraphContainerPrototype,
+    renameSubGraphInputSlot
+} from "../../util/control/subgraphHandler";
+import {patchGraphAddSingletonGuard} from "../../util/control/singletonHandler";
 
 const comfyApp = getApp();
 
@@ -33,7 +46,6 @@ function startConfigWatcher() {
 }
 
 function hookSubgraphWidgetChanged(node: SubgraphNode) {
-
     let found = false
     let foundNode: LGraphNode | undefined;
 
@@ -53,71 +65,11 @@ function hookSubgraphWidgetChanged(node: SubgraphNode) {
     }
 
     const config = readConfig();
-
     if (!config) return;
 
     setTimeout(() => {
         updateSingleControlNode(foundNode, config)
-
-
     }, 100)
-
-}
-
-function showErrorToast(msg: string) {
-    getApp().extensionManager.toast.add({
-        severity: "error",
-        summary: "Error",
-        detail: msg,
-        life: 5000
-    });
-}
-
-function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string) {
-
-
-    let label = slotName
-    if (!slotName) {
-        // @ts-ignore
-        label = node.inputs[slotNumber].label
-        if (!label) label = node.inputs[slotNumber].name
-    }
-
-
-    if (!label) return false;
-
-
-    try {
-        if (node.getInputLink(slotNumber)) {
-
-            if (node.graph?._subgraphs) {
-                const subgraph = node.graph as Subgraph
-
-                const link = node.getInputLink(slotNumber);
-                const orgingId = link?.origin_id
-                const orgingSlot = link?.origin_slot;
-                if (subgraph.inputNode.id == orgingId && typeof orgingSlot === 'number') {
-                    const slot = subgraph.inputNode.allSlots[orgingSlot]
-                    subgraph.renameInput(slot, label.split(" - ")[0])
-                    return true;
-
-                }
-                return false
-            }
-            return true;
-
-        }
-
-    } catch (e) {
-
-        console.error("Error renaming subgraph input slot (LINK)", e)
-        return false;
-
-    }
-
-
-    return false
-
 }
 
 function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true) {
@@ -247,7 +199,6 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             let label = config.rows[i].title;
             const rawLabel = config.rows[i].title;
 
-
             if (getWidgetValue(node, i)) {
                 label = label + " - (ACTIVE)"
             } else {
@@ -258,7 +209,6 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
 
             if (node.inputs[i].label !== label) {
                 node.inputs[i].label = label;
-
                 changed = true;
             }
 
@@ -286,7 +236,6 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             node.inputs[i]._widget = widget;
 
             renameSubGraphInputSlot(node, i, rawLabel)
-
         }
 
         if (node.inputs.length > config.rows.length) {
@@ -335,57 +284,6 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
     });
 }
 
-function crawlSubgraphForNode(nodes: any[]) {
-    const controlNodes: LGraphNode[] = [];
-    nodes.forEach((node: any) => {
-
-        if (node.isSubgraphNode && node.isSubgraphNode()) {
-            const sGraph = node as SubgraphNode;
-            controlNodes.push(...crawlSubgraphForNode(sGraph.subgraph.nodes))
-        } else {
-            if (node.type === "BV Control Center") {
-                controlNodes.push(node);
-            }
-        }
-    })
-    return controlNodes;
-}
-
-function getNodeHelper(nodeId: number, graph: any, subgraph: boolean = false) {
-
-    if (!graph?.nodes) return;
-
-    let foundNode: LGraphNode | undefined;
-
-    graph.nodes.forEach((node: any) => {
-
-
-        if (!foundNode) {
-            if (node.id == nodeId) {
-
-                if (subgraph) {
-                    foundNode = node;
-                    if (node.subgraph && !node.type) {
-                        foundNode = node;
-                    }
-                } else {
-                    if (!node.subgraph) {
-                        foundNode = node;
-                    }
-                }
-
-            }
-            if (!foundNode && node.isSubgraphNode) {
-                foundNode = getNodeHelper(nodeId, node.subgraph)
-            }
-        }
-
-    })
-
-
-    return foundNode;
-}
-
 function hookWidgetChanged(node: any) {
     if (node.__bv_onWidgetChanged_patched) return;
     node.__bv_onWidgetChanged_patched = true;
@@ -400,7 +298,6 @@ function hookWidgetChanged(node: any) {
         } catch {
         }
 
-
         const config = readConfig();
         if (config) {
             const title = widget.label?.split(" - ")[0]
@@ -411,15 +308,6 @@ function hookWidgetChanged(node: any) {
 
         return r
     }
-
-
-}
-
-
-function getWidgetValue(node: LGraphNode, slot: number) {
-    const inputSlot = node.getInputInfo(slot)
-    if (!inputSlot) return;
-    return node.getWidgetFromSlot(inputSlot)?.value as boolean;
 }
 
 function normalizeGroupTitle(entry: BVControlEntry) {
@@ -484,16 +372,12 @@ comfyApp.registerExtension({
             const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
             this.serialize_widgets = true;
 
-
-            this.serialize_widgets = true;
-
             const cfg = readConfig();
             if (cfg) {
                 updateSingleControlNode(this, cfg);
             }
 
             hookWidgetChanged(this)
-
             startConfigWatcher();
 
             return r;
@@ -503,7 +387,6 @@ comfyApp.registerExtension({
         nodeType.prototype.onConfigure = function (nodeInfo: any) {
             // @ts-ignore
             const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
-
             this.serialize_widgets = true;
 
             const cfg = readConfig();
@@ -519,7 +402,6 @@ comfyApp.registerExtension({
         nodeType.prototype.onConnectInput = function (target_slot, type, output, node, slot) {
             // @ts-ignore
             const r = onConnectInput ? onConnectInput.apply(this, arguments) : undefined;
-
             this.serialize_widgets = true;
 
             // @ts-ignore
@@ -529,130 +411,31 @@ comfyApp.registerExtension({
             }
 
             if (this.type == "BV Control Center") {
-
-                ensureSubgraphContainerPatchedFromInnerNodeRetry(this);
+                ensureSubgraphContainerPatchedFromInnerNodeRetry(this, hookSubgraphWidgetChanged, executeChange);
 
                 if (typeof this.id !== 'number') {
                     return r;
                 }
 
                 const id = this.id;
-
                 const retries = 20
-
                 function retry(n = 0) {
                     if (n >= retries) return;
                     const gNode = getNodeHelper(id, getApp().rootGraph)
-
-
                     if (gNode) {
-
                         const suc = renameSubGraphInputSlot(gNode, target_slot)
-
                         if (suc) return;
-
                     }
-
                     setTimeout(() => {
                         retry(n + 1)
                     }, 50)
                 }
-
                 retry()
                 return r;
-
             }
         }
     }
 });
-
-
-function findAllSubgraphContainers(graph: any): any[] {
-    const result: any[] = [];
-
-    const walk = (nodes: any[]) => {
-        for (const n of nodes ?? []) {
-            if (n?.isSubgraphNode?.()) {
-                result.push(n);
-                if (n.subgraph?.nodes) walk(n.subgraph.nodes);
-            }
-        }
-    };
-
-    walk(graph?.nodes);
-    return result;
-}
-
-function getOuterNode(innerNode: LGraphNode) {
-    if (innerNode.graph?.subgraphs) {
-        const subgraph = innerNode.graph as Subgraph;
-
-        function walk(graph: any, type: string): LGraphNode | undefined {
-
-            let foundNode: LGraphNode | undefined;
-
-            for (const node of graph.nodes) {
-                if (!foundNode) {
-
-                    if (node.isSubgraphNode()) {
-                        if (type == node.type) {
-                            return node;
-                        } else {
-                            foundNode = walk(node.subgraph, type)
-                            if (foundNode) return foundNode;
-                        }
-                    }
-                } else {
-                    return foundNode;
-                }
-            }
-            return foundNode;
-        }
-
-        return walk(getApp().rootGraph, subgraph.id)
-    }
-    return undefined;
-}
-
-function patchSubgraphContainerPrototype(subgraphNode: any) {
-
-    const proto = subgraphNode?.constructor?.prototype;
-
-    if (!proto) return false;
-    if (proto.__bv_patched) return false;
-    if (!proto || proto.__bv_patched) return false;
-
-    proto.__bv_patched = true;
-
-
-    proto.onWidgetChanged = function (
-        name: string,
-        value: any,
-        old_value: any,
-        widget: any
-    ) {
-
-        let r;
-        try {
-            // @ts-ignore
-            r = original?.apply(this, arguments);
-        } catch {
-        }
-
-        const graph = getApp()?.rootGraph;
-
-        const node = getNodeHelper(this.id, graph, true) as SubgraphNode
-
-        hookSubgraphWidgetChanged(node)
-
-        executeChange(widget.label, value);
-
-        return r
-    };
-
-    return true;
-}
-
 
 function patchAllSubgraphs(): number {
     const graph = getApp()?.rootGraph;
@@ -662,7 +445,7 @@ function patchAllSubgraphs(): number {
 
     let patched = 0;
     for (const s of subs) {
-        const didPatch = patchSubgraphContainerPrototype(s); // <-- return boolean!
+        const didPatch = patchSubgraphContainerPrototype(s, hookSubgraphWidgetChanged, executeChange);
         if (didPatch) patched++;
     }
 
@@ -694,130 +477,7 @@ function retryPatchAllSubgraphs(opts?: {
     tick();
 }
 
-function ensureSubgraphContainerPatchedFromInnerNode(innerNode: any) {
-    const g: any = innerNode?.graph;
-    if (!g) return false;
-
-    const container = getOuterNode(innerNode)
-    if (!container) return false;
-
-    return patchSubgraphContainerPrototype(container);
-
-}
-
-function ensureSubgraphContainerPatchedFromInnerNodeRetry(innerNode: any, maxTries = 20) {
-    let tries = 0;
-
-    const tick = () => {
-
-        console.debug("Retrying patching subgraph container from inner node", innerNode.id, tries)
-        tries++;
-        if (ensureSubgraphContainerPatchedFromInnerNode(innerNode)) return;
-        if (tries >= maxTries) return;
-        requestAnimationFrame(tick);
-    };
-
-    tick();
-}
-
-
 retryPatchAllSubgraphs({intervalMs: 150, maxAttempts: 80});
-
-let __bvSingletonCheckScheduled = false;
-
-let singletonRemovalScheduled = false;
-const pendingSingletonAdds: Array<{ node: any; graph: any }> = [];
-
-function scheduleRemoveJustAddedSingletons() {
-    if (singletonRemovalScheduled) return;
-    singletonRemovalScheduled = true;
-
-    // next tick: let ComfyUI finish subgraph conversion / internal moves
-    setTimeout(() => {
-        singletonRemovalScheduled = false;
-
-        const root = getApp()?.rootGraph;
-        if (!root) return;
-
-        // collect all singleton nodes across entire workflow (root + subgraphs)
-        const all: Array<{ node: any; graph: any }> = [];
-        const walk = (g: any) => {
-            for (const n of g?.nodes ?? []) {
-                if (!n) continue;
-                if (n.type === BV_SINGLETON_TYPE) all.push({node: n, graph: g});
-                if (n.isSubgraphNode?.() && n.subgraph) walk(n.subgraph);
-            }
-        };
-        walk(root);
-
-        if (all.length <= 1) {
-            pendingSingletonAdds.length = 0;
-            return;
-        }
-
-        // Prefer keeping an "old" one: keep the one with the smallest id (usually the existing one)
-        all.sort((a, b) => (a.node?.id ?? 0) - (b.node?.id ?? 0));
-        const keep = all[0].node;
-
-        // Remove everything else, but especially remove the ones that were just added by the user
-        let removedAny = false;
-
-        for (const entry of all.slice(1)) {
-            const n = entry.node;
-            const g = entry.graph;
-
-            if (n === keep) continue;
-
-            try {
-                g.remove(n);
-            } catch {
-                const idx = g.nodes?.indexOf(n);
-                if (idx >= 0) g.nodes.splice(idx, 1);
-            }
-
-            removedAny = true;
-        }
-
-        if (removedAny) {
-            showErrorToast("BV Control Center is already in the workflow.");
-            root.setDirtyCanvas?.(true, true);
-        }
-
-        pendingSingletonAdds.length = 0;
-    }, 0);
-}
-
-const BV_SINGLETON_TYPE = "BV Control Center";
-
-
-function patchGraphAddSingletonGuard() {
-    const LGraphCtor: any = (window as any).LGraph;
-    if (!LGraphCtor?.prototype) return false;
-
-    const proto = LGraphCtor.prototype;
-    if (proto.__bv_singleton_add_patched) return true;
-    proto.__bv_singleton_add_patched = true;
-
-    const addFnName = proto.add ? "add" : (proto.addNode ? "addNode" : null);
-    if (!addFnName) {
-        return false;
-    }
-
-    const origAdd = proto[addFnName];
-
-    proto[addFnName] = function (node: any) {
-        const r = origAdd.apply(this, arguments);
-
-        if (node?.type === BV_SINGLETON_TYPE) {
-            pendingSingletonAdds.push({node, graph: this});
-            scheduleRemoveJustAddedSingletons();
-        }
-
-        return r;
-    };
-
-    return true;
-}
 
 // Retry because LGraph might not be ready instantly
 (function retry(n = 0) {
@@ -825,4 +485,3 @@ function patchGraphAddSingletonGuard() {
     if (n > 80) return;
     setTimeout(() => retry(n + 1), 50);
 })();
-
