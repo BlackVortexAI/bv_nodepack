@@ -1,15 +1,24 @@
-import {FC} from "react";
+import {FC, useEffect} from "react";
 import {BVControlEntry} from "../../util/control/configHandler";
 import * as React from 'react';
 import {BVControlRow} from "../../util/control/configHandler";
-import { getApp } from "../../appHelper.js";
-import {collectAllGroups} from "../../util/control/collector";
+import {CollectedGroup} from "../../util/control/collector";
 
-const BvControlRowComponent: FC<{ index: number, row: BVControlRow, maxCols: number, onChange(index: number, row: BVControlRow, del: boolean): void}> = ({index, row, maxCols, onChange}) => {
+const BvControlRowComponent: FC<{ index: number, row: BVControlRow, maxCols: number, onChange(index: number, row: BVControlRow, del: boolean): void, groups: CollectedGroup[]}> = ({index, row, maxCols, onChange, groups}) => {
 
-    const comfyApp = getApp();
+    useEffect(() => {
+        const groupTitles = groups.map(g => g.group.title);
+        const validEntries = row.entries.filter(entry => {
+            if (entry.kind === "group") {
+                return groupTitles.includes(entry.ref.title);
+            }
+            return true;
+        });
 
-    const groups = collectAllGroups(comfyApp);
+        if (validEntries.length !== row.entries.length) {
+            onChange(index, {...row, entries: validEntries}, false);
+        }
+    }, [groups, row.entries, index, onChange, row.title]);
 
     const onSelectedChange = (entryIndex: number | null, value: string) => {
         if (entryIndex === null) {

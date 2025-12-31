@@ -1,11 +1,15 @@
 import * as React from 'react';
 import {BVControlRow, readConfig, writeConfig} from "../../util/control/configHandler";
 import BVControlRowComponent from "./BVControlRowComponent";
-import {FC} from "react";
+import {FC, useMemo} from "react";
+import {getApp} from "../../appHelper";
+import {collectAllGroups} from "../../util/control/collector";
 
 const BVControlComponent: FC<{onClose() : void}> = ({onClose}) => {
 
     const [config, setConfig] = React.useState(readConfig());
+    const comfyApp = getApp();
+    const groups = useMemo(() => collectAllGroups(comfyApp), [comfyApp, config]);
 
     const addRow = () => {
         if (config) {
@@ -77,7 +81,7 @@ const BVControlComponent: FC<{onClose() : void}> = ({onClose}) => {
                     })}
 
                     {config.rows.map((row, i) => (
-                        <BVControlRowComponent key={i} index={i} row={row} onChange={onChange} maxCols={cols}/>
+                        <BVControlRowComponent key={i} index={i} row={row} onChange={onChange} maxCols={cols} groups={groups}/>
                     ))}
                 </div>
             }
