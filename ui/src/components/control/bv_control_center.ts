@@ -15,7 +15,7 @@ import {
 } from "../../util/control/controlHelper";
 import {
     ensureSubgraphContainerPatchedFromInnerNodeRetry,
-    findAllSubgraphContainers,
+    findAllSubgraphContainers, getOuterNode,
     patchSubgraphContainerPrototype,
     renameSubGraphInputSlot
 } from "../../util/control/subgraphHandler";
@@ -442,7 +442,6 @@ comfyApp.registerExtension({
             if (this.type == "BV Control Center") {
                 ensureSubgraphContainerPatchedFromInnerNodeRetry(this, hookSubgraphWidgetChanged, executeChange);
 
-                console.debug("BV Control Center connected to subgraph", this)
 
                 if (typeof this.id !== 'number') {
                     return r;
@@ -464,6 +463,54 @@ comfyApp.registerExtension({
                 retry()
                 return r;
             }
+        }
+
+        const onConnectionsChange = nodeType.prototype.onConnectionsChange
+        // @ts-ignore
+        nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
+            // @ts-ignore
+            const r = onConnectionsChange ? onConnectionsChange.apply(this, arguments) : undefined;
+
+            if (!connected && type === 1) { // 1 is LiteGraph.INPUT
+                if (this.type == "BV Control Center") {
+
+                    const id = this.id;
+                    setTimeout(() => {
+
+                        const gNode2 = getNodeHelper(id as number, getApp().rootGraph, true)
+                        if (!gNode2) return;
+                        const gNode = getOuterNode(gNode2) as SubgraphNode
+                        if (gNode && gNode.subgraph) {
+                            // Check if any other input is still connected to a BV Control Center
+                            let stillConnected = false
+                            gNode.subgraph.inputs.forEach((input) => {
+                                input.getLinks().forEach((link) => {
+                                    const sourceNode = getNodeHelper(link.target_id as number, gNode.graph)
+                                    if (sourceNode?.type == "BV Control Center") {
+                                        stillConnected = true
+                                    }
+                                })
+                            })
+
+                            if (!stillConnected) {
+                                // Remove all widgets that were added by us
+                                if (gNode.widgets) {
+                                    for (let i = gNode.widgets.length - 1; i >= 0; i--) {
+                                        const w = gNode.widgets[i];
+                                        if (w.name.startsWith("v_") || (w.label && (w.label.includes(ACTIVE) || w.label.includes(MUTE)))) {
+                                            // gNode.widgets.splice(i, 1);
+                                            gNode.removeWidget(gNode.widgets[i])
+                                        }
+                                    }
+                                    gNode.setDirtyCanvas(true, true);
+                                    gNode.size = gNode.computeSize?.() ?? gNode.size;
+                                }
+                            }
+                        }
+                    }, 100)
+                }
+            }
+            return r;
         }
     }
 });
