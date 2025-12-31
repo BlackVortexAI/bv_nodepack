@@ -16,15 +16,8 @@ class BVControlCenterNode:
     FUNCTION = "run"
     CATEGORY = "🌀 BV Node Pack/beta/control"
 
-    def run(self, config_json, **kwargs):
-        # kwargs contains b_001..b_100 but we don't need them server-side here.
-        try:
-            cfg = json.loads(config_json or "{}")
-        except Exception:
-            cfg = {}
-
-        normalized = json.dumps(cfg, ensure_ascii=False, sort_keys=True, indent=2)
-        return (normalized,)
+    def run(self, **kwargs):
+        return ()
 
 
 NODE_CLASS_MAPPINGS = {
