@@ -1,6 +1,6 @@
 import { getApp } from "../../appHelper.js";
 import { LGraphNode, Subgraph, SubgraphNode } from "../../types/comfyui-frontend-types.augment";
-import { getNodeHelper } from "./controlHelper";
+import {getNodeHelper, getWidgetValue} from "./controlHelper";
 import { readConfig } from "./configHandler";
 
 export function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string) {
@@ -23,7 +23,8 @@ export function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, sl
                 const orgingSlot = link?.origin_slot;
                 if (subgraph.inputNode.id == orgingId && typeof orgingSlot === 'number') {
                     const slot = subgraph.inputNode.allSlots[orgingSlot]
-                    subgraph.renameInput(slot, label.split(" - ")[0])
+                    subgraph.renameInput(slot, label)
+                    // subgraph.renameInput(slot, label.split(" - ")[0])
                     return true;
                 }
                 return false
@@ -105,6 +106,7 @@ export function patchSubgraphContainerPrototype(subgraphNode: any, hookSubgraphW
         const graph = getApp()?.rootGraph;
         const node = getNodeHelper(this.id, graph, true) as SubgraphNode
         if (node) {
+            console.debug("Subgraph container widget changed", name, value, old_value, widget, node, widget.label)
             hookSubgraphWidgetChanged(node)
         }
 

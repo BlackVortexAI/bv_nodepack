@@ -58,3 +58,5 @@ export function getWidgetValue(node: LGraphNode, slot: number) {
     if (!inputSlot) return;
     return node.getWidgetFromSlot(inputSlot)?.value as boolean;
 }
+
+

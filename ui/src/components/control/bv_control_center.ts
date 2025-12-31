@@ -21,6 +21,9 @@ import {
 } from "../../util/control/subgraphHandler";
 import {patchGraphAddSingletonGuard} from "../../util/control/singletonHandler";
 
+const ACTIVE = "(  #  ACTIVE  #  )";
+const MUTE   = "(MUTE/BYPASS)";
+
 const comfyApp = getApp();
 
 let configWatcherStarted = false;
@@ -67,13 +70,22 @@ function hookSubgraphWidgetChanged(node: SubgraphNode) {
     const config = readConfig();
     if (!config) return;
 
-    setTimeout(() => {
-        updateSingleControlNode(foundNode, config)
-    }, 100)
+    let retries = 0;
+    const maxRetries = 200;
+    const retry = () => {
+        const success = updateSingleControlNode(foundNode, config);
+        if (success || retries >= maxRetries) {
+            return;
+        }
+        retries++;
+        setTimeout(retry, 10);
+    };
+
+    retry();
 }
 
-function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true) {
-    if (!node || !config) return;
+function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true): boolean {
+    if (!node || !config) return false;
 
     let changed = false;
     if (!node.widgets) node.widgets = [];
@@ -91,9 +103,9 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         let label = config.rows[i].title;
 
         if (getWidgetValue(node, i)) {
-            label = label + " - (ACTIVE)"
+            label = label + " - " + ACTIVE
         } else {
-            label = label + " - (MUTE/BYPASS)"
+            label = label + " - " + MUTE
         }
 
         node.addInput(inputName, "BOOLEAN", {
@@ -126,14 +138,15 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         changed = true;
     }
 
+    let allSlotsRenamed = true;
     // Sync labels + widget values + link input<->widget
     for (let i = 0; i < desiredCount; i++) {
         let label = config.rows[i].title;
 
         if (getWidgetValue(node, i)) {
-            label = label + " - (ACTIVE)"
+            label = label + " - " + ACTIVE
         } else {
-            label = label + " - (MUTE/BYPASS)"
+            label = label + " - " + MUTE
         }
 
         const inputName = `v_${String(i).padStart(3, "0")}`;
@@ -168,7 +181,18 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         }
         const gNode = getNodeHelper(node.id, node.graph)
         if (gNode) {
-            renameSubGraphInputSlot(gNode, i, label.split(" - ")[0])
+            let subgraphLabelInvert = label.split(" - ")[0]
+            if (label.split(" - ")[1] === ACTIVE){
+                subgraphLabelInvert = label.split(" - ")[0] + " - " + MUTE
+            }else {
+                subgraphLabelInvert = label.split(" - ")[0] + " - " + ACTIVE
+            }
+            const success = renameSubGraphInputSlot(node, i, subgraphLabelInvert)
+            if (!success) {
+                allSlotsRenamed = false;
+            }
+        } else {
+            allSlotsRenamed = false;
         }
     }
 
@@ -177,6 +201,8 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         node.setDirtyCanvas(true, true);
         node.size = node.computeSize?.() ?? node.size;
     }
+
+    return allSlotsRenamed;
 }
 
 function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]) {
@@ -200,9 +226,9 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             const rawLabel = config.rows[i].title;
 
             if (getWidgetValue(node, i)) {
-                label = label + " - (ACTIVE)"
+                label = label + " - " + ACTIVE
             } else {
-                label = label + " - (MUTE/BYPASS)"
+                label = label + " - " + MUTE
             }
 
             const inputName = `v_${String(i).padStart(3, "0")}`;
@@ -235,7 +261,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             // @ts-ignore
             node.inputs[i]._widget = widget;
 
-            renameSubGraphInputSlot(node, i, rawLabel)
+            renameSubGraphInputSlot(node, i, label)
         }
 
         if (node.inputs.length > config.rows.length) {
@@ -251,9 +277,9 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             for (let i = node.inputs.length; i < config.rows.length; i++) {
                 let label = config.rows[i].title;
                 if (getWidgetValue(node, i)) {
-                    label = label + " - (ACTIVE)"
+                    label = label + " - " + ACTIVE
                 } else {
-                    label = label + " - (MUTE/BYPASS)"
+                    label = label + " - " + MUTE
                 }
                 const inputName = `v_${String(i).padStart(3, "0")}`;
 
@@ -300,7 +326,8 @@ function hookWidgetChanged(node: any) {
 
         const config = readConfig();
         if (config) {
-            const title = widget.label?.split(" - ")[0]
+            // const title = widget.label?.split(" - ")[0]
+            const title = widget.label
             if (!title) return;
             executeChange(title, value);
             updateSingleControlNode(node, config, undefined, false);
@@ -341,7 +368,7 @@ function executeChange(title: string, value: boolean): void {
 
     const applyDisable = !value;
 
-    const foundRow = config.rows.find(row => row.title === title);
+    const foundRow = config.rows.find(row => row.title.split(" - ")[0] === title.split(" - ")[0]);
     if (!foundRow) return;
     for (const entry of foundRow.entries) {
         const groupTitle = normalizeGroupTitle(entry);
@@ -397,6 +424,8 @@ comfyApp.registerExtension({
             return r;
         };
 
+
+
         const onConnectInput = nodeType.prototype.onConnectInput
         // @ts-ignore
         nodeType.prototype.onConnectInput = function (target_slot, type, output, node, slot) {
@@ -412,6 +441,8 @@ comfyApp.registerExtension({
 
             if (this.type == "BV Control Center") {
                 ensureSubgraphContainerPatchedFromInnerNodeRetry(this, hookSubgraphWidgetChanged, executeChange);
+
+                console.debug("BV Control Center connected to subgraph", this)
 
                 if (typeof this.id !== 'number') {
                     return r;
