@@ -243,6 +243,7 @@ Here is an example if, for example, Only Preview is active
 
 
 ### CHANGE LOG
+* 2025-12-31 - v0.0.13: Fix inverting error for label from `BV Control Center` widget.
 * 2025-12-31 - v0.0.12: Fix input error by node `BV Control Center`.
 * 2025-12-31 - v0.0.11: Reimplementation of renaming logic for they are connected to `BV Control Center`. Add logik for deleted Groups.
 * 2025-12-30 - v0.0.10: Fix onWidgetCreate event for subgraphs linked to `BV Control Center`.

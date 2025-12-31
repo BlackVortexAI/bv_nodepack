@@ -107,7 +107,7 @@ export function patchSubgraphContainerPrototype(subgraphNode: any, hookSubgraphW
         const node = getNodeHelper(this.id, graph, true) as SubgraphNode
         if (node) {
             console.debug("Subgraph container widget changed", name, value, old_value, widget, node, widget.label)
-            hookSubgraphWidgetChanged(node)
+            hookSubgraphWidgetChanged(node, name)
         }
 
         if (widget?.label) {

@@ -48,7 +48,7 @@ function startConfigWatcher() {
     }, 500);
 }
 
-function hookSubgraphWidgetChanged(node: SubgraphNode) {
+function hookSubgraphWidgetChanged(node: SubgraphNode, name?: string) {
     let found = false
     let foundNode: LGraphNode | undefined;
 
@@ -73,7 +73,7 @@ function hookSubgraphWidgetChanged(node: SubgraphNode) {
     let retries = 0;
     const maxRetries = 200;
     const retry = () => {
-        const success = updateSingleControlNode(foundNode, config);
+        const success = updateSingleControlNode(foundNode, config, undefined, true, name);
         if (success || retries >= maxRetries) {
             return;
         }
@@ -84,7 +84,7 @@ function hookSubgraphWidgetChanged(node: SubgraphNode) {
     retry();
 }
 
-function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true): boolean {
+function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true, name?: string): boolean {
     if (!node || !config) return false;
 
     let changed = false;
@@ -182,12 +182,19 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         const gNode = getNodeHelper(node.id, node.graph)
         if (gNode) {
             let subgraphLabelInvert = label.split(" - ")[0]
-            if (label.split(" - ")[1] === ACTIVE){
-                subgraphLabelInvert = label.split(" - ")[0] + " - " + MUTE
-            }else {
-                subgraphLabelInvert = label.split(" - ")[0] + " - " + ACTIVE
+            let success = false
+            if(name != w.name){
+                if (label.split(" - ")[1] === ACTIVE){
+                    subgraphLabelInvert = label.split(" - ")[0] + " - " + MUTE
+                }else {
+                    subgraphLabelInvert = label.split(" - ")[0] + " - " + ACTIVE
+                }
+                success = renameSubGraphInputSlot(node, i, subgraphLabelInvert)
+            }else{
+                success = renameSubGraphInputSlot(node, i, label)
             }
-            const success = renameSubGraphInputSlot(node, i, subgraphLabelInvert)
+
+
             if (!success) {
                 allSlotsRenamed = false;
             }
