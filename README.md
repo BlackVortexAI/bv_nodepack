@@ -243,6 +243,7 @@ Here is an example if, for example, Only Preview is active
 
 
 ### CHANGE LOG
+* 2026-01-01 - v0.0.14: Fix widget bugs for subgraph node connected to `BV Control Center` widget.
 * 2025-12-31 - v0.0.13: Fix inverting error for label from `BV Control Center` widget.
 * 2025-12-31 - v0.0.12: Fix input error by node `BV Control Center`.
 * 2025-12-31 - v0.0.11: Reimplementation of renaming logic for they are connected to `BV Control Center`. Add logik for deleted Groups.

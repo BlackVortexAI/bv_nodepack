@@ -96,6 +96,7 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
 
     const desiredCount = config.rows.length;
 
+
     // Ensure enough inputs
     while (node.inputs.length < desiredCount) {
         const i = node.inputs.length;
@@ -181,18 +182,8 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         }
         const gNode = getNodeHelper(node.id, node.graph)
         if (gNode) {
-            let subgraphLabelInvert = label.split(" - ")[0]
             let success = false
-            if(name != w.name){
-                if (label.split(" - ")[1] === ACTIVE){
-                    subgraphLabelInvert = label.split(" - ")[0] + " - " + MUTE
-                }else {
-                    subgraphLabelInvert = label.split(" - ")[0] + " - " + ACTIVE
-                }
-                success = renameSubGraphInputSlot(node, i, subgraphLabelInvert)
-            }else{
-                success = renameSubGraphInputSlot(node, i, label)
-            }
+            success = renameSubGraphInputSlot(node, i, label)
 
 
             if (!success) {
@@ -481,40 +472,58 @@ comfyApp.registerExtension({
             if (!connected && type === 1) { // 1 is LiteGraph.INPUT
                 if (this.type == "BV Control Center") {
 
+                    console.debug("onConnectionsChange", type, link_info, connected, index)
+
                     const id = this.id;
-                    setTimeout(() => {
 
-                        const gNode2 = getNodeHelper(id as number, getApp().rootGraph, true)
-                        if (!gNode2) return;
-                        const gNode = getOuterNode(gNode2) as SubgraphNode
-                        if (gNode && gNode.subgraph) {
-                            // Check if any other input is still connected to a BV Control Center
-                            let stillConnected = false
-                            gNode.subgraph.inputs.forEach((input) => {
-                                input.getLinks().forEach((link) => {
-                                    const sourceNode = getNodeHelper(link.target_id as number, gNode.graph)
-                                    if (sourceNode?.type == "BV Control Center") {
-                                        stillConnected = true
-                                    }
-                                })
-                            })
+                    const ccNode = getNodeHelper(id as number, getApp().rootGraph, true)
 
-                            if (!stillConnected) {
-                                // Remove all widgets that were added by us
-                                if (gNode.widgets) {
-                                    for (let i = gNode.widgets.length - 1; i >= 0; i--) {
-                                        const w = gNode.widgets[i];
-                                        if (w.name.startsWith("v_") || (w.label && (w.label.includes(ACTIVE) || w.label.includes(MUTE)))) {
-                                            // gNode.widgets.splice(i, 1);
-                                            gNode.removeWidget(gNode.widgets[i])
-                                        }
+                    if (ccNode){
+
+                        const sNode = getOuterNode(ccNode) as SubgraphNode
+
+                        if(link_info && sNode && sNode.widgets){
+                            const sWidget = sNode.widgets[link_info.origin_slot]
+                            const value = sWidget.value
+
+                            sNode.removeWidget(sWidget)
+                            const newSize = sNode.computeSize?.() ?? sNode.size;
+                            sNode.setSize?.(newSize);
+                            sNode.size = newSize;
+
+                            sNode.setDirtyCanvas?.(true, true);
+                            sNode.graph?.setDirtyCanvas?.(true, true);
+                            const ccINput = ccNode.getInputInfo(index)
+                            if(ccINput != null){
+                                const widget = ccNode.getWidgetFromSlot(ccINput);
+                                if (widget) {
+                                    function setWidgetValue(node: any, widgetName: any, newValue: any) {
+                                        // @ts-ignore
+                                        const w = node?.widgets?.find(x => x?.name === widgetName);
+                                        if (!w) return false;
+                                        w.value = newValue;
+                                        (w.callback || w.onChange)?.call(w, newValue, node, w);
+
+                                        node.setSize?.(node.computeSize?.() ?? node.size);
+
+                                        node.setDirtyCanvas?.(true, true);
+                                        node.graph?.setDirtyCanvas?.(true, true);
+
+                                        return true;
                                     }
-                                    gNode.setDirtyCanvas(true, true);
-                                    gNode.size = gNode.computeSize?.() ?? gNode.size;
+
+                                    setWidgetValue(sNode, sWidget.name, value)
+
+                                    const config = readConfig()
+                                    if(config){
+                                        updateSingleControlNode(ccNode, config)
+                                    }
                                 }
                             }
+
                         }
-                    }, 100)
+
+                    }
                 }
             }
             return r;

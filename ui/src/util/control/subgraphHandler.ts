@@ -1,9 +1,19 @@
 import { getApp } from "../../appHelper.js";
-import { LGraphNode, Subgraph, SubgraphNode } from "../../types/comfyui-frontend-types.augment";
+import {
+    ExposedWidget,
+    LGraphNode,
+    Subgraph,
+    SubgraphInput,
+    SubgraphNode
+} from "../../types/comfyui-frontend-types.augment";
 import {getNodeHelper, getWidgetValue} from "./controlHelper";
 import { readConfig } from "./configHandler";
 
+const ACTIVE = "(  #  ACTIVE  #  )";
+const MUTE   = "(MUTE/BYPASS)";
+
 export function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, slotName?: string) {
+
     let label = slotName
     if (!slotName) {
         // @ts-ignore
@@ -36,6 +46,7 @@ export function renameSubGraphInputSlot(node: LGraphNode, slotNumber: number, sl
         return false;
     }
     return false
+
 }
 
 export function findAllSubgraphContainers(graph: any): any[] {
@@ -107,7 +118,8 @@ export function patchSubgraphContainerPrototype(subgraphNode: any, hookSubgraphW
         const node = getNodeHelper(this.id, graph, true) as SubgraphNode
         if (node) {
             console.debug("Subgraph container widget changed", name, value, old_value, widget, node, widget.label)
-            hookSubgraphWidgetChanged(node, name)
+            // hookSubgraphWidgetChanged(node, name)
+            widget.label = widget.label.split(" - ")[0] + " - " + (value ? ACTIVE : MUTE)
         }
 
         if (widget?.label) {
