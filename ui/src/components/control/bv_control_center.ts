@@ -1,6 +1,6 @@
 import {getApp} from "../../appHelper.js";
 import {BVControlConfig, BVControlEntry, readConfig} from "../../util/control/configHandler";
-import {IBaseWidget, LGraphNode, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
+import {IBaseWidget, LGraphNode, Subgraph, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
 import {
     bypassGroupsByTitle,
     muteGroupsByTitle,
@@ -14,8 +14,7 @@ import {
     showErrorToast
 } from "../../util/control/controlHelper";
 import {
-    ensureSubgraphContainerPatchedFromInnerNodeRetry,
-    findAllSubgraphContainers, getOuterNode,
+    ensureSubgraphContainerPatchedFromInnerNodeRetry, findAllSubgraphContainers, getOuterNode,
     patchSubgraphContainerPrototype,
     renameSubGraphInputSlot
 } from "../../util/control/subgraphHandler";
@@ -180,11 +179,38 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
             // @ts-ignore
             node.inputs[i]._widget = w;
         }
+
+
+        const ccNode = getNodeHelper(node.id, node.graph)
+        if(ccNode){
+            const ccInput = ccNode.inputs[i]
+            const ccLink = ccNode.getInputLink(i)
+            if(ccLink && ccNode.graph){
+                setTimeout(() => {
+                    const graphNode = getOuterNode(ccNode)
+                    if(graphNode) {
+                        const graphWidgets = graphNode.widgets
+                        if(graphWidgets){
+                            const graphWidget = graphWidgets[ccLink.origin_slot]
+                            if(graphWidget){
+                                graphWidget.label = label
+                            }
+                        }
+                    }
+
+
+
+                }, 50)
+
+            }
+        }
+
         const gNode = getNodeHelper(node.id, node.graph)
+
         if (gNode) {
             let success = false
-            success = renameSubGraphInputSlot(node, i, label)
 
+            success = renameSubGraphInputSlot(node, i, label)
 
             if (!success) {
                 allSlotsRenamed = false;
@@ -539,6 +565,7 @@ function patchAllSubgraphs(): number {
 
     let patched = 0;
     for (const s of subs) {
+        console.log("patching", s.title)
         const didPatch = patchSubgraphContainerPrototype(s, hookSubgraphWidgetChanged, executeChange);
         if (didPatch) patched++;
     }

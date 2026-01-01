@@ -1,6 +1,6 @@
 import { getApp } from "../../appHelper.js";
 import {
-    ExposedWidget,
+    ExposedWidget, IBaseWidget,
     LGraphNode,
     Subgraph,
     SubgraphInput,
@@ -63,6 +63,27 @@ export function findAllSubgraphContainers(graph: any): any[] {
     return result;
 }
 
+export function getInnerNodeFromOuterNode(
+    outerNode: LGraphNode,
+    match?: ((n: LGraphNode) => boolean) | string
+): LGraphNode | undefined {
+    if (!outerNode?.isSubgraphNode?.()) return undefined;
+
+    const innerGraph: any = (outerNode as any).subgraph;
+    if (!innerGraph) return undefined;
+
+    const nodes: LGraphNode[] = innerGraph._nodes ?? innerGraph.nodes ?? [];
+
+    const predicate =
+        typeof match === "function"
+            ? match
+            : typeof match === "string"
+                ? (n: any) => n?.type === match || n?.comfyClass === match || n?.title === match
+                : () => true; // first node (fallback)
+
+    return nodes.find(predicate);
+}
+
 export function getOuterNode(innerNode: LGraphNode) {
     if (innerNode.graph?.subgraphs) {
         const subgraph = innerNode.graph as Subgraph;
@@ -116,10 +137,19 @@ export function patchSubgraphContainerPrototype(subgraphNode: any, hookSubgraphW
 
         const graph = getApp()?.rootGraph;
         const node = getNodeHelper(this.id, graph, true) as SubgraphNode
-        if (node) {
+
+        const sWidget = widget as IBaseWidget
+        const iNode = getInnerNodeFromOuterNode(node, "BV Control Center")
+        if (node && iNode) {
             console.debug("Subgraph container widget changed", name, value, old_value, widget, node, widget.label)
             // hookSubgraphWidgetChanged(node, name)
             widget.label = widget.label.split(" - ")[0] + " - " + (value ? ACTIVE : MUTE)
+
+            iNode.widgets?.forEach((w) => {
+                if(w.name == sWidget.name){
+                    w.label = widget.label
+                }
+            })
         }
 
         if (widget?.label) {
