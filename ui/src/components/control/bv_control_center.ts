@@ -20,8 +20,8 @@ import {
 } from "../../util/control/subgraphHandler";
 import {patchGraphAddSingletonGuard} from "../../util/control/singletonHandler";
 
-const ACTIVE = "(  #  ACTIVE  #  )";
-const MUTE   = "(MUTE/BYPASS)";
+const ACTIVE = "ACTIVE";
+const MUTE   = "MUTE/BYPASS";
 
 const comfyApp = getApp();
 
@@ -99,14 +99,8 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
     // Ensure enough inputs
     while (node.inputs.length < desiredCount) {
         const i = node.inputs.length;
-        const inputName = `v_${String(i).padStart(3, "0")}`;
-        let label = config.rows[i].title;
-
-        if (getWidgetValue(node, i)) {
-            label = label + " - " + ACTIVE
-        } else {
-            label = label + " - " + MUTE
-        }
+        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
+        const label = config.rows[i].title;
 
         node.addInput(inputName, "BOOLEAN", {
             label,
@@ -116,7 +110,8 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         });
 
         const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-        const w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true));
+        // (node as LGraphNode).addWidget()
+        const w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
         w.label = label;
         w.serialize = true;
 
@@ -128,7 +123,7 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
     // Remove extra inputs
     while (node.inputs.length > desiredCount) {
         const i = node.inputs.length - 1;
-        const inputName = `v_${String(i).padStart(3, "0")}`;
+        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
 
         const wi = node.widgets?.findIndex((w: any) => w.name === inputName) ?? -1;
         if (wi !== -1) node.widgets.splice(wi, 1);
@@ -143,13 +138,7 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
     for (let i = 0; i < desiredCount; i++) {
         let label = config.rows[i].title;
 
-        if (getWidgetValue(node, i)) {
-            label = label + " - " + ACTIVE
-        } else {
-            label = label + " - " + MUTE
-        }
-
-        const inputName = `v_${String(i).padStart(3, "0")}`;
+        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
 
         if (node.inputs[i]?.label !== label) {
             node.inputs[i].label = label;
@@ -159,17 +148,21 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         let w = node.widgets.find((ww: any) => ww.name === inputName);
         if (!w) {
             const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-            w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true));
-            w.label = label;
+            w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
             w.serialize = true;
+            w.label = label;
             changed = true;
         } else {
-            if (w.label !== label) {
-                w.label = label;
-                changed = true;
+            if (w.options) {
+                if (w.options.on !== ACTIVE || w.options.off !== MUTE) {
+                    w.options.on = ACTIVE;
+                    w.options.off = MUTE;
+                    changed = true;
+                }
             }
             if (overrideValue && savedValues && savedValues[i] !== undefined && w.value !== savedValues[i]) {
                 w.value = savedValues[i];
+                w.label = label;
                 changed = true;
             }
         }
@@ -247,15 +240,8 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
         const commonCount = Math.min(node.inputs.length, config.rows.length);
         for (let i = 0; i < commonCount; i++) {
             let label = config.rows[i].title;
-            const rawLabel = config.rows[i].title;
 
-            if (getWidgetValue(node, i)) {
-                label = label + " - " + ACTIVE
-            } else {
-                label = label + " - " + MUTE
-            }
-
-            const inputName = `v_${String(i).padStart(3, "0")}`;
+            const inputName = `bvcc_${String(i).padStart(3, "0")}`;
 
             if (node.inputs[i].label !== label) {
                 node.inputs[i].label = label;
@@ -265,8 +251,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
             let widget = node.widgets.find(w => w.name === inputName);
             if (!widget) {
                 const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-                widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true));
-                widget.label = label;
+                widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
                 widget.serialize = true;
                 changed = true;
             } else {
@@ -275,9 +260,12 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
                     widget.value = savedValues[i];
                     changed = true;
                 }
-                if (widget.label !== label) {
-                    widget.label = label;
-                    changed = true;
+                if (widget.options) {
+                    if (widget.options.on !== ACTIVE || widget.options.off !== MUTE) {
+                        widget.options.on = ACTIVE;
+                        widget.options.off = MUTE;
+                        changed = true;
+                    }
                 }
             }
 
@@ -290,7 +278,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
 
         if (node.inputs.length > config.rows.length) {
             for (let i = node.inputs.length - 1; i >= config.rows.length; i--) {
-                const inputName = `v_${String(i).padStart(3, "0")}`;
+                const inputName = `bvcc_${String(i).padStart(3, "0")}`;
                 const widgetIndex = node.widgets?.findIndex(w => w.name === inputName) ?? -1;
                 if (widgetIndex !== -1) node.widgets.splice(widgetIndex, 1);
                 if (node.isInputConnected(i)) node.disconnectInput(i);
@@ -300,12 +288,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
         } else if (node.inputs.length < config.rows.length) {
             for (let i = node.inputs.length; i < config.rows.length; i++) {
                 let label = config.rows[i].title;
-                if (getWidgetValue(node, i)) {
-                    label = label + " - " + ACTIVE
-                } else {
-                    label = label + " - " + MUTE
-                }
-                const inputName = `v_${String(i).padStart(3, "0")}`;
+                const inputName = `bvcc_${String(i).padStart(3, "0")}`;
 
                 node.addInput(inputName, "BOOLEAN", {
                     label,
@@ -315,9 +298,7 @@ function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]
                 });
 
                 const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-                const widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true));
-                // @ts-ignore
-                widget.label = label;
+                const widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
                 widget.serialize = true;
 
                 // @ts-ignore
@@ -350,11 +331,11 @@ function hookWidgetChanged(node: any) {
 
         const config = readConfig();
         if (config) {
-            // const title = widget.label?.split(" - ")[0]
-            const title = widget.label
+            const index = node.widgets.indexOf(widget);
+            const title = (index !== -1 && node.inputs[index]) ? node.inputs[index].label : widget.label;
             if (!title) return;
             executeChange(title, value);
-            updateSingleControlNode(node, config, undefined, false);
+            // updateSingleControlNode(node, config, undefined, false);
         }
 
         return r
@@ -392,7 +373,7 @@ function executeChange(title: string, value: boolean): void {
 
     const applyDisable = !value;
 
-    const foundRow = config.rows.find(row => row.title.split(" - ")[0] === title.split(" - ")[0]);
+    const foundRow = config.rows.find(row => row.title === title);
     if (!foundRow) return;
     for (const entry of foundRow.entries) {
         const groupTitle = normalizeGroupTitle(entry);
@@ -425,7 +406,10 @@ comfyApp.registerExtension({
 
             const cfg = readConfig();
             if (cfg) {
-                updateSingleControlNode(this, cfg);
+                setTimeout(() => {
+
+                    updateSingleControlNode(this, cfg);
+                }, 50)
             }
 
             hookWidgetChanged(this)
@@ -539,11 +523,6 @@ comfyApp.registerExtension({
                                     }
 
                                     setWidgetValue(sNode, sWidget.name, value)
-
-                                    const config = readConfig()
-                                    if(config){
-                                        updateSingleControlNode(ccNode, config)
-                                    }
                                 }
                             }
 
@@ -565,7 +544,6 @@ function patchAllSubgraphs(): number {
 
     let patched = 0;
     for (const s of subs) {
-        console.log("patching", s.title)
         const didPatch = patchSubgraphContainerPrototype(s, hookSubgraphWidgetChanged, executeChange);
         if (didPatch) patched++;
     }

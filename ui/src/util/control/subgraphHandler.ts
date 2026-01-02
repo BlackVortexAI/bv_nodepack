@@ -143,7 +143,7 @@ export function patchSubgraphContainerPrototype(subgraphNode: any, hookSubgraphW
         if (node && iNode) {
             console.debug("Subgraph container widget changed", name, value, old_value, widget, node, widget.label)
             // hookSubgraphWidgetChanged(node, name)
-            widget.label = widget.label.split(" - ")[0] + " - " + (value ? ACTIVE : MUTE)
+            // widget.label = widget.label.split(" - ")[0] + " - " + (value ? ACTIVE : MUTE)
 
             iNode.widgets?.forEach((w) => {
                 if(w.name == sWidget.name){

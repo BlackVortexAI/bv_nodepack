@@ -243,6 +243,7 @@ Here is an example if, for example, Only Preview is active
 
 
 ### CHANGE LOG
+* 2026-01-02 - v0.0.17: Change toggle label system from `BV Control Center` widget.
 * 2026-01-02 - v0.0.16: Change input names to prevent possible collisions on `BV Control Center` widget.
 * 2026-01-01 - v0.0.15: Fix renaming bug for subgraph node connected to `BV Control Center` widget.
 * 2026-01-01 - v0.0.14: Fix widget bugs for subgraph node connected to `BV Control Center` widget.
