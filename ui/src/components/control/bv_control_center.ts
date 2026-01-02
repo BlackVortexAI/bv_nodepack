@@ -110,7 +110,6 @@ function updateSingleControlNode(node: any, config: BVControlConfig, savedValues
         });
 
         const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-        // (node as LGraphNode).addWidget()
         const w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
         w.label = label;
         w.serialize = true;

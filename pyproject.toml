@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
-version = "0.0.17"
-description = "A ComfyUI node pack providing advanced utility and workflow nodes, including a config-driven Control Center for muting and bypassing node groups, a flexible Pipe system, and Subgraph-friendly UI nodes (Heading, Spacer, Divider) with dynamic JavaScript rendering."
+version = "0.0.18"
+description = "A ComfyUI node pack providing advanced utility and workflow nodes, including a config-driven Control Center for muting and bypassing node groups, a flexible Pipe system, a AST (Abstract Syntax Tree) prompting system , and Subgraph-friendly UI nodes (Heading, Spacer, Divider) with dynamic JavaScript rendering."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]
