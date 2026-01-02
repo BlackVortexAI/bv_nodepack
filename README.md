@@ -23,6 +23,7 @@ A curated collection of **quality-of-life**, **UI**, and **prompting** nodes for
     - [Prompt / AST Nodes](#prompt--ast-nodes)
     - [Beta Nodes](#beta-nodes)
 - [Prompt AST Syntax & Markup Guide](#prompt-ast-syntax--markup-guide)
+- [Example application for AST](#example-application-for-ast)
 - [Quick Start (BV Pipe)](#quick-start-bv-pipe)
 - [Notes & Design Principles](#notes--design-principles)
 - [Changelog](#changelog)
@@ -335,29 +336,32 @@ Inline categories are only recognized if the category name matches this pattern:
 
 
 #### ❌ Invalid
-
->@<clothing color> white dress @@
-
+```text
+@<clothing color> white dress @@
+```
 
 ✅ Valid
-
->@<clothing_color> white dress @@
-
+```text
+@<clothing_color> white dress @@
+```
 ### Closing inline categories (@@)
+```text
+@@ closes one currently open inline category
 
->@@ closes one currently open inline category
->
->Extra @@ without an open category are treated as literal text and will appear in the output
-
+Extra @@ without an open category are treated as literal text and will appear in the output
+```
 ### ❌ Invalid (too many closings)
-
->@<clothing> long dress.@@@@
-
+```text
+@<clothing> long dress,@@@@
+```
 
 ✅ Valid
+```text
+@<clothing> long dress,@@
+```
 
->@<clothing> long dress.@@
-
+## Example application for AST
+![BV AST Example](workflows/workflow_AST_with_pipe.png)
 ---
 
 ## Beta Nodes
@@ -434,6 +438,7 @@ prompt
 ## Changelog
 
 ### 2026-01-02
+- v0.0.19 — Update README: add AST example image with embedded workflow
 - v0.0.18 — Add AST Prompting system
 - v0.0.17 — Changed toggle label system (`BV Control Center`)
 - v0.0.16 — Renamed inputs to avoid collisions
