@@ -380,7 +380,20 @@ Extra @@ without an open category are treated as literal text and will appear in
 
 **Output**
 - `color` (`INT`)
-- </details>
+
+<summary><strong>BV Dynamic Combo</strong></summary>
+
+**Purpose**
+- Creates a dynamic combo box from a list of strings
+
+**Input**
+- `prompt` (COMBO, STRING)
+
+**Output**
+- `value_str` (`STRING`)
+- `value_int` (`INT`)
+- `value_float` (`FLOAT`)
+</details>
 
 ## Beta Nodes
 
@@ -457,7 +470,8 @@ prompt
 ## Changelog
 
 ### 2026-01-10
-- v0.0.20 — Adding a HEX color to INT node
+- v0.0.21 — Add dynamic combo box node
+- v0.0.20 — Add a HEX color to INT node
 
 ### 2026-01-02
 - v0.0.19 — Update README: add AST example image with embedded workflow
