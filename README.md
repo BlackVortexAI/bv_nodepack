@@ -21,6 +21,7 @@ A curated collection of **quality-of-life**, **UI**, and **prompting** nodes for
     - [Pipe Nodes](#pipe-nodes)
     - [UI / Layout Nodes](#ui--layout-nodes)
     - [Prompt / AST Nodes](#prompt--ast-nodes)
+    - [Util Nodes](#util-nodes)
     - [Beta Nodes](#beta-nodes)
 - [Prompt AST Syntax & Markup Guide](#prompt-ast-syntax--markup-guide)
 - [Example application for AST](#example-application-for-ast)
@@ -364,6 +365,23 @@ Extra @@ without an open category are treated as literal text and will appear in
 ![BV AST Example](workflows/workflow_AST_with_pipe.png)
 ---
 
+## Util Nodes
+
+> A Collection of Utility Nodes.
+
+<details>
+<summary><strong>BV Hex Color To Int</strong></summary>
+
+**Purpose**
+- Converts a HEX color code to an INT value
+
+**Input**
+- `prompt` (STRING)
+
+**Output**
+- `color` (`INT`)
+- </details>
+
 ## Beta Nodes
 
 <details>
@@ -401,6 +419,7 @@ Centralized runtime control for **mute / bypass** states of node groups.
 >Here is an example if, for example, Only Preview is active
 >
 > ![BV Divider](docs/screenshots/bv_controllconfig_graph2.png)
+
 </details>
 
 ---
@@ -436,6 +455,9 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-01-10
+- v0.0.20 — Adding a HEX color to INT node
 
 ### 2026-01-02
 - v0.0.19 — Update README: add AST example image with embedded workflow
