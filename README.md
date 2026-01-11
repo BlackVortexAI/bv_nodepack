@@ -402,6 +402,39 @@ Extra @@ without an open category are treated as literal text and will appear in
 
 </details>
 
+<details>
+<summary><strong>BV Latent Random Aspect Ratio</strong></summary>
+
+**Purpose**
+- Generates or resizes a latent to a randomly selected aspect ratio based on a seed
+- Selection is deterministic via seed and configurable via enabled aspect-ratio toggles
+- Uses a 1:1 base resolution reference (e.g. 1024×1024) commonly assumed for model training
+
+**Input**
+- `latent` (LATENT, optional)
+    - If connected, the current latent resolution is used as the 1:1 base reference
+- `seed` (INT)
+- `enabled` (BOOLEAN)
+- `base_resolution_px` (INT)
+    - Edge length of a square 1:1 reference in pixels (e.g. 1024 = 1024×1024), used when no latent is connected
+- `use_1_1` (BOOLEAN) – Resolution 1×1
+- `use_3_2` (BOOLEAN) – Resolution 3×2
+- `use_2_3` (BOOLEAN) – Resolution 2×3
+- `use_4_3` (BOOLEAN) – Resolution 4×3
+- `use_3_4` (BOOLEAN) – Resolution 3×4
+- `use_16_9` (BOOLEAN) – Resolution 16×9
+- `use_9_16` (BOOLEAN) – Resolution 9×16
+- `use_21_9` (BOOLEAN) – Resolution 21×9
+- `use_9_21` (BOOLEAN) – Resolution 9×21
+
+**Output**
+- `latent` (LATENT)
+- `latent_width` (INT)
+- `latent_height` (INT)
+- `picked_ratio` (STRING)
+
+</details
+
 ## Util Nodes
 
 > A Collection of Utility Nodes.
@@ -496,6 +529,7 @@ prompt
 ## Changelog
 
 ### 2026-01-11
+- v0.0.23 — Add BV Latent Random Aspect Ratio node.
 - v0.0.22 — Change the category of BV Dynamic Combo. Add 90 Latent Rotate Node.
 
 ### 2026-01-10
