@@ -27,7 +27,6 @@ function parseOptions(text) {
 }
 
 function isMultilineStringWidget(w) {
-    console.log("CHECK", w);
     return (
         w &&
         w.type === "customtext"
@@ -72,18 +71,13 @@ function upgradeDynamicCombo(node) {
     const { valueWidget, optionsWidget } = findWidgets(node);
     if (!valueWidget || !optionsWidget) return;
 
-    console.log("UPGRADE", node.id, valueWidget.name, optionsWidget.name);
-
     // We only patch if:
     // - options is multiline string (the editor list)
     // - value is a string widget (declared STRING in python)
     if (!isMultilineStringWidget(optionsWidget)) return;
-    console.log("UPGRADE 1", node.id, optionsWidget.value);
     if (!isStringValueWidget(valueWidget)) return;
 
     const values = parseOptions(optionsWidget.value);
-
-    console.log("UPGRADE 2", node.id, values);
 
     // Create a REAL combo widget
     const comboWidget = node.addWidget(
@@ -96,7 +90,6 @@ function upgradeDynamicCombo(node) {
         { values }
     );
 
-    console.log("UPGRADE 3", node.id, comboWidget);
 
     // Replace old string widget with our combo widget
     replaceWidget(node, valueWidget, comboWidget);
@@ -143,7 +136,6 @@ app.registerExtension({
         nodeType.prototype.onNodeCreated = function () {
             const r = origCreated?.apply(this, arguments);
             try {
-                console.log("TEST1")
                 upgradeDynamicCombo(this);
             } catch (e) {
                 // ignore
@@ -158,7 +150,6 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const r = origConfigure?.apply(this, arguments);
             try {
-                console.log("TEST2")
                 upgradeDynamicCombo(this);
             } catch (e) {
                 // ignore

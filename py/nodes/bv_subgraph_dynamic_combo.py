@@ -36,7 +36,7 @@ class BVDynamicCombo:
     RETURN_TYPES = ("STRING", "INT", "FLOAT")
     RETURN_NAMES = ("value_str", "value_int", "value_float")
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/utils"
+    CATEGORY = "🌀 BV Node Pack/subgraph"
 
     def run(self, value: str, options: str, prompt=None, unique_id=None):
         s = (value or "").strip()

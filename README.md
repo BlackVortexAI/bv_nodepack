@@ -208,6 +208,20 @@ A UI-only divider node that draws a horizontal separator line.
 - `alpha` (FLOAT)
 
 </details>
+<details>
+<summary><strong>BV Dynamic Combo</strong></summary>
+
+**Purpose**
+- Creates a dynamic combo box from a list of strings
+
+**Input**
+- `prompt` (COMBO, STRING)
+
+**Output**
+- `value_str` (`STRING`)
+- `value_int` (`INT`)
+- `value_float` (`FLOAT`)
+</details>
 
 ---
 
@@ -365,6 +379,29 @@ Extra @@ without an open category are treated as literal text and will appear in
 ![BV AST Example](workflows/workflow_AST_with_pipe.png)
 ---
 
+## Latent Nodes
+
+> A Collection of Latent Nodes.
+
+<details>
+<summary><strong>BV Latent Random Rotate 90</strong></summary>
+
+**Purpose**
+- Rotates a latent by 90 degrees deterministically based on seed if enabled
+
+**Input**
+- `latent` (LATENT)
+- `seed` (INT)
+- `enabled` (BOOLEAN)
+
+**Output**
+- `latent` (`LATENT`)
+- `latent_width` (`INT`)
+- `latent_hieght` (`INT`)
+
+
+</details>
+
 ## Util Nodes
 
 > A Collection of Utility Nodes.
@@ -381,18 +418,7 @@ Extra @@ without an open category are treated as literal text and will appear in
 **Output**
 - `color` (`INT`)
 
-<summary><strong>BV Dynamic Combo</strong></summary>
 
-**Purpose**
-- Creates a dynamic combo box from a list of strings
-
-**Input**
-- `prompt` (COMBO, STRING)
-
-**Output**
-- `value_str` (`STRING`)
-- `value_int` (`INT`)
-- `value_float` (`FLOAT`)
 </details>
 
 ## Beta Nodes
@@ -468,6 +494,9 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-01-11
+- v0.0.22 — Change the category of BV Dynamic Combo. Add 90 Latent Rotate Node.
 
 ### 2026-01-10
 - v0.0.21 — Add dynamic combo box node
