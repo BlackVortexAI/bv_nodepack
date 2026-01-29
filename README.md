@@ -528,6 +528,9 @@ prompt
 
 ## Changelog
 
+### 2026-01-29
+- v0.0.24 — Make subgraph UI widgets more rebuild-safe.
+
 ### 2026-01-11
 - v0.0.23 — Add BV Latent Random Aspect Ratio node.
 - v0.0.22 — Change the category of BV Dynamic Combo. Add 90 Latent Rotate Node.

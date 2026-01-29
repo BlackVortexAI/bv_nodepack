@@ -1,4 +1,4 @@
-import {app} from "../../scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 function getWidget(node, name) {
     return (node?.widgets || []).find((w) => w?.name === name) || null;
@@ -10,76 +10,95 @@ function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
 }
 
+function forceRelayout(node) {
+    if (!node) return;
+    node.setSize?.(node.computeSize());
+    node.setDirtyCanvas?.(true, true);
+    node.graph?.setDirtyCanvas?.(true, true);
+}
+
 function patchHeading(node) {
     const valueW =
         (node.widgets || []).find((w) => w?.name === "value") ||
         (node.widgets || []).find((w) => w?.config?.[0] === "STRING");
 
-    if (!node || !valueW || valueW.__bvHeadingPatched) return;
-    valueW.__bvHeadingPatched = true;
+    if (!node || !valueW) return;
 
-    valueW.__bvNode = node;
-    valueW.__bvFontSizeWidget = getWidget(node, "font_size");
-    valueW.__bvShowDividerWidget = getWidget(node, "show_divider");
+    // Allow re-patching if widgets were rebuilt:
+    // Only mark patched on the widget instance itself
+    if (!valueW.__bvHeadingPatched) {
+        valueW.__bvHeadingPatched = true;
+        valueW.__bvNode = node;
 
-    valueW.type = "BV_HEADING";
-    valueW.options = valueW.options || {};
-    valueW.options.serialize = true;
+        valueW.type = "BV_HEADING";
+        valueW.options = valueW.options || {};
+        valueW.options.serialize = true;
 
-    valueW.draw = function (ctx, _node, width, posY, height) {
-        const text = String(this.value ?? "");
-        const fontSize = clamp(this.__bvFontSizeWidget?.value ?? 20, 10, 80);
-        const showDivider = !!this.__bvShowDividerWidget?.value;
+        valueW.draw = function (ctx, _node, width, posY, height) {
+            const n = this.__bvNode || node;
 
-        const padX = 10;
-        const padY = 10;
-        const textH = fontSize * 1.35;
+            // IMPORTANT: do not cache these widgets; fetch fresh each draw
+            const fontSizeW = getWidget(n, "font_size");
+            const showDividerW = getWidget(n, "show_divider");
 
-        const y = posY + Math.max(0, (height - (textH + (showDivider ? 10 : 0))) * 0.5);
+            const text = String(this.value ?? "");
+            const fontSize = clamp(fontSizeW?.value ?? 20, 10, 80);
+            const showDivider = !!showDividerW?.value;
 
-        ctx.save();
+            const padX = 10;
+            const padY = 10;
+            const textH = fontSize * 1.35;
 
-        // Clip only the text area
-        ctx.beginPath();
-        ctx.rect(padX, posY + padY, width - padX * 2, textH + padY);
-        ctx.clip();
+            const y = posY + Math.max(0, (height - (textH + (showDivider ? 10 : 0))) * 0.5);
 
-        ctx.font = `700 ${fontSize}px Inter, system-ui, sans-serif`;
-        ctx.fillStyle = "#ddd";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(text, padX, y + padY);
-
-        ctx.restore();
-
-        if (showDivider) {
-            const lineY = posY + textH + 5;
             ctx.save();
-            ctx.globalAlpha = 0.35;
-            ctx.lineWidth = 2;
+
+            // Clip only the text area
             ctx.beginPath();
-            ctx.moveTo(padX, lineY);
-            ctx.lineTo(width - padX, lineY);
-            ctx.strokeStyle = "#ddd";
-            ctx.stroke();
+            ctx.rect(padX, posY + padY, width - padX * 2, textH + padY);
+            ctx.clip();
+
+            ctx.font = `700 ${fontSize}px Inter, system-ui, sans-serif`;
+            ctx.fillStyle = "#ddd";
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText(text, padX, y + padY);
+
             ctx.restore();
-        }
-    };
 
-    valueW.computeSize = function (width) {
-        const fontSize = clamp(this.__bvFontSizeWidget?.value ?? 20, 10, 80);
-        const showDivider = !!this.__bvShowDividerWidget?.value;
+            if (showDivider) {
+                const lineY = posY + textH + 5;
+                ctx.save();
+                ctx.globalAlpha = 0.35;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(padX, lineY);
+                ctx.lineTo(width - padX, lineY);
+                ctx.strokeStyle = "#ddd";
+                ctx.stroke();
+                ctx.restore();
+            }
+        };
 
-        const padY = 10;
-        const textH = Math.ceil(fontSize * 1.35);
-        const dividerExtra = showDivider ? 12 : 0;
+        valueW.computeSize = function (width) {
+            const n = this.__bvNode || node;
+            const fontSizeW = getWidget(n, "font_size");
+            const showDividerW = getWidget(n, "show_divider");
 
-        const h = Math.max(34, textH + padY + dividerExtra);
-        return [Math.max(220, width || 220), h];
-    };
+            const fontSize = clamp(fontSizeW?.value ?? 20, 10, 80);
+            const showDivider = !!showDividerW?.value;
 
-    // Keep widget->input conversion compatibility
-    valueW.config = valueW.config || ["STRING", {default: valueW.value ?? "", multiline: false}];
+            const padY = 10;
+            const textH = Math.ceil(fontSize * 1.35);
+            const dividerExtra = showDivider ? 12 : 0;
+
+            const h = Math.max(34, textH + padY + dividerExtra);
+            return [Math.max(220, width || 220), h];
+        };
+
+        // Keep widget->input conversion compatibility
+        valueW.config = valueW.config || ["STRING", { default: valueW.value ?? "", multiline: false }];
+    }
 
     const hookRedraw = (w) => {
         if (!w || w.__bvHeadingHooked) return;
@@ -88,20 +107,19 @@ function patchHeading(node) {
         const oldCb = w.callback;
         w.callback = function () {
             const n = valueW.__bvNode || node;
-            n?.setSize?.(n.computeSize());
-            n?.setDirtyCanvas(true, true);
-            n?.graph?.setDirtyCanvas(true, true);
+            forceRelayout(n);
             return oldCb?.apply(this, arguments);
         };
     };
 
-    hookRedraw(valueW.__bvFontSizeWidget);
-    hookRedraw(valueW.__bvShowDividerWidget);
+    // Hook whatever is present right now (and re-hook later if widgets get rebuilt)
+    hookRedraw(getWidget(node, "font_size"));
+    hookRedraw(getWidget(node, "show_divider"));
 }
 
 function hideAllOutputs(node) {
     if (!node?.outputs?.length) return;
-    node.outputs.length = 0;           // removes output slots visually
+    node.outputs.length = 0;
     node.setDirtyCanvas?.(true, true);
     node.graph?.setDirtyCanvas?.(true, true);
 }
@@ -111,7 +129,7 @@ app.registerExtension({
 
     getCustomWidgets() {
         return {
-            BV_HEADING: () => ({widget: null}),
+            BV_HEADING: () => ({ widget: null }),
         };
     },
 
@@ -121,7 +139,6 @@ app.registerExtension({
 
         const isHeading =
             comfyClass === "BVSubgraphHeading" || nodeName === "BV Subgraph Heading";
-
         if (!isHeading) return;
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
@@ -129,14 +146,10 @@ app.registerExtension({
             const r = onNodeCreated?.apply(this, arguments);
 
             patchHeading(this);
-
             hideAllOutputs(this);
-
-            this.setSize?.(this.computeSize());
-            this.graph?.setDirtyCanvas(true, true);
+            forceRelayout(this);
 
             this.serialize_widgets = true;
-            this.setDirtyCanvas(true, true);
             return r;
         };
 
@@ -144,11 +157,22 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const r = oldConfigure?.apply(this, arguments);
 
-            // patch + hide outputs after graph loads/restores node
             patchHeading(this);
             hideAllOutputs(this);
+            forceRelayout(this);
 
-            this.setSize?.(this.computeSize());
+            return r;
+        };
+
+        // NEW: keep layout correct after slot/widget rebuilds
+        const oldConnectionsChange = nodeType.prototype.onConnectionsChange;
+        nodeType.prototype.onConnectionsChange = function () {
+            const r = oldConnectionsChange?.apply(this, arguments);
+
+            patchHeading(this);
+            hideAllOutputs(this);
+            forceRelayout(this);
+
             return r;
         };
     },

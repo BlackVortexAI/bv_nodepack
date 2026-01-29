@@ -1,4 +1,4 @@
-import {app} from "../../scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 function getWidget(node, name) {
     return (node?.widgets || []).find((w) => w?.name === name) || null;
@@ -10,6 +10,13 @@ function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
 }
 
+function forceRelayout(node) {
+    if (!node) return;
+    node.setSize?.(node.computeSize());
+    node.setDirtyCanvas?.(true, true);
+    node.graph?.setDirtyCanvas?.(true, true);
+}
+
 function patchSpacer(node) {
     const hW = getWidget(node, "height");
     if (!node || !hW || hW.__bvSpacerPatched) return;
@@ -17,24 +24,22 @@ function patchSpacer(node) {
     hW.__bvSpacerPatched = true;
     hW.__bvNode = node;
 
-    // NEW: cache scale widget
-    hW.__bvScaleWidget = getWidget(node, "scale");
-
     hW.type = "BV_SPACER";
     hW.options = hW.options || {};
     hW.options.serialize = true;
 
-    hW.draw = function () {
-    };
+    hW.draw = function () { };
 
     hW.computeSize = function (width) {
+        // IMPORTANT: do NOT cache the scale widget; it may be replaced on subgraph input reorder/rebuild
+        const scaleW = getWidget(hW.__bvNode || node, "scale");
+
         const base = clamp(hW.value ?? 24, 0, 400);
-        const scale = clamp(this.__bvScaleWidget?.value ?? 1.0, 0.0, 5.0);
+        const scale = clamp(scaleW?.value ?? 1.0, 0.0, 5.0);
         const h = Math.max(8, Math.round(base * scale));
         return [Math.max(220, width || 220), h];
     };
 
-    // NEW: hookRedraw helper + hook both widgets
     const hookRedraw = (w) => {
         if (!w || w.__bvSpacerHooked) return;
         w.__bvSpacerHooked = true;
@@ -42,31 +47,30 @@ function patchSpacer(node) {
         const oldCb = w.callback;
         w.callback = function () {
             const n = hW.__bvNode || node;
-            n?.setSize?.(n.computeSize());
-            n?.setDirtyCanvas(true, true);
-            n?.graph?.setDirtyCanvas(true, true);
+            forceRelayout(n);
             return oldCb?.apply(this, arguments);
         };
     };
 
     hookRedraw(hW);
-    hookRedraw(hW.__bvScaleWidget);
+
+    // Hook scale widget if present (but do not cache it)
+    hookRedraw(getWidget(node, "scale"));
 }
 
 function hideAllOutputs(node) {
     if (!node?.outputs?.length) return;
-    node.outputs.length = 0;           // removes output slots visually
+    node.outputs.length = 0;
     node.setDirtyCanvas?.(true, true);
     node.graph?.setDirtyCanvas?.(true, true);
 }
-
 
 app.registerExtension({
     name: "bv_nodepack.bv_spacer",
 
     getCustomWidgets() {
         return {
-            BV_SPACER: () => ({widget: null}),
+            BV_SPACER: () => ({ widget: null }),
         };
     },
 
@@ -82,15 +86,10 @@ app.registerExtension({
             const r = onNodeCreated?.apply(this, arguments);
 
             patchSpacer(this);
-
-
             hideAllOutputs(this);
-
-            this.setSize?.(this.computeSize());
-            this.graph?.setDirtyCanvas(true, true);
+            forceRelayout(this);
 
             this.serialize_widgets = true;
-            this.setDirtyCanvas(true, true);
             return r;
         };
 
@@ -98,11 +97,23 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const r = oldConfigure?.apply(this, arguments);
 
-            // patch + hide outputs after graph loads/restores node
             patchSpacer(this);
             hideAllOutputs(this);
+            forceRelayout(this);
 
-            this.setSize?.(this.computeSize());
+            return r;
+        };
+
+        // NEW: Re-run layout when links/slots change (often happens during subgraph input reorder/rebuild)
+        const oldConnectionsChange = nodeType.prototype.onConnectionsChange;
+        nodeType.prototype.onConnectionsChange = function () {
+            const r = oldConnectionsChange?.apply(this, arguments);
+
+            // Make sure widget patching & layout are consistent after slot/order changes
+            patchSpacer(this);
+            hideAllOutputs(this);
+            forceRelayout(this);
+
             return r;
         };
     },

@@ -1,4 +1,4 @@
-import {app} from "../../scripts/app.js";
+import { app } from "../../scripts/app.js";
 
 function getWidget(node, name) {
     return (node?.widgets || []).find((w) => w?.name === name) || null;
@@ -10,46 +10,57 @@ function clamp(n, a, b) {
     return Math.max(a, Math.min(b, n));
 }
 
+function forceRelayout(node) {
+    if (!node) return;
+    node.setSize?.(node.computeSize());
+    node.setDirtyCanvas?.(true, true);
+    node.graph?.setDirtyCanvas?.(true, true);
+}
+
 function patchDivider(node) {
     const thickW = getWidget(node, "thickness");
-    const padW = getWidget(node, "padding");
-    const alphaW = getWidget(node, "alpha");
+    if (!node || !thickW) return;
 
-    if (!node || !thickW || thickW.__bvDividerPatched) return;
-    thickW.__bvDividerPatched = true;
+    // Patch per widget instance; allow re-patching if rebuilt
+    if (!thickW.__bvDividerPatched) {
+        thickW.__bvDividerPatched = true;
+        thickW.__bvNode = node;
 
-    thickW.__bvNode = node;
-    thickW.__bvPadWidget = padW;
-    thickW.__bvAlphaWidget = alphaW;
+        thickW.type = "BV_DIVIDER";
+        thickW.options = thickW.options || {};
+        thickW.options.serialize = true;
 
-    thickW.type = "BV_DIVIDER";
-    thickW.options = thickW.options || {};
-    thickW.options.serialize = true;
+        thickW.draw = function (ctx, _node, width, posY, height) {
+            const n = this.__bvNode || node;
 
-    thickW.draw = function (ctx, _node, width, posY, height) {
-        const thickness = clamp(thickW.value ?? 2, 1, 10);
-        const pad = clamp(this.__bvPadWidget?.value ?? 10, 0, 60);
-        const alpha = clamp(this.__bvAlphaWidget?.value ?? 0.35, 0.05, 1.0);
+            // IMPORTANT: do not cache; fetch fresh each draw
+            const padW = getWidget(n, "padding");
+            const alphaW = getWidget(n, "alpha");
 
-        const y = posY + height * 0.5;
+            const thickness = clamp(this.value ?? 2, 1, 10);
+            const pad = clamp(padW?.value ?? 10, 0, 60);
+            const alpha = clamp(alphaW?.value ?? 0.35, 0.05, 1.0);
 
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.lineWidth = thickness;
-        ctx.strokeStyle = "#ddd";
-        ctx.beginPath();
-        ctx.moveTo(pad, y);
-        ctx.lineTo(width - pad, y);
-        ctx.stroke();
-        ctx.restore();
-    };
+            const y = posY + height * 0.5;
 
-    thickW.computeSize = function (width) {
-        const thickness = clamp(thickW.value ?? 2, 1, 10);
-        const padY = 10;
-        const h = Math.max(18, thickness + padY);
-        return [Math.max(220, width || 220), h];
-    };
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = thickness;
+            ctx.strokeStyle = "#ddd";
+            ctx.beginPath();
+            ctx.moveTo(pad, y);
+            ctx.lineTo(width - pad, y);
+            ctx.stroke();
+            ctx.restore();
+        };
+
+        thickW.computeSize = function (width) {
+            const thickness = clamp(this.value ?? 2, 1, 10);
+            const padY = 10;
+            const h = Math.max(18, thickness + padY);
+            return [Math.max(220, width || 220), h];
+        };
+    }
 
     const hookRedraw = (w) => {
         if (!w || w.__bvDividerHooked) return;
@@ -58,32 +69,30 @@ function patchDivider(node) {
         const oldCb = w.callback;
         w.callback = function () {
             const n = thickW.__bvNode || node;
-            n?.setSize?.(n.computeSize());
-            n?.setDirtyCanvas(true, true);
-            n?.graph?.setDirtyCanvas(true, true);
+            forceRelayout(n);
             return oldCb?.apply(this, arguments);
         };
     };
 
+    // Hook current widgets (re-hooking will happen after rebuild via onConnectionsChange)
     hookRedraw(thickW);
-    hookRedraw(padW);
-    hookRedraw(alphaW);
+    hookRedraw(getWidget(node, "padding"));
+    hookRedraw(getWidget(node, "alpha"));
 }
 
 function hideAllOutputs(node) {
     if (!node?.outputs?.length) return;
-    node.outputs.length = 0;           // removes output slots visually
+    node.outputs.length = 0;
     node.setDirtyCanvas?.(true, true);
     node.graph?.setDirtyCanvas?.(true, true);
 }
-
 
 app.registerExtension({
     name: "bv_nodepack.bv_divider",
 
     getCustomWidgets() {
         return {
-            BV_DIVIDER: () => ({widget: null}),
+            BV_DIVIDER: () => ({ widget: null }),
         };
     },
 
@@ -91,7 +100,8 @@ app.registerExtension({
         const comfyClass = nodeType?.ComfyClass || nodeType?.comfyClass;
         const nodeName = nodeData?.name;
 
-        const isDivider = comfyClass === "BVSubgraphDivider" || nodeName === "BV Subgraph Divider";
+        const isDivider =
+            comfyClass === "BVSubgraphDivider" || nodeName === "BV Subgraph Divider";
         if (!isDivider) return;
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
@@ -99,15 +109,10 @@ app.registerExtension({
             const r = onNodeCreated?.apply(this, arguments);
 
             patchDivider(this);
-
-
             hideAllOutputs(this);
-
-            this.setSize?.(this.computeSize());
-            this.graph?.setDirtyCanvas(true, true);
+            forceRelayout(this);
 
             this.serialize_widgets = true;
-            this.setDirtyCanvas(true, true);
             return r;
         };
 
@@ -115,11 +120,22 @@ app.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const r = oldConfigure?.apply(this, arguments);
 
-            // patch + hide outputs after graph loads/restores node
             patchDivider(this);
             hideAllOutputs(this);
+            forceRelayout(this);
 
-            this.setSize?.(this.computeSize());
+            return r;
+        };
+
+        // NEW: keep layout correct after slot/widget rebuilds
+        const oldConnectionsChange = nodeType.prototype.onConnectionsChange;
+        nodeType.prototype.onConnectionsChange = function () {
+            const r = oldConnectionsChange?.apply(this, arguments);
+
+            patchDivider(this);
+            hideAllOutputs(this);
+            forceRelayout(this);
+
             return r;
         };
     },
