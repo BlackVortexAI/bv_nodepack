@@ -33,7 +33,7 @@ class BVLatentRandomAspectRatio:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "seed": ("INT", {"default": 0, "min": -1125899906842624, "max": 1125899906842624}),
+                "seed": ("INT", {"default": 0, "min": -1125899906842624, "max": 1125899906842624, "step": 8}),
                 "enabled": ("BOOLEAN", {"default": True}),
 
                 # Square 1:1 reference edge length in PIXELS (e.g. 1024 means 1024x1024 reference).
