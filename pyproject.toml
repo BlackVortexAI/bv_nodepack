@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
 version = "0.1.0"
-description = "Advanced ComfyUI workflow toolkit featuring wireless, branchable Smart Pipes with ordered merges and Subgraph routing; user-defined group state controls; stable composable Subgraph UIs; structured AST prompt processing; and flexible latent utilities."
+description = "Advanced ComfyUI workflow toolkit featuring wireless, branchable Smart Pipes with ordered merges and Subgraph routing; user-defined group state controls; stable composable Subgraph UIs; a Subgraph-native seed controller; structured AST prompt processing; and flexible latent utilities."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]

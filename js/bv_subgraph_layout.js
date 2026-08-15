@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { projectSubgraphUIPresentation, synchronizeDynamicComboHost } from "./bv_subgraph_ui_projection.js";
+import { projectSeedControls } from "./bv_seed.js";
 
 const UI_CLASSES = new Set(["BV Subgraph Heading", "BV Subgraph Spacer", "BV Subgraph Divider", "BV Dynamic Combo"]);
 
@@ -19,7 +20,10 @@ function ensureIdentity(node) {
 }
 
 function refreshHost(host) {
-  const project = () => projectSubgraphUIPresentation(host);
+  const project = () => {
+    projectSubgraphUIPresentation(host);
+    projectSeedControls(host);
+  };
   queueMicrotask(() => requestAnimationFrame(() => {
     project();
     // Subgraph proxy widgets are finalized one render pass after graph
@@ -40,6 +44,7 @@ function attachHost(host) {
     const originalDrawBackground = host.onDrawBackground;
     const renderGuard = function () {
       projectSubgraphUIPresentation(this);
+      projectSeedControls(this);
       return originalDrawBackground?.apply(this, arguments);
     };
     host.__bvSubgraphPresentationRenderGuard = renderGuard;

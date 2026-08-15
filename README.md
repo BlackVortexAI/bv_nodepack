@@ -544,6 +544,20 @@ category raises an error with its line and column.
 > A Collection of Utility Nodes.
 
 <details>
+<summary><strong>BV Seed</strong></summary>
+
+A Subgraph-capable seed controller with fast controls inspired by rgthree's Seed node.
+
+- `-1` remains visible and stored as the random-each-queue sentinel instead of being replaced after execution
+- Quick actions select random-each-time, generate a new fixed random seed, or reuse the last queued seed
+- The complete control — editable seed value and all three actions — is projected onto Subgraph nodes
+- Only one public control is exposed: it is stored internally as `seed_bv` and displayed as `seed`
+- At queue time, the frontend materializes a concrete value into the API prompt while leaving the saved UI state untouched
+- The node still outputs a regular `INT` seed for samplers and other seed consumers
+
+</details>
+
+<details>
 <summary><strong>BV Hex Color To Int</strong></summary>
 
 **Purpose**
