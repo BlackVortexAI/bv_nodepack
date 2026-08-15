@@ -1,3 +1,6 @@
+import math
+
+
 def _contains_link(obj, my_id: str, out_index: int) -> bool:
     # Link format typically: [node_id, output_index]
     if isinstance(obj, list):
@@ -40,6 +43,13 @@ class BVDynamicCombo:
 
     def run(self, value: str, options: str, prompt=None, unique_id=None):
         s = (value or "").strip()
+        parsed_options = [line.strip() for line in (options or "").splitlines() if line.strip()]
+        if not parsed_options:
+            raise Exception("BV Dynamic Combo: at least one option is required.")
+        if len(parsed_options) != len(set(parsed_options)):
+            raise Exception("BV Dynamic Combo: duplicate options are not allowed.")
+        if s not in parsed_options:
+            raise Exception(f"BV Dynamic Combo: selected value '{s}' is not present in options.")
 
         needs_int = is_output_used(prompt, unique_id, 1)
         needs_float = is_output_used(prompt, unique_id, 2)
@@ -58,8 +68,10 @@ class BVDynamicCombo:
         if needs_float:
             try:
                 f = float(s)
+                if not math.isfinite(f):
+                    raise ValueError
             except Exception:
-                raise Exception(f"BV Dynamic Combo: FLOAT output is connected, but value '{s}' is not a valid float.")
+                raise Exception(f"BV Dynamic Combo: FLOAT output is connected, but value '{s}' is not a finite float.")
 
         return (s, i, f)
 

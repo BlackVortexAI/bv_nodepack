@@ -13,7 +13,7 @@ class BVSubgraphSpacer:
     FUNCTION = "run"
     CATEGORY = "🌀 BV Node Pack/subgraph"
 
-    def run(self, height):
+    def run(self, height, scale):
         return (height,)
 
 

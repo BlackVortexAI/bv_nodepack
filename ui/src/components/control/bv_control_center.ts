@@ -1,585 +1,196 @@
-import {getApp} from "../../appHelper.js";
-import {BVControlConfig, BVControlEntry, readConfig} from "../../util/control/configHandler";
-import {IBaseWidget, LGraphNode, Subgraph, SubgraphNode} from "../../types/comfyui-frontend-types.augment";
-import {
-    bypassGroupsByTitle,
-    muteGroupsByTitle,
-    unbypassGroupsByTitle,
-    unmuteGroupsByTitle
-} from "../../util/control/stateHandler";
-import {
-    crawlSubgraphForNode,
-    getNodeHelper,
-    getWidgetValue,
-    showErrorToast
-} from "../../util/control/controlHelper";
-import {
-    ensureSubgraphContainerPatchedFromInnerNodeRetry, findAllSubgraphContainers, getOuterNode,
-    patchSubgraphContainerPrototype,
-    renameSubGraphInputSlot
-} from "../../util/control/subgraphHandler";
-import {patchGraphAddSingletonGuard} from "../../util/control/singletonHandler";
+import { getApp } from "../../appHelper.js";
+import { collectAllGroups, collectNodesByType, nodeMatchesType } from "../../util/control/collector";
+import { BVControlConfig, CONFIG_CHANGED_EVENT, readConfig, writeConfig } from "../../util/control/configHandler";
+import { findActiveControlConflicts, formatControlConflictStatus, nodesInControlGroup } from "../../util/control/controlCenterModel.js";
 
-const ACTIVE = "ACTIVE";
-const MUTE   = "MUTE/BYPASS";
+const NODE_CLASS = "BV Control Center";
+const NORMAL = 0;
+const MUTE = 2;
+const BYPASS = 4;
+const BASE_MODE = "bvControlBaseMode";
+const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
+const CONTROL_CENTER_MIN_WIDTH = 320;
+const CONTROL_CENTER_WIDTH_BUFFER = 48;
+const CONTROL_STATUS_WIDGET = "bv_control_conflict_status";
+const previouslyControlled = new Set<any>();
 
-const comfyApp = getApp();
-
-let configWatcherStarted = false;
-
-function startConfigWatcher() {
-    if (configWatcherStarted) return;
-    configWatcherStarted = true;
-
-    let config = readConfig();
-    if (config) {
-        updateControlNodes(config);
-    }
-
-    setInterval(() => {
-        const newConfig = readConfig();
-        if (!newConfig) return;
-
-        if (JSON.stringify(newConfig) !== JSON.stringify(config)) {
-            config = newConfig;
-            updateControlNodes(config);
-        }
-    }, 500);
+function restrictionForAction(action: "activate" | "bypass" | "mute") {
+    if (action === "activate") return { mode: NORMAL, priority: 3 };
+    if (action === "mute") return { mode: MUTE, priority: 2 };
+    return { mode: BYPASS, priority: 1 };
 }
 
-function hookSubgraphWidgetChanged(node: SubgraphNode, name?: string) {
-    let found = false
-    let foundNode: LGraphNode | undefined;
-
-    node.subgraph.inputs.forEach((input) => {
-        input.getLinks().forEach((link) => {
-            if (!found) {
-                foundNode = getNodeHelper(link.target_id as number, node.graph)
-                if (!found && foundNode?.type == "BV Control Center") {
-                    found = true
-                }
-            }
-        })
-    })
-
-    if (!foundNode) {
-        return
-    }
-
-    const config = readConfig();
-    if (!config) return;
-
-    let retries = 0;
-    const maxRetries = 200;
-    const retry = () => {
-        const success = updateSingleControlNode(foundNode, config, undefined, true, name);
-        if (success || retries >= maxRetries) {
-            return;
-        }
-        retries++;
-        setTimeout(retry, 10);
+function configForValidation(config: BVControlConfig): BVControlConfig {
+    const available = new Set(collectAllGroups(getApp()).map((group) => group.id));
+    return {
+        ...config,
+        controls: config.controls.map((control) => ({
+            ...control,
+            assignments: control.assignments.map((assignment) => ({ ...assignment, unresolved: !available.has(assignment.groupId) })),
+        })),
     };
-
-    retry();
 }
 
-function updateSingleControlNode(node: any, config: BVControlConfig, savedValuesOverride?: any[], overrideValue: boolean = true, name?: string): boolean {
-    if (!node || !config) return false;
+function nodesInGroup(item: any): any[] {
+    return nodesInControlGroup(item, (node: any) => nodeMatchesType(node, NODE_CLASS));
+}
 
-    let changed = false;
-    if (!node.widgets) node.widgets = [];
+function applyConfig(config: BVControlConfig) {
+    for (const node of previouslyControlled) {
+        const base = node.properties?.[BASE_MODE];
+        node.mode = config.forceActive ? NORMAL : typeof base === "number" ? base : node.mode;
+        if (node.properties) delete node.properties[BASE_MODE];
+        node.setDirtyCanvas?.(true, true);
+    }
+    previouslyControlled.clear();
 
-    // Prefer workflow-loaded values
-    // @ts-ignore
-    const savedValues = savedValuesOverride ?? node.widgets_values;
+    const groups = new Map(collectAllGroups(getApp()).map((item) => [item.id, item]));
+    const restrictions = new Map<any, { mode: number; priority: number }>();
+    for (const control of config.controls) {
+        if (!control.enabled) continue;
+        for (const assignment of control.assignments) {
+            const group = groups.get(assignment.groupId);
+            if (!group) continue;
+            for (const node of nodesInGroup(group)) {
+                const restriction = restrictionForAction(assignment.action);
+                const current = restrictions.get(node);
+                if (!current || restriction.priority > current.priority) restrictions.set(node, restriction);
+            }
+        }
+    }
+    for (const [node, restriction] of restrictions) {
+        node.properties ??= {};
+        if (typeof node.properties[BASE_MODE] !== "number") node.properties[BASE_MODE] = typeof node.mode === "number" ? node.mode : NORMAL;
+        node.mode = restriction.mode;
+        previouslyControlled.add(node);
+        node.setDirtyCanvas?.(true, true);
+    }
+}
 
-    const desiredCount = config.rows.length;
+function removeControlPort(node: any, index: number) {
+    const input = node.inputs[index];
+    const widget = node.widgets?.find((item: any) => item.name === input.name);
+    if (widget) node.removeWidget?.(widget);
+    if (input.link != null) node.disconnectInput(index);
+    node.removeInput(index);
+}
 
-
-    // Ensure enough inputs
-    while (node.inputs.length < desiredCount) {
-        const i = node.inputs.length;
-        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-        const label = config.rows[i].title;
-
-        node.addInput(inputName, "BOOLEAN", {
-            label,
-            nameLocked: true,
-            default: true,
-            widget: {name: inputName}
+function syncConflictStatus(node: any, config: BVControlConfig) {
+    const conflicts = findActiveControlConflicts(config);
+    const value = formatControlConflictStatus(conflicts);
+    let widget = node.widgets?.find((item: any) => item.name === CONTROL_STATUS_WIDGET);
+    if (!widget) {
+        widget = node.addCustomWidget({
+            name: CONTROL_STATUS_WIDGET,
+            type: "custom",
+            value,
+            y: 0,
+            options: {},
+            serialize: false,
+            computeSize: () => [0, 24],
+            computeLayoutSize: () => ({ minHeight: 24, maxHeight: 24, minWidth: CONTROL_CENTER_MIN_WIDTH }),
+            mouse: () => false,
+            draw(ctx: CanvasRenderingContext2D, _node: any, width: number, y: number, height: number) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(10, y, Math.max(0, width - 20), height);
+                ctx.clip();
+                ctx.fillStyle = this.__bvHasConflict ? "#ffbd66" : "#8fc9a3";
+                ctx.font = "12px sans-serif";
+                ctx.textBaseline = "middle";
+                ctx.fillText(String(this.value ?? ""), 14, y + height / 2);
+                ctx.restore();
+            },
         });
-
-        const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-        const w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
-        w.label = label;
-        w.serialize = true;
-
-        // @ts-ignore
-        node.inputs[i]._widget = w;
-        changed = true;
     }
-
-    // Remove extra inputs
-    while (node.inputs.length > desiredCount) {
-        const i = node.inputs.length - 1;
-        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-
-        const wi = node.widgets?.findIndex((w: any) => w.name === inputName) ?? -1;
-        if (wi !== -1) node.widgets.splice(wi, 1);
-
-        if (node.isInputConnected(i)) node.disconnectInput(i);
-        node.removeInput(i);
-        changed = true;
-    }
-
-    let allSlotsRenamed = true;
-    // Sync labels + widget values + link input<->widget
-    for (let i = 0; i < desiredCount; i++) {
-        let label = config.rows[i].title;
-
-        const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-
-        if (node.inputs[i]?.label !== label) {
-            node.inputs[i].label = label;
-            changed = true;
-        }
-
-        let w = node.widgets.find((ww: any) => ww.name === inputName);
-        if (!w) {
-            const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-            w = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
-            w.serialize = true;
-            w.label = label;
-            changed = true;
-        } else {
-            if (w.options) {
-                if (w.options.on !== ACTIVE || w.options.off !== MUTE) {
-                    w.options.on = ACTIVE;
-                    w.options.off = MUTE;
-                    changed = true;
-                }
-            }
-            if (overrideValue && savedValues && savedValues[i] !== undefined && w.value !== savedValues[i]) {
-                w.value = savedValues[i];
-                w.label = label;
-                changed = true;
-            }
-        }
-
-        if (node.inputs[i]) {
-            node.inputs[i].widget = {name: inputName};
-            // @ts-ignore
-            node.inputs[i]._widget = w;
-        }
-
-
-        const ccNode = getNodeHelper(node.id, node.graph)
-        if(ccNode){
-            const ccInput = ccNode.inputs[i]
-            const ccLink = ccNode.getInputLink(i)
-            if(ccLink && ccNode.graph){
-                setTimeout(() => {
-                    const graphNode = getOuterNode(ccNode)
-                    if(graphNode) {
-                        const graphWidgets = graphNode.widgets
-                        if(graphWidgets){
-                            const graphWidget = graphWidgets[ccLink.origin_slot]
-                            if(graphWidget){
-                                graphWidget.label = label
-                            }
-                        }
-                    }
-
-
-
-                }, 50)
-
-            }
-        }
-
-        const gNode = getNodeHelper(node.id, node.graph)
-
-        if (gNode) {
-            let success = false
-
-            success = renameSubGraphInputSlot(node, i, label)
-
-            if (!success) {
-                allSlotsRenamed = false;
-            }
-        } else {
-            allSlotsRenamed = false;
-        }
-    }
-
-    if (changed) {
-        node.serialize_widgets = true;
-        node.setDirtyCanvas(true, true);
-        node.size = node.computeSize?.() ?? node.size;
-    }
-
-    return allSlotsRenamed;
+    widget.value = value;
+    widget.__bvHasConflict = conflicts.length > 0;
+    widget.tooltip = conflicts.map((conflict: any) => `${conflict.groupPath}: ${conflict.winnerAction} wins`).join("\n");
 }
 
-function updateControlNodes(config: BVControlConfig, savedValuesOverride?: any[]) {
-    const app = getApp();
-    const graph = app.rootGraph;
-    if (!graph?.nodes || !config) return;
+function syncNode(node: any, config: BVControlConfig) {
+    node.mode = NORMAL;
+    if (node.properties) delete node.properties[BASE_MODE];
 
-    const controlNodes = crawlSubgraphForNode(graph.nodes);
+    let configureWidget = node.widgets?.find((item: any) => item.name === "configure_control_center");
+    if (!configureWidget) configureWidget = node.addWidget("button", "configure_control_center", null, () => window.dispatchEvent(new Event(OPEN_CONTROL_RACK_EVENT)), { serialize: false });
+    configureWidget.label = "Configure Control Center";
+    configureWidget.serialize = false;
 
-    controlNodes.forEach((node) => {
-        let changed = false;
-
-        if (!node.widgets) node.widgets = [];
-
-        // @ts-ignore
-        const savedValues = savedValuesOverride ?? node.widgets_values;
-
-        const commonCount = Math.min(node.inputs.length, config.rows.length);
-        for (let i = 0; i < commonCount; i++) {
-            let label = config.rows[i].title;
-
-            const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-
-            if (node.inputs[i].label !== label) {
-                node.inputs[i].label = label;
-                changed = true;
-            }
-
-            let widget = node.widgets.find(w => w.name === inputName);
-            if (!widget) {
-                const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-                widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
-                widget.serialize = true;
-                changed = true;
-            } else {
-                // Apply saved value on load as well
-                if (savedValues && savedValues[i] !== undefined && widget.value !== savedValues[i]) {
-                    widget.value = savedValues[i];
-                    changed = true;
-                }
-                if (widget.options) {
-                    if (widget.options.on !== ACTIVE || widget.options.off !== MUTE) {
-                        widget.options.on = ACTIVE;
-                        widget.options.off = MUTE;
-                        changed = true;
-                    }
-                }
-            }
-
-            node.inputs[i].widget = {name: inputName} as any;
-            // @ts-ignore
-            node.inputs[i]._widget = widget;
-
-            renameSubGraphInputSlot(node, i, label)
-        }
-
-        if (node.inputs.length > config.rows.length) {
-            for (let i = node.inputs.length - 1; i >= config.rows.length; i--) {
-                const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-                const widgetIndex = node.widgets?.findIndex(w => w.name === inputName) ?? -1;
-                if (widgetIndex !== -1) node.widgets.splice(widgetIndex, 1);
-                if (node.isInputConnected(i)) node.disconnectInput(i);
-                node.removeInput(i);
-                changed = true;
-            }
-        } else if (node.inputs.length < config.rows.length) {
-            for (let i = node.inputs.length; i < config.rows.length; i++) {
-                let label = config.rows[i].title;
-                const inputName = `bvcc_${String(i).padStart(3, "0")}`;
-
-                node.addInput(inputName, "BOOLEAN", {
-                    label,
-                    nameLocked: true,
-                    default: true,
-                    widget: {name: inputName}
-                });
-
-                const initialValue = (savedValues && savedValues[i] !== undefined) ? savedValues[i] : true;
-                const widget = node.addWidget("toggle", inputName, initialValue, () => node.setDirtyCanvas(true), {on: ACTIVE, off: MUTE});
-                widget.serialize = true;
-
-                // @ts-ignore
-                node.inputs[i]._widget = widget;
-                changed = true;
-            }
-        }
-
-        if (changed) {
-            node.serialize_widgets = true;
-            node.setDirtyCanvas(true, true);
-            node.size = node.computeSize();
-        }
-    });
-}
-
-function hookWidgetChanged(node: any) {
-    if (node.__bv_onWidgetChanged_patched) return;
-    node.__bv_onWidgetChanged_patched = true;
-
-    const original = node.onWidgetChanged;
-
-    node.onWidgetChanged = function (name: string, value: any, old_value: any, widget: IBaseWidget) {
-        let r;
-        try {
-            // @ts-ignore
-            r = original?.apply(this, arguments);
-        } catch {
-        }
-
-        const config = readConfig();
-        if (config) {
-            const index = node.widgets.indexOf(widget);
-            const title = (index !== -1 && node.inputs[index]) ? node.inputs[index].label : widget.label;
-            if (!title) return;
-            executeChange(title, value);
-            // updateSingleControlNode(node, config, undefined, false);
-        }
-
-        return r
+    const desiredNames = new Set(config.controls.map((control) => `bvcc_${control.id}`));
+    for (let index = node.inputs.length - 1; index >= 0; index--) {
+        const input = node.inputs[index];
+        if (input.name.startsWith("bvcc_") && !desiredNames.has(input.name)) removeControlPort(node, index);
     }
-}
-
-function normalizeGroupTitle(entry: BVControlEntry) {
-    return entry.ref.title
-}
-
-function normalizeAction(value: "bypass" | "mute") {
-    const v = (value ?? "").toString().toLowerCase().trim();
-    return v === "bypass" ? "bypass" : "mute";
-}
-
-function applyEntry(groupTitle: string, action: "bypass" | "mute", enabled: boolean) {
-    if (!groupTitle) return;
-    const appOrGraph = getApp()
-
-    const a = normalizeAction(action);
-
-    if (a === "bypass") {
-        if (enabled) bypassGroupsByTitle(appOrGraph, groupTitle, "overlap");
-        else unbypassGroupsByTitle(appOrGraph, groupTitle, "overlap");
-        return;
+    for (const control of config.controls) {
+        const name = `bvcc_${control.id}`;
+        const onToggle = (value: boolean) => {
+            const latest = readConfig();
+            const next = { ...latest, controls: latest.controls.map((item) => item.id === control.id ? { ...item, enabled: Boolean(value) } : item) };
+            writeConfig(next);
+        };
+        let input = node.inputs.find((item: any) => item.name === name);
+        if (!input) input = node.addInput(name, "BOOLEAN", { label: control.name, nameLocked: true, widget: { name } });
+        input.label = control.name;
+        let widget = node.widgets?.find((item: any) => item.name === name);
+        if (widget && !widget.__bvControlCallbackBound) {
+            node.removeWidget?.(widget);
+            widget = null;
+        }
+        if (!widget) widget = node.addWidget("toggle", name, control.enabled, onToggle, { on: "ACTIVE", off: "INACTIVE" });
+        widget.__bvControlCallbackBound = true;
+        widget.label = control.name;
+        widget.value = control.enabled;
+        widget.serialize = true;
+        widget.options ??= {};
+        widget.options.on = "ACTIVE";
+        widget.options.off = "INACTIVE";
+        widget.callback = onToggle;
+        input.widget = { name };
     }
-
-    if (enabled) muteGroupsByTitle(appOrGraph, groupTitle, "overlap");
-    else unmuteGroupsByTitle(appOrGraph, groupTitle, "overlap");
-}
-
-function executeChange(title: string, value: boolean): void {
-    const config = readConfig();
-    if (!config) return;
-
-    const applyDisable = !value;
-
-    const foundRow = config.rows.find(row => row.title === title);
-    if (!foundRow) return;
-    for (const entry of foundRow.entries) {
-        const groupTitle = normalizeGroupTitle(entry);
-        const action = normalizeAction(entry.action);
-        if (!groupTitle) continue;
-
-        applyEntry(groupTitle, action, applyDisable);
+    syncConflictStatus(node, config);
+    const configWidget = node.widgets?.find((item: any) => item.name === "bv_control_config_json");
+    if (configWidget) {
+        configWidget.value = JSON.stringify(configForValidation(config));
+        configWidget.type = "converted-widget";
+        configWidget.draw = () => {};
+        configWidget.hidden = true;
+        configWidget.options ??= {};
+        configWidget.options.hidden = true;
+        if (configWidget.element) configWidget.element.style.display = "none";
+        configWidget.computeSize = () => [0, -4];
+        configWidget.serializeValue = () => JSON.stringify(configForValidation(readConfig()));
     }
+    node.serialize_widgets = true;
+    const currentSize = node.size ?? [0, 0];
+    const computedSize = node.computeSize?.() ?? currentSize;
+    const minimumWidth = Math.max(CONTROL_CENTER_MIN_WIDTH, (computedSize[0] ?? 0) + CONTROL_CENTER_WIDTH_BUFFER);
+    node.setSize?.([
+        Math.max(currentSize[0] ?? 0, minimumWidth),
+        computedSize[1] ?? currentSize[1] ?? 0,
+    ]);
+    node.setDirtyCanvas?.(true, true);
 }
 
-comfyApp.registerExtension({
-    name: "bv_control_center",
-    async beforeRegisterNodeDef(nodeType, nodeData) {
-        const comfyClass = nodeType.type;
-        const nodeName = nodeData.name;
+function syncAll(config = readConfig()) {
+    for (const { node } of collectNodesByType(getApp(), NODE_CLASS)) syncNode(node, config);
+    applyConfig(config);
+}
 
-        const isControlCenter =
-            comfyClass === "BVControlCenterNode" ||
-            nodeName === "BV Control Center" ||
-            nodeName?.includes("BV Control Center") ||
-            nodeName?.includes("🌀 BV Control Center");
+window.addEventListener(CONFIG_CHANGED_EVENT, (event) => syncAll((event as CustomEvent<BVControlConfig>).detail));
 
-        if (!isControlCenter) return;
-
-        const onNodeCreated = nodeType.prototype.onNodeCreated;
+getApp().registerExtension({
+    name: "bv_nodepack.control_center",
+    async beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (nodeData.name !== NODE_CLASS) return;
+        const originalCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
-            // @ts-ignore
-            const r = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
-            this.serialize_widgets = true;
-
-            const cfg = readConfig();
-            if (cfg) {
-                setTimeout(() => {
-
-                    updateSingleControlNode(this, cfg);
-                }, 50)
-            }
-
-            hookWidgetChanged(this)
-            startConfigWatcher();
-
-            return r;
+            const result = originalCreated?.apply(this, arguments);
+            syncNode(this, readConfig());
+            return result;
         };
-
-        const onConfigure = nodeType.prototype.onConfigure;
-        nodeType.prototype.onConfigure = function (nodeInfo: any) {
-            // @ts-ignore
-            const r = onConfigure ? onConfigure.apply(this, arguments) : undefined;
-            this.serialize_widgets = true;
-
-            const cfg = readConfig();
-            if (cfg) {
-                updateSingleControlNode(this, cfg, nodeInfo?.widgets_values);
-            }
-
-            return r;
-        };
-
-
-
-        const onConnectInput = nodeType.prototype.onConnectInput
-        // @ts-ignore
-        nodeType.prototype.onConnectInput = function (target_slot, type, output, node, slot) {
-            // @ts-ignore
-            const r = onConnectInput ? onConnectInput.apply(this, arguments) : undefined;
-            this.serialize_widgets = true;
-
-            // @ts-ignore
-            if (node.type && !node.subgraph) {
-                showErrorToast("BV Control Center can only be connected to a Subgraph.")
-                return false
-            }
-
-            if (this.type == "BV Control Center") {
-                ensureSubgraphContainerPatchedFromInnerNodeRetry(this, hookSubgraphWidgetChanged, executeChange);
-
-
-                if (typeof this.id !== 'number') {
-                    return r;
-                }
-
-                const id = this.id;
-                const retries = 20
-                function retry(n = 0) {
-                    if (n >= retries) return;
-                    const gNode = getNodeHelper(id, getApp().rootGraph)
-                    if (gNode) {
-                        const suc = renameSubGraphInputSlot(gNode, target_slot)
-                        if (suc) return;
-                    }
-                    setTimeout(() => {
-                        retry(n + 1)
-                    }, 50)
-                }
-                retry()
-                return r;
-            }
-        }
-
-        const onConnectionsChange = nodeType.prototype.onConnectionsChange
-        // @ts-ignore
-        nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
-            // @ts-ignore
-            const r = onConnectionsChange ? onConnectionsChange.apply(this, arguments) : undefined;
-
-            if (!connected && type === 1) { // 1 is LiteGraph.INPUT
-                if (this.type == "BV Control Center") {
-
-                    console.debug("onConnectionsChange", type, link_info, connected, index)
-
-                    const id = this.id;
-
-                    const ccNode = getNodeHelper(id as number, getApp().rootGraph, true)
-
-                    if (ccNode){
-
-                        const sNode = getOuterNode(ccNode) as SubgraphNode
-
-                        if(link_info && sNode && sNode.widgets){
-                            const sWidget = sNode.widgets[link_info.origin_slot]
-                            const value = sWidget.value
-
-                            sNode.removeWidget(sWidget)
-                            const newSize = sNode.computeSize?.() ?? sNode.size;
-                            sNode.setSize?.(newSize);
-                            sNode.size = newSize;
-
-                            sNode.setDirtyCanvas?.(true, true);
-                            sNode.graph?.setDirtyCanvas?.(true, true);
-                            const ccINput = ccNode.getInputInfo(index)
-                            if(ccINput != null){
-                                const widget = ccNode.getWidgetFromSlot(ccINput);
-                                if (widget) {
-                                    function setWidgetValue(node: any, widgetName: any, newValue: any) {
-                                        // @ts-ignore
-                                        const w = node?.widgets?.find(x => x?.name === widgetName);
-                                        if (!w) return false;
-                                        w.value = newValue;
-                                        (w.callback || w.onChange)?.call(w, newValue, node, w);
-
-                                        node.setSize?.(node.computeSize?.() ?? node.size);
-
-                                        node.setDirtyCanvas?.(true, true);
-                                        node.graph?.setDirtyCanvas?.(true, true);
-
-                                        return true;
-                                    }
-
-                                    setWidgetValue(sNode, sWidget.name, value)
-                                }
-                            }
-
-                        }
-
-                    }
-                }
-            }
-            return r;
-        }
-    }
+    },
+    afterConfigureGraph() {
+        syncAll();
+    },
 });
-
-function patchAllSubgraphs(): number {
-    const graph = getApp()?.rootGraph;
-    if (!graph) return 0;
-
-    const subs = findAllSubgraphContainers(graph);
-
-    let patched = 0;
-    for (const s of subs) {
-        const didPatch = patchSubgraphContainerPrototype(s, hookSubgraphWidgetChanged, executeChange);
-        if (didPatch) patched++;
-    }
-
-    return patched;
-}
-
-function retryPatchAllSubgraphs(opts?: {
-    intervalMs?: number;
-    maxAttempts?: number;
-    stopWhenPatched?: boolean;
-}) {
-    const intervalMs = opts?.intervalMs ?? 200;
-    const maxAttempts = opts?.maxAttempts ?? 30;
-    const stopWhenPatched = opts?.stopWhenPatched ?? true;
-
-    let attempt = 0;
-
-    const tick = () => {
-        attempt++;
-
-        const patchedCount = patchAllSubgraphs();
-
-        if (stopWhenPatched && patchedCount > 0) return;
-        if (attempt >= maxAttempts) return;
-
-        setTimeout(tick, intervalMs);
-    };
-
-    tick();
-}
-
-retryPatchAllSubgraphs({intervalMs: 150, maxAttempts: 80});
-
-// Retry because LGraph might not be ready instantly
-(function retry(n = 0) {
-    if (patchGraphAddSingletonGuard()) return;
-    if (n > 80) return;
-    setTimeout(() => retry(n + 1), 50);
-})();

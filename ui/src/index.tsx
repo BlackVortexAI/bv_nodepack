@@ -2,21 +2,20 @@ import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
+import styles from "./index.css?inline";
 const comfyApp = getApp();
-import "./util/control/stateHandler";
 import "./components/control/bv_control_center";
 
-// Expose a setter so non-React callbacks (e.g., action bar button) can open the portal
-let setPortalOpenExternal: ((open: boolean) => void) | null = null;
+const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
+const STYLE_ID = "bv-nodepack-styles";
 
 function BVRoot() {
     const [portalOpen, setPortalOpen] = useState(false);
 
     useEffect(() => {
-        setPortalOpenExternal = (open: boolean) => setPortalOpen(open);
-        return () => {
-            setPortalOpenExternal = null;
-        };
+        const open = () => setPortalOpen(true);
+        window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
+        return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
     }, []);
 
     return (
@@ -32,6 +31,12 @@ function BVRoot() {
 const MOUNT_ID = "bv-root";
 
 function ensureMountedOnce() {
+    if (!document.getElementById(STYLE_ID)) {
+        const style = document.createElement("style");
+        style.id = STYLE_ID;
+        style.textContent = styles;
+        document.head.appendChild(style);
+    }
     let container = document.getElementById(MOUNT_ID);
     if (!container) {
         container = document.createElement("div");
@@ -46,20 +51,9 @@ function ensureMountedOnce() {
     }
 }
 
-// Set up once: create an action button that opens the persistent portal
 comfyApp.registerExtension({
-    name: "bv_nodepack.action_button",
+    name: "bv_nodepack.control_rack_portal",
     setup() {
         ensureMountedOnce();
     },
-    actionBarButtons: [
-        {
-            icon: "pi pi-wrench",
-            tooltip: "BV Tools Configuration (Beta)",
-            onClick: () => {
-                ensureMountedOnce();
-                setPortalOpenExternal?.(true);
-            },
-        },
-    ],
 });

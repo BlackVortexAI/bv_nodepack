@@ -18,16 +18,41 @@
     --bv-muted-text-color: #7f8c8d;
 }
 
-#bv-root {
-    height: 100%;
+.bv-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.6);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    box-sizing: border-box;
     color: var(--bv-text-color);
-    background: var(--bv-bg-color);
 }
 
-#bv-root * {
+.bv-modal * {
     box-sizing: border-box;
 }
+
+.bv-dialog { width: min(900px, 92vw); max-height: 84vh; }
+.bv-rack { width: 100%; max-height: 84vh; overflow: auto; padding: 20px; border: 1px solid var(--bv-border-color); border-radius: 14px; background: var(--comfy-menu-bg, #20242a); box-shadow: 0 18px 60px #0009; }
+.bv-rack header, .bv-rack footer, .bv-control-title, .bv-assignments > div { display: flex; align-items: center; gap: 10px; }
+.bv-rack header { justify-content: space-between; border-bottom: 1px solid #ffffff20; margin-bottom: 16px; }
+.bv-rack h2 { margin: 0; }
+.bv-rack p { margin-top: 4px; color: var(--bv-muted-text-color); }
+.bv-force { display: flex; gap: 8px; padding: 10px 12px; background: #ffffff08; border-radius: 8px; }
+.bv-controls { display: grid; gap: 12px; margin: 16px 0; }
+.bv-control-card { border: 1px solid #ffffff20; border-radius: 10px; padding: 12px; background: #ffffff08; }
+.bv-control-title input { flex: 1; font-weight: 650; }
+.bv-control-title span { color: var(--bv-muted-text-color); }
+.bv-assignments { display: grid; gap: 6px; margin: 10px 0; }
+.bv-assignments > div span { flex: 1; }
+.bv-assignments > div span small { display: block; margin-top: 3px; color: #ffbd66; }
+.bv-assignments .conflict { border-left: 2px solid #ffbd66; padding-left: 8px; }
+.bv-assignments .unresolved { color: #ff9f7a; }
+.bv-rack input, .bv-rack select, .bv-rack button { color: inherit; background: #15181c; border: 1px solid #ffffff25; border-radius: 6px; padding: 7px 9px; }
+.bv-rack button { cursor: pointer; }
+.bv-rack button.primary { background: var(--bv-primary-color); border-color: transparent; }
+.bv-rack footer { justify-content: flex-end; }
 
 

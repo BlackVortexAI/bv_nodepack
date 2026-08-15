@@ -19,15 +19,20 @@ class BVHexColorToInt:
     CATEGORY = "🌀 BV Node Pack/utils"
 
     def run(self, hex: str):
-        s = hex.strip().lower()
+        color = hex
+        s = color.strip().lower()
 
         # Accept: "#rrggbb", "0xrrggbb", "rrggbb"
         s = s.replace("0x", "")
         if s.startswith("#"):
             s = s[1:]
 
-        if not re.fullmatch(r"[0-9a-f]{6}", s):
-            raise ValueError(f"Invalid hex color: '{hex}'. Expected #RRGGBB / 0xRRGGBB / RRGGBB.")
+        if re.fullmatch(r"[0-9a-f]{3}", s):
+            s = "".join(ch * 2 for ch in s)
+        elif not re.fullmatch(r"[0-9a-f]{6}", s):
+            raise ValueError(
+                f"Invalid hex color: '{color}'. Expected #RGB, RGB, #RRGGBB, 0xRRGGBB, or RRGGBB."
+            )
 
         value = int(s, 16)
         return (value,)

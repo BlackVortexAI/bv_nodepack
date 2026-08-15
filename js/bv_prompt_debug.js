@@ -1,81 +1,72 @@
 import { app } from "../../scripts/app.js";
 
-function setWidgetReadonly(widget, readonly = true) {
-    // Keep it interactive (scroll/select), but prevent edits
-    widget.disabled = false;
-    widget.readonly = readonly;
-    widget.options = widget.options || {};
-    widget.options.readonly = readonly;
+const WIDGET_NAME = "bv_ast_debug_output";
 
-    // If the DOM element exists (textarea/input), set readonly there too
-    const el = widget.inputEl || widget.element || widget.el;
-    if (el) {
-        el.readOnly = readonly;
-        el.setAttribute("readonly", readonly ? "true" : "false");
-        // Important: do NOT disable pointer events, otherwise scrolling breaks
-        el.style.pointerEvents = "auto";
-    }
+function ensureDebugWidget(node) {
+    if (!node || node.__bvAstDebugWidget) return node?.__bvAstDebugWidget;
 
-    // Some ComfyUI widget implementations use callback to commit value;
-    // we can keep callback but readonly prevents edits anyway.
+    const textarea = document.createElement("textarea");
+    textarea.readOnly = true;
+    textarea.placeholder = "Run the workflow to inspect the AST.";
+    textarea.style.boxSizing = "border-box";
+    textarea.style.width = "100%";
+    textarea.style.height = "100%";
+    textarea.style.minHeight = "160px";
+    textarea.style.resize = "vertical";
+    textarea.style.fontFamily = "ui-monospace, SFMono-Regular, Consolas, monospace";
+    textarea.style.fontSize = "12px";
+    textarea.style.whiteSpace = "pre";
+
+    const widget = node.addDOMWidget(WIDGET_NAME, "textarea", textarea, {
+        serialize: false,
+        getMinHeight: () => 160,
+        getValue: () => textarea.value,
+        setValue: (value) => {
+            textarea.value = typeof value === "string" ? value : "";
+        },
+    });
+
+    widget.element = textarea;
+    node.__bvAstDebugWidget = widget;
+    return widget;
+}
+
+function setDebugText(node, value) {
+    const widget = ensureDebugWidget(node);
+    const textarea = widget?.element;
+    if (!textarea) return;
+
+    textarea.value = value;
+    node.setDirtyCanvas?.(true, true);
+    node.graph?.setDirtyCanvas?.(true, true);
 }
 
 app.registerExtension({
     name: "bv_nodepack.ast_debug_output",
 
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        const name = nodeData?.name;
-        if (name !== "BV Prompt AST Debug") return;
+        if (nodeData?.name !== "BV Prompt AST Debug") return;
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
-            const r = onNodeCreated?.apply(this, arguments);
+            const result = onNodeCreated?.apply(this, arguments);
+            ensureDebugWidget(this);
+            return result;
+        };
 
-            // Find by widget name (much more stable than slot index)
-            const w = this.widgets?.find((x) => x.name === "debug_output");
-            if (w) {
-                // Mark readonly immediately (if DOM exists already)
-                setWidgetReadonly(w, true);
-
-                // Fallback: ensure readonly once the input element exists
-                const origDraw = w.draw;
-                w.draw = function () {
-                    const rr = origDraw?.apply(this, arguments);
-                    if (!w.__bv_readonly_applied) {
-                        setWidgetReadonly(w, true);
-                        // if element exists now, lock it
-                        const el = w.inputEl || w.element || w.el;
-                        if (el) w.__bv_readonly_applied = true;
-                    }
-                    return rr;
-                };
-            }
-
-            return r;
+        const onConfigure = nodeType.prototype.onConfigure;
+        nodeType.prototype.onConfigure = function () {
+            const result = onConfigure?.apply(this, arguments);
+            ensureDebugWidget(this);
+            return result;
         };
 
         const onExecuted = nodeType.prototype.onExecuted;
         nodeType.prototype.onExecuted = function (message) {
-            const r = onExecuted?.apply(this, arguments);
-
-            // Your python returns UI key "ast_json": [txt] :contentReference[oaicite:1]{index=1}
-            const txt = message?.ast_json?.[0];
-            if (typeof txt === "string") {
-                const w = this.widgets?.find((x) => x.name === "debug_output");
-                if (w) {
-                    w.value = txt;
-
-                    // Keep readonly and refresh element value if present
-                    setWidgetReadonly(w, true);
-                    const el = w.inputEl || w.element || w.el;
-                    if (el) el.value = txt;
-
-                    this.setDirtyCanvas(true, true);
-                    this.graph?.setDirtyCanvas(true, true);
-                }
-            }
-
-            return r;
+            const result = onExecuted?.apply(this, arguments);
+            const text = message?.ast_json?.[0];
+            if (typeof text === "string") setDebugText(this, text);
+            return result;
         };
-    }
+    },
 });

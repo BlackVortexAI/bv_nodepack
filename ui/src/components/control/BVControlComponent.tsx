@@ -1,98 +1,60 @@
-import * as React from 'react';
-import {BVControlRow, readConfig, writeConfig} from "../../util/control/configHandler";
+import * as React from "react";
+import { FC, useMemo, useState } from "react";
+import { getApp } from "../../appHelper";
+import { collectAllGroups } from "../../util/control/collector";
+import { BVControl, BVControlConfig, readConfig, writeConfig } from "../../util/control/configHandler";
+import { findActiveControlConflicts } from "../../util/control/controlCenterModel.js";
 import BVControlRowComponent from "./BVControlRowComponent";
-import {FC, useMemo} from "react";
-import {getApp} from "../../appHelper";
-import {collectAllGroups} from "../../util/control/collector";
 
-const BVControlComponent: FC<{onClose() : void}> = ({onClose}) => {
+function id() {
+    return globalThis.crypto?.randomUUID?.() ?? `bv-control-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
-    const [config, setConfig] = React.useState(readConfig());
-    const comfyApp = getApp();
-    const groups = useMemo(() => collectAllGroups(comfyApp), [comfyApp, config]);
+const BVControlComponent: FC<{ onClose(): void }> = ({ onClose }) => {
+    const [config, setConfig] = useState<BVControlConfig>(() => {
+        const current = readConfig();
+        const available = new Set(collectAllGroups(getApp()).map((group) => group.id));
+        return {
+            ...current,
+            controls: current.controls.map((control) => ({
+                ...control,
+                assignments: control.assignments.map((assignment) => ({ ...assignment, unresolved: !available.has(assignment.groupId) })),
+            })),
+        };
+    });
+    const groups = useMemo(() => collectAllGroups(getApp()), [config]);
+    const conflicts = useMemo(() => findActiveControlConflicts(config), [config]);
+    const updateControl = (index: number, control: BVControl | null) => {
+        setConfig({ ...config, controls: control ? config.controls.map((item, itemIndex) => itemIndex === index ? control : item) : config.controls.filter((_, itemIndex) => itemIndex !== index) });
+    };
+    const addControl = () => {
+        let name = "New Control";
+        let suffix = 2;
+        while (config.controls.some((control) => control.name === name)) name = `New Control ${suffix++}`;
+        setConfig({ ...config, controls: [...config.controls, { id: id(), name, enabled: true, assignments: [] }] });
+    };
+    const save = () => {
+        const names = config.controls.map((control) => control.name.trim());
+        if (names.some((name) => !name) || new Set(names).size !== names.length) return;
+        const available = new Set(groups.map((group) => group.id));
+        const resolved = {
+            ...config,
+            controls: config.controls.map((control) => ({
+                ...control,
+                name: control.name.trim(),
+                assignments: control.assignments.map((assignment) => ({ ...assignment, unresolved: !available.has(assignment.groupId) })),
+            })),
+        };
+        writeConfig(resolved);
+        setConfig(resolved);
+    };
 
-    const addRow = () => {
-        if (config) {
-            const baseTitle = "New Row";
-            let newTitle = baseTitle;
-            let counter = 1;
-            while (config.rows.some(r => r.title === newTitle)) {
-                newTitle = `${baseTitle} ${counter}`;
-                counter++;
-            }
-            setConfig({rows: [...config.rows, {title: newTitle, entries: []}]});
-        } else {
-            setConfig({rows: [{title: "New Row", entries: []}]});
-        }
-    }
-
-    const saveConfig = () => {
-        writeConfig(config);
-    }
-
-    const clearConfig = () => {
-        writeConfig(null);
-        setConfig(null);
-    }
-
-    const onChange = (index: number, row: BVControlRow, del: boolean) => {
-        if (config) {
-            if (del) {
-                setConfig({...config, rows: config.rows.filter((_, i) => i !== index)});
-            }else{
-                // Prevent duplicate titles
-                const isDuplicate = config.rows.some((r, i) => i !== index && r.title === row.title);
-                if (isDuplicate) {
-                    // Option 1: Just don't update if it's a duplicate title
-                    // But we might want to update other parts of the row (entries)
-                    // So we only block if the title specifically is being changed to a duplicate
-                    const oldRow = config.rows[index];
-                    if (oldRow.title !== row.title) {
-                        // Title changed and it's a duplicate. We could revert the title or auto-increment it.
-                        // For now, let's just not update the title if it's a duplicate.
-                        // Or better: call a function that makes it unique.
-                        let uniqueTitle = row.title;
-                        let counter = 1;
-                        while (config.rows.some((r, i) => i !== index && r.title === uniqueTitle)) {
-                            uniqueTitle = `${row.title} ${counter}`;
-                            counter++;
-                        }
-                        row = {...row, title: uniqueTitle};
-                    }
-                }
-                setConfig({...config, rows: config.rows.map((r, i) => i === index ? row : r)});
-            }
-        }
-    }
-
-    const cols = (config?.rows.reduce((m, r) => Math.max(m, r.entries.length), 0) ?? 0) + 3;
-
-    return (
-        <div className={"grid grid-cols-1 gap-4 p-4"}>
-            {config &&
-                <div
-                    className={"grid gap-4 p-4 items-center"}
-                    style={{ gridTemplateColumns: `max-content repeat(${cols - 2}, auto) max-content` }}
-                >
-                    {Array.from({length: cols}, (_, i) => {
-                        if (i === 0) return <div key={`header_${i}`}>Title</div>;
-                        if (i === cols - 1) return <div key={`header_${i}`}></div>;
-                        return <div key={`header_${i}`}>Selection {i}</div>;
-                    })}
-
-                    {config.rows.map((row, i) => (
-                        <BVControlRowComponent key={i} index={i} row={row} onChange={onChange} maxCols={cols} groups={groups}/>
-                    ))}
-                </div>
-            }
-            <div className={"grid grid-cols-1 gap-4 p-4"}>
-                <button onClick={addRow}>Add Row</button>
-                <button onClick={saveConfig}>Save Config</button>
-                <button onClick={clearConfig}>Clear Config</button>
-                <button onClick={onClose}>Close</button>
-            </div>
-        </div>
-    );
+    return <div className="bv-rack">
+        <header><div><h2>BV Control Rack</h2><p>User-defined workflow states</p></div><button onClick={onClose}>×</button></header>
+        <label className="bv-force"><input type="checkbox" checked={config.forceActive} onChange={(event) => setConfig({ ...config, forceActive: event.target.checked })} /> Force active after releasing restrictions</label>
+        <div className="bv-controls">{config.controls.map((control, index) => <BVControlRowComponent key={control.id} control={control} groups={groups} conflicts={conflicts} onChange={(value) => updateControl(index, value)} />)}</div>
+        <footer><button onClick={addControl}>Add Control</button><button className="primary" onClick={save}>Save Configuration</button></footer>
+    </div>;
 };
 
 export default BVControlComponent;

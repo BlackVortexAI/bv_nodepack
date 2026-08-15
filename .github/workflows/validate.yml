@@ -1,0 +1,54 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Python syntax
+        run: python -m compileall -q __init__.py py
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Run frontend behavior tests
+        run: node --test tests/*.test.mjs
+
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Type-check UI
+        working-directory: ui
+        run: npm run typecheck
+
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+
+      - name: Verify committed UI bundle
+        run: git diff --exit-code -- js/bv_nodepack.core.js

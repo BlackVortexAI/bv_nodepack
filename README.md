@@ -18,14 +18,16 @@ A curated collection of **quality-of-life**, **UI**, and **prompting** nodes for
 - [Installation](#installation)
 - [Update & Uninstall](#update--uninstall)
 - [Node Overview](#node-overview)
+    - [Example Workflows](#example-workflows)
     - [Pipe Nodes](#pipe-nodes)
     - [UI / Layout Nodes](#ui--layout-nodes)
     - [Prompt / AST Nodes](#prompt--ast-nodes)
+    - [Latent Nodes](#latent-nodes)
     - [Util Nodes](#util-nodes)
-    - [Beta Nodes](#beta-nodes)
+    - [Control Nodes](#control-nodes)
 - [Prompt AST Syntax & Markup Guide](#prompt-ast-syntax--markup-guide)
 - [Example application for AST](#example-application-for-ast)
-- [Quick Start (BV Pipe)](#quick-start-bv-pipe)
+- [Quick Start (BV Smart Pipe)](#quick-start-bv-smart-pipe)
 - [Notes & Design Principles](#notes--design-principles)
 - [Changelog](#changelog)
 
@@ -72,10 +74,115 @@ Each section below can be read independently.
 
 ---
 
+## Example Workflows
+
+Each preview is also an importable ComfyUI workflow: download the PNG and drag it onto the canvas. The matching JSON is provided as a metadata-independent fallback.
+
+<details open>
+<summary><strong>Smart Pipe: wireless branches and ordered merge</strong></summary>
+
+[![Smart Pipe wireless merge example](examples/images/smart-pipe-wireless-merge.png)](examples/images/smart-pipe-wireless-merge.png)
+
+Two independently populated pipes are merged wirelessly and then inherited by the next processing stage. [Workflow JSON](examples/workflows/smart-pipe-wireless-merge.json)
+
+</details>
+
+<details>
+<summary><strong>Control Center: reusable workflow states</strong></summary>
+
+[![Control Center workflow-state example](examples/images/control-center-workflow-states.png)](examples/images/control-center-workflow-states.png)
+
+Multiple synchronized Control Center nodes manage grouped generation stages while showing their active state and conflict status directly on the graph. [Workflow JSON](examples/workflows/control-center-workflow-states.json)
+
+</details>
+
+<details>
+<summary><strong>Subgraph UI: heading, combo, divider and spacer</strong></summary>
+
+[![Subgraph UI layout example](examples/images/subgraph-ui-layout.png)](examples/images/subgraph-ui-layout.png)
+
+The presentation nodes are arranged in the logical order in which they should be exposed on a purpose-built Subgraph interface. [Workflow JSON](examples/workflows/subgraph-ui-layout.json)
+
+</details>
+
+<details>
+<summary><strong>Random-ratio latent for composition exploration</strong></summary>
+
+[![Random-ratio latent example](examples/images/empty-latent-random-ratio.png)](examples/images/empty-latent-random-ratio.png)
+
+A deterministic mix of common and project-specific aspect ratios feeds a sampler while width, height and ratio remain available for metadata and post-processing. [Workflow JSON](examples/workflows/empty-latent-random-ratio.json)
+
+</details>
+
+<details>
+<summary><strong>Prompt AST: category-based prompt variants</strong></summary>
+
+[![Prompt AST category example](examples/images/prompt-ast-categories.png)](examples/images/prompt-ast-categories.png)
+
+One structured prompt is filtered into a generation variant while the complete AST remains inspectable during workflow construction. [Workflow JSON](examples/workflows/prompt-ast-categories.json)
+
+</details>
+
+---
+
 ## Pipe Nodes
 
 <details>
-<summary><strong>BV Pipe Config</strong></summary>
+<summary><strong>BV Smart Pipe</strong></summary>
+
+A chain-growing pipe with stable slot identities and per-node projections.
+
+**What it does**
+- Opens its schema editor through the Configure button or context menu
+- Adds up to 100 local slots and inherits upstream slots
+- Allows each node to expose only the inputs and outputs needed at that point
+- Keeps branches independent and transports all values through the pipe connection
+- Passes inherited values across bypassed Smart Pipe nodes without applying their local writes
+- Treats a muted Smart Pipe as a temporary execution-branch stop without changing the saved workflow
+- Omits muted Merge sources for the current run; a Merge with no active sources stops only its dependent branch
+- Marks slots from a removed upstream producer as missing instead of shifting links
+- Blocks execution when a missing slot is still connected
+
+Slot types start as `*` and are persisted after inference from the first connection.
+
+**Configure local slots**
+
+![Smart Pipe slot configuration](examples/images/smart-pipe-slot-config.png)
+
+1. Add one or several local slot names.
+2. Connect each local input so its type can be inferred and persisted.
+3. Enable outputs only where a downstream node actually consumes the value.
+
+> **Experimental:** Wireless routing, especially across Subgraph boundaries, depends on a prompt-materialization adapter because ComfyUI does not yet expose an official pre-prompt extension hook. Keep physical Pipe links for compatibility-critical workflows until the Nodes 2.0, partial-execution and third-party wrapper matrix has been completed.
+
+</details>
+
+<details>
+<summary><strong>BV Smart Pipe Merge</strong></summary>
+
+Combines several Smart Pipe branches in an explicit, user-defined order.
+
+**What it does**
+- Mixes wired and wireless Smart Pipe sources
+- Adds wired sources through the temporary `Add Pipe Source` connector
+- Adds wireless sources through the configuration dialog
+- Prevents the same source from being selected more than once
+- Keeps different stable slot IDs separate even when their visible names match
+- Preserves a genuine branch write when a later source only inherited the shared base value
+- Lets the later source win when several branches genuinely changed the same stable slot ID
+- Exposes the merged Pipe Schema to subsequent Smart Pipe nodes
+- Rejects missing sources and cycles instead of silently producing incomplete data
+
+**Configure source order**
+
+![Smart Pipe Merge configuration](examples/images/smart-pipe-merge-config.png)
+
+Wireless and wired sources share the same ordered list. For colliding stable Slot IDs, the later genuine branch write wins.
+
+</details>
+
+<details>
+<summary><strong>BV Pipe Config [Deprecated]</strong></summary>
 
 Defines the slot layout (names) for a BV Pipe.
 
@@ -96,7 +203,7 @@ Defines the slot layout (names) for a BV Pipe.
 </details>
 
 <details>
-<summary><strong>BV Pipe</strong></summary>
+<summary><strong>BV Pipe [Deprecated]</strong></summary>
 
 A config-driven carrier node that forwards one pipe connection while exposing named slots.
 
@@ -139,7 +246,7 @@ When exposed, the heading is also rendered on the Subgraph node itself.
 
 > Heading inside Subgraph
 >
-> ![BV Subgraph Heading Subgraph](docs/screenshots/bv_subgraph_heading_subgraph.png)
+> ![BV Subgraph Heading Subgraph](docs/screenshots/bv_subgraph_heading_in_subgraph.png)
 
 > Heading rendered on Subgraph node
 >
@@ -242,6 +349,8 @@ A UI-only divider node that draws a horizontal separator line.
 **Output**
 - `ast` (`BV_AST`)
 - `cleaned_prompt` (plain text, no markup, no comments)
+
+Comment text is removed while its line break is preserved.
 
 **Screenshot**
 > Example output
@@ -362,9 +471,10 @@ Inline categories are only recognized if the category name matches this pattern:
 ### Closing inline categories (@@)
 ```text
 @@ closes one currently open inline category
-
-Extra @@ without an open category are treated as literal text and will appear in the output
 ```
+
+Every inline category must be closed. An unmatched `@@` or an unclosed inline
+category raises an error with its line and column.
 ### ❌ Invalid (too many closings)
 ```text
 @<clothing> long dress,@@@@
@@ -397,43 +507,37 @@ Extra @@ without an open category are treated as literal text and will appear in
 **Output**
 - `latent` (`LATENT`)
 - `latent_width` (`INT`)
-- `latent_hieght` (`INT`)
+- `latent_height` (`INT`)
 
 
 </details>
 
 <details>
-<summary><strong>BV Latent Random Aspect Ratio</strong></summary>
+<summary><strong>BV Empty Latent Random Ratio</strong></summary>
 
 **Purpose**
-- Generates or resizes a latent to a randomly selected aspect ratio based on a seed
-- Selection is deterministic via seed and configurable via enabled aspect-ratio toggles
-- Uses a 1:1 base resolution reference (e.g. 1024×1024) commonly assumed for model training
+- Creates a native empty latent at a deterministic aspect ratio
+- Preserves the approximate pixel area of a square resolution reference
+- Supports 512, 768, 1024, 1536, 2048, and a custom resolution
 
 **Input**
-- `latent` (LATENT, optional)
-    - If connected, the current latent resolution is used as the 1:1 base reference
 - `seed` (INT)
-- `enabled` (BOOLEAN)
-- `base_resolution_px` (INT)
-    - Edge length of a square 1:1 reference in pixels (e.g. 1024 = 1024×1024), used when no latent is connected
-- `use_1_1` (BOOLEAN) – Resolution 1×1
-- `use_3_2` (BOOLEAN) – Resolution 3×2
-- `use_2_3` (BOOLEAN) – Resolution 2×3
-- `use_4_3` (BOOLEAN) – Resolution 4×3
-- `use_3_4` (BOOLEAN) – Resolution 3×4
-- `use_16_9` (BOOLEAN) – Resolution 16×9
-- `use_9_16` (BOOLEAN) – Resolution 9×16
-- `use_21_9` (BOOLEAN) – Resolution 21×9
-- `use_9_21` (BOOLEAN) – Resolution 9×21
+- `resolution` (512, 768, 1024, 1536, 2048, or Custom)
+- `custom_resolution` (INT, used for Custom)
+- `alignment` (8, 16, 32, or 64; default 8)
+- Individual toggles for 1:1, 3:2, 2:3, 4:3, 3:4, 16:9, 9:16, 21:9, and 9:21
+- `ratios` (optional multiline STRING for additional normalized `W:H` ratios)
+- `batch_size` (INT)
 
 **Output**
 - `latent` (LATENT)
-- `latent_width` (INT)
-- `latent_height` (INT)
+- `width` (INT, pixels)
+- `height` (INT, pixels)
 - `picked_ratio` (STRING)
 
-</details
+</details>
+
+`BV Latent Random Aspect Ratio` remains available for existing workflows but is deprecated.
 
 ## Util Nodes
 
@@ -443,10 +547,10 @@ Extra @@ without an open category are treated as literal text and will appear in
 <summary><strong>BV Hex Color To Int</strong></summary>
 
 **Purpose**
-- Converts a HEX color code to an INT value
+- Converts a three- or six-digit HEX color code to an INT value
 
 **Input**
-- `prompt` (STRING)
+- `hex` (STRING, `#RGB`, `RGB`, `#RRGGBB`, or `RRGGBB`)
 
 **Output**
 - `color` (`INT`)
@@ -454,49 +558,44 @@ Extra @@ without an open category are treated as literal text and will appear in
 
 </details>
 
-## Beta Nodes
+## Control Nodes
 
 <details>
-<summary><strong>BV Control Center</strong> ⚠️ BETA</summary>
+<summary><strong>BV Control Center</strong></summary>
 
-Centralized runtime control for **mute / bypass** states of node groups.
+Centralized runtime control for explicit **activate / mute / bypass** states of node groups.
 
 **Key Features**
-- Group-based control
-- Subgraph-compatible
-- Dynamic UI reconfiguration
+- User-defined, case-sensitive Controls with stable IDs
+- Stable group assignments displayed with their full graph/subgraph path
+- Multiple synchronized Control Center nodes and subgraph exposure
+- Controls participate only while their toggle is `ACTIVE`; `INACTIVE` Controls do not apply assignments
+- Deterministic overlap resolution with `Activate > Mute > Bypass`
+- Conflicting active assignments are explained in the Rack and in a persistent Node status row
+- Optional Force Active behavior; otherwise each node's base mode is restored
+- Unresolved groups remain visible and block execution while their Control is active
+- Event-driven updates without polling or retry loops
 
-**Screenshot**
-> Configuration
->
-> ![BV Divider](docs/screenshots/bv_controllconfig_button.png)
+**Configure workflow states**
 
-> Selected group
->
-> ![BV Divider](docs/screenshots/bv_controllconfig_dialog1.png)
+![Control Center Rack configuration](examples/images/control-center-config.png)
 
-> Define status
->
-> ![BV Divider](docs/screenshots/bv_controllconfig_dialog2.png)
+1. Create a named Control such as `Generate only` or `Full pipeline`.
+2. Assign one or more graph or Subgraph groups.
+3. Choose `Activate`, `Mute`, or `Bypass` for each assignment.
+4. Save once; every synchronized Control Center node updates immediately.
 
->Columns are automatically expanded
->
->![BV Divider](docs/screenshots/bv_controllconfig_dialog3.png)
-
->After saving the configuration, the `BV Control Center` Node updates itself.
->
->![BV Divider](docs/screenshots/bv_controllconfig_dialog4.png)
->![BV Divider](docs/screenshots/bv_controllconfig_graph1.png)
-
->Here is an example if, for example, Only Preview is active
->
-> ![BV Divider](docs/screenshots/bv_controllconfig_graph2.png)
+![Control Center graph state](examples/images/control-center-workflow-states.png)
 
 </details>
 
 ---
 
-## Quick Start (BV Pipe)
+## Quick Start (BV Smart Pipe)
+
+For new workflows, add **BV Smart Pipe**, open **Configure Smart Pipe**, and add
+only the slots needed at that point in the chain. The following legacy setup is
+kept for existing workflows only.
 
 1. Add **BV Pipe Config** and enter slot names:
 
@@ -518,7 +617,8 @@ prompt
 
 ## Notes & Design Principles
 
-- Slot IDs are stable internally (`v_001…v_100`)
+- Smart Pipe slots use stable logical IDs; `v_001…` are only their persisted physical connector ordinals.
+- Legacy `BV Pipe` retains its fixed 100-slot contract solely for existing workflows.
 - Labels are user-defined and dynamic
 - UI nodes are rendered via JavaScript
 - All UI nodes support Subgraphs / Subflows
@@ -527,6 +627,9 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-08-14
+- v0.1.0 — Add BV Smart Pipe and native random-ratio empty latents; harden AST, Dynamic Combo, Subgraph UI, Control Rack, debug, rotation, and HEX nodes.
 
 ### 2026-01-29
 - v0.0.24 — Make subgraph UI widgets more rebuild-safe.

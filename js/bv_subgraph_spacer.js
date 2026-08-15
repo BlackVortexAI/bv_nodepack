@@ -21,10 +21,12 @@ function patchSpacer(node) {
     const hW = getWidget(node, "height");
     if (!node || !hW || hW.__bvSpacerPatched) return;
 
+    node.__bvPresentationWidget = hW;
+
     hW.__bvSpacerPatched = true;
     hW.__bvNode = node;
 
-    hW.type = "BV_SPACER";
+    hW.__bvPresentationType = "BV_SPACER";
     hW.options = hW.options || {};
     hW.options.serialize = true;
 

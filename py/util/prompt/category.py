@@ -42,6 +42,7 @@ def parse_prompt_to_ast(
 
     # Stack for nested spans (span nodes)
     span_stack: List[ASTNode] = []
+    span_locations: List[tuple[str, int, int]] = []
 
     def current_children() -> List[ASTNode]:
         return span_stack[-1]["children"] if span_stack else current_block["children"]
@@ -60,25 +61,37 @@ def parse_prompt_to_ast(
             return
         current_children().append(make_node("comment", v=s))
 
-    def start_span(cat: str) -> None:
+    def start_span(cat: str, line_number: int, column: int) -> None:
         span = make_node("span", cat=cat, children=[])
         current_children().append(span)
         span_stack.append(span)
+        span_locations.append((cat, line_number, column))
 
     def end_span() -> None:
         if span_stack:
             span_stack.pop()
+            span_locations.pop()
+
+    def split_line_ending(s: str) -> tuple[str, str]:
+        for ending in ("\r\n", "\n", "\r"):
+            if s.endswith(ending):
+                return s[:-len(ending)], ending
+        return s, ""
 
     # Process line-by-line to support block directives
-    for line in text.splitlines(keepends=True):
+    for line_number, line in enumerate(text.splitlines(keepends=True), start=1):
         # --- Block directive handling (standalone line starting with @@) ---
         if line.startswith("@@"):
             # Only treat as directive if the entire line is "@@<cat>\n" (or "@@\n")
             raw = line[2:]
             candidate = raw.strip("\r\n").strip()
             if candidate == "" or is_valid_cat(candidate):
-                # Close any open spans at a block boundary (fail-soft)
-                span_stack.clear()
+                if span_stack:
+                    cat, start_line, start_column = span_locations[-1]
+                    raise ValueError(
+                        f"Unclosed inline category '{cat}' opened at line {start_line}, "
+                        f"column {start_column} before block directive on line {line_number}."
+                    )
                 cat = candidate or "default"
                 current_block = make_node("block", cat=cat, children=[])
                 root["children"].append(current_block)
@@ -91,7 +104,9 @@ def parse_prompt_to_ast(
             # Inline or line comment detection (outside of special structures)
             # Treat everything from comment_prefix to end-of-line as a comment node.
             if line.startswith(comment_prefix, i):
-                emit_comment(line[i:])  # includes newline (keepends=True)
+                comment, ending = split_line_ending(line[i:])
+                emit_comment(comment)
+                emit_text(ending)
                 break
 
             # Inline span end: @@ (pop one span)
@@ -99,6 +114,11 @@ def parse_prompt_to_ast(
                 end_span()
                 i += 2
                 continue
+
+            if line.startswith("@@", i):
+                raise ValueError(
+                    f"Unexpected inline category closer '@@' at line {line_number}, column {i + 1}."
+                )
 
             # Inline span start: @<cat>
             if line.startswith("@<", i):
@@ -111,7 +131,7 @@ def parse_prompt_to_ast(
                 if j < len(line) and line[j] == ">":
                     cat = "".join(cat_chars).strip()
                     if is_valid_cat(cat):
-                        start_span(cat)
+                        start_span(cat, line_number, i + 1)
                         i = j + 1
                         # Swallow exactly one whitespace after the '>'
                         if i < len(line) and line[i] in (" ", "\t"):
@@ -122,6 +142,12 @@ def parse_prompt_to_ast(
             # Normal char
             emit_text(line[i])
             i += 1
+
+    if span_stack:
+        cat, line_number, column = span_locations[-1]
+        raise ValueError(
+            f"Unclosed inline category '{cat}' opened at line {line_number}, column {column}."
+        )
 
     return root
 

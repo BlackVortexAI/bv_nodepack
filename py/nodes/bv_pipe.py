@@ -1,6 +1,6 @@
 # bv_pipe.py
 from __future__ import annotations
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List
 
 PIPE = "BV_PIPE"
 
@@ -44,7 +44,7 @@ class BVPipeNode:
     RETURN_TYPES = (PIPE,) + (ANY,) * 100
     RETURN_NAMES = ("pipe",) + tuple([f"out_{i:03d}" for i in range(1, 101)])
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/pipe"
+    CATEGORY = "🌀 BV Node Pack/deprecated"
 
     def run(self, pipe: Dict[str, Any], **kwargs):
         pipe = pipe or {}
@@ -95,5 +95,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "BV Pipe": "🌀 BV Pipe",
+    "BV Pipe": "🌀 BV Pipe [Deprecated]",
 }

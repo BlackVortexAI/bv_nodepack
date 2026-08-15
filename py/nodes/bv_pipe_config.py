@@ -26,7 +26,7 @@ class BVPipeConfigNode:
     RETURN_TYPES = (PIPE,)
     RETURN_NAMES = ("pipe",)
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/pipe"
+    CATEGORY = "🌀 BV Node Pack/deprecated"
 
     def run(self, names: str):
         # store config in the pipe object
@@ -46,5 +46,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "BV Pipe Config": "🌀 BV Pipe Config",
+    "BV Pipe Config": "🌀 BV Pipe Config [Deprecated]",
 }

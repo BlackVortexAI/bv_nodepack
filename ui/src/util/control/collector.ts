@@ -12,6 +12,8 @@ export interface CollectedGroup {
     group: LGraphGroup;
     graph: LGraph;
     path: GraphPathEntry[];
+    id: string;
+    pathLabel: string;
 }
 
 export interface CollectedNode {
@@ -89,6 +91,22 @@ function traverseGraphs(
     }
 }
 
+function newGroupId(): string {
+    return globalThis.crypto?.randomUUID?.() ?? `bv-group-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function groupId(group: LGraphGroup, usedIds: Set<string>): string {
+    const target = group as any;
+    target.flags ??= {};
+    let id = typeof target.flags.bvGroupId === "string" ? target.flags.bvGroupId : "";
+    if (!id || usedIds.has(id)) {
+        do id = newGroupId(); while (usedIds.has(id));
+        target.flags.bvGroupId = id;
+    }
+    usedIds.add(id);
+    return id;
+}
+
 /**
  * Collect ALL groups in main graph + every subgraph (typed).
  * Pass either comfyApp or a graph.
@@ -98,9 +116,12 @@ export function collectAllGroups(input: ComfyApp | LGraph | unknown): CollectedG
     if (!root) return [];
 
     const results: CollectedGroup[] = [];
+    const usedIds = new Set<string>();
     traverseGraphs(root, (graph, path) => {
         for (const group of getGraphGroups(graph)) {
-            results.push({ group, graph, path });
+            const segments = path.map((entry) => String((entry.node as any).title || (entry.node as any).type || entry.node.id));
+            const pathLabel = [...segments, String(group.title || "Untitled Group")].join(" / ");
+            results.push({ group, graph, path, id: groupId(group, usedIds), pathLabel });
         }
     });
     return results;
@@ -129,7 +150,7 @@ export function collectNodesByType(
     return results;
 }
 
-function nodeMatchesType(node: LGraphNode, typeOrPredicate: string | NodePredicate): boolean {
+export function nodeMatchesType(node: LGraphNode, typeOrPredicate: string | NodePredicate): boolean {
     if (typeof typeOrPredicate === "function") return !!typeOrPredicate(node);
 
     const wanted = String(typeOrPredicate);

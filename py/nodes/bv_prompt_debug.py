@@ -14,7 +14,6 @@ class BVPromptASTDebugNode:
                 "pretty": ("BOOLEAN", {"default": True}),
                 "indent": ("INT", {"default": 2, "min": 0, "max": 8, "step": 1}),
                 "sort_keys": ("BOOLEAN", {"default": False}),
-                "debug_output": ("STRING", {"default": "", "multiline": True}),
             }
         }
 
@@ -24,7 +23,7 @@ class BVPromptASTDebugNode:
     FUNCTION = "run"
     CATEGORY = "🌀 BV Node Pack/prompting"
 
-    def run(self, ast, pretty=True, indent=2, sort_keys=False, debug_output=""):
+    def run(self, ast, pretty=True, indent=2, sort_keys=False):
         try:
             if pretty:
                 txt = json.dumps(ast, ensure_ascii=False, indent=int(indent), sort_keys=bool(sort_keys))
@@ -33,12 +32,11 @@ class BVPromptASTDebugNode:
         except Exception as e:
             txt = f"[BV AST Debug] Failed to serialize AST to JSON: {type(e).__name__}: {e}\n\nRaw:\n{repr(ast)}"
 
-        # WICHTIG: UI + result zurückgeben
         return {
             "ui": {
-                "ast_json": [txt],        # frei benennbar
+                "ast_json": [txt],
             },
-            "result": (txt,)             # das ist dein normaler Node-Output
+            "result": (txt,)
         }
 
 

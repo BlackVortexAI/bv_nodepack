@@ -21,12 +21,14 @@ function patchDivider(node) {
     const thickW = getWidget(node, "thickness");
     if (!node || !thickW) return;
 
+    node.__bvPresentationWidget = thickW;
+
     // Patch per widget instance; allow re-patching if rebuilt
     if (!thickW.__bvDividerPatched) {
         thickW.__bvDividerPatched = true;
         thickW.__bvNode = node;
 
-        thickW.type = "BV_DIVIDER";
+        thickW.__bvPresentationType = "BV_DIVIDER";
         thickW.options = thickW.options || {};
         thickW.options.serialize = true;
 

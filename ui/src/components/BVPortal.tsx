@@ -1,7 +1,5 @@
 import {FC, useEffect, useMemo} from "react";
 import * as React from 'react';
-import { getApp } from "../appHelper.js";
-import {collectAllGroups} from "../util/control/collector";
 import BVControl from "./control/BVControlComponent";
 
 interface IBVPortalProps {
@@ -10,10 +8,7 @@ interface IBVPortalProps {
     children: React.ReactNode;
 }
 
-const BvPortal: FC<IBVPortalProps> = ({open, onClose, children}) => {
-
-    const comfyApp = getApp();
-
+const BvPortal: FC<IBVPortalProps> = ({open, onClose}) => {
     const el = useMemo(() => document.createElement("div"), []);
 
     useEffect(() => {
@@ -38,44 +33,20 @@ const BvPortal: FC<IBVPortalProps> = ({open, onClose, children}) => {
 
     return (
         <div
+            className="bv-modal"
             role="dialog"
             aria-modal="true"
             onMouseDown={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}
 
-            style={{
-                position: "fixed",
-                inset: 0,
-                display: "grid",
-                placeItems: "center",
-                background: "rgba(0,0,0,0.45)",
-                zIndex: 2147483647,
-            }}
         >
             <div
-                className={"p-dialog"}
-                // style={{
-                //     minWidth: 320,
-                //     maxWidth: "min(720px, 92vw)",
-                //     maxHeight: "min(80vh, 720px)",
-                //     overflow: "auto",
-                //     borderRadius: 12,
-                //     // background: "white",
-                //     boxShadow: "0 12px 40px rgba(0,0,0,0.35)",
-                //     padding: 16,
-                // }}
+                className="bv-dialog"
                 onMouseDown={(e) => e.stopPropagation()}
             >
-
                 <BVControl onClose={() => onClose()} />
-
-
-                {/*{collectAllGroups(comfyApp).map((group) => (*/}
-                {/*    <div>{group.group.title}</div>*/}
-                {/*))}*/}
             </div>
-
         </div>
     );
 };

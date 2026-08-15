@@ -1,10 +1,7 @@
 import { app } from "../../scripts/app.js";
 
 /**
- * BV - Relabel aspect ratio toggle widgets for:
- *   "BV Latent Random Aspect Ratio"
- *
- * Keeps widget.name intact (use_1_1, use_3_2, ...) but changes widget.label to user-friendly text.
+ * Keeps aspect ratio widget names stable while presenting compact labels.
  */
 
 const LABEL_MAP = {
@@ -22,10 +19,7 @@ const LABEL_MAP = {
 function relabelAspectRatioWidgets(node) {
   if (!node || !node.widgets) return;
 
-  // Only for your node (internal name)
-  // NOTE: node.type is usually the internal type string.
-  // If this doesn't match in your build, log node.type once and adjust.
-  if (node.type !== "BV Latent Random Aspect Ratio") return;
+  if (node.type !== "BV Latent Random Aspect Ratio" && node.type !== "BV Empty Latent Random Ratio") return;
 
   for (const w of node.widgets) {
     if (!w || !w.name) continue;
@@ -51,6 +45,7 @@ app.registerExtension({
   },
 
   async beforeRegisterNodeDef(nodeType, nodeData) {
+    if (nodeData.name !== "BV Latent Random Aspect Ratio" && nodeData.name !== "BV Empty Latent Random Ratio") return;
     // Hook creation
     const origCreated = nodeType.prototype.onNodeCreated;
     nodeType.prototype.onNodeCreated = function () {

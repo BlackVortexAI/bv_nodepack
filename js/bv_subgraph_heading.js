@@ -24,13 +24,20 @@ function patchHeading(node) {
 
     if (!node || !valueW) return;
 
+    // ComfyUI removes promoted/exposed widgets from node.widgets. Keep the
+    // presentation object reachable so a Subgraph host can still project it.
+    node.__bvPresentationWidget = valueW;
+
     // Allow re-patching if widgets were rebuilt:
     // Only mark patched on the widget instance itself
     if (!valueW.__bvHeadingPatched) {
         valueW.__bvHeadingPatched = true;
         valueW.__bvNode = node;
 
-        valueW.type = "BV_HEADING";
+        // Keep the native text widget type. Subgraph proxy widgets are rebuilt
+        // from this type on workflow load; replacing it with BV_HEADING makes
+        // ComfyUI create a non-editable/empty custom proxy.
+        valueW.__bvPresentationType = "BV_HEADING";
         valueW.options = valueW.options || {};
         valueW.options.serialize = true;
 

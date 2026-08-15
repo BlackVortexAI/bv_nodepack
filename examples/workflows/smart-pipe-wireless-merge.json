@@ -1,0 +1,933 @@
+{
+  "id": "4e132e1a-a3fd-4a4c-860b-701948cc03cc",
+  "revision": 0,
+  "last_node_id": 209,
+  "last_link_id": 191,
+  "nodes": [
+    {
+      "id": 204,
+      "type": "PrimitiveString",
+      "pos": [
+        20,
+        30
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "value",
+          "name": "value",
+          "type": "STRING",
+          "widget": {
+            "name": "value"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            185
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.1",
+        "Node name for S&R": "PrimitiveString"
+      },
+      "widgets_values": [
+        "A lighthouse above a stormy sea"
+      ]
+    },
+    {
+      "id": 199,
+      "type": "BV Smart Pipe",
+      "pos": [
+        320,
+        20
+      ],
+      "size": [
+        400,
+        134
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "shape": 7,
+          "type": "BV_SMART_PIPE",
+          "link": null
+        },
+        {
+          "label": "prompt",
+          "localized_name": "prompt",
+          "name": "v_001",
+          "shape": 7,
+          "type": "STRING",
+          "link": 185
+        },
+        {
+          "label": "style",
+          "localized_name": "style",
+          "name": "v_002",
+          "shape": 7,
+          "type": "STRING",
+          "link": 188
+        },
+        {
+          "label": "＋ Add Slot",
+          "localized_name": "＋ Add Slot",
+          "name": "bv_add_slot",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "type": "BV_SMART_PIPE",
+          "links": null
+        }
+      ],
+      "title": "🌀 BV Smart Pipe Tree 1",
+      "properties": {
+        "bvSmartPipe": {
+          "version": 1,
+          "localSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false
+            }
+          ],
+          "inheritedSlots": [],
+          "nextOrdinal": 3,
+          "routing": {
+            "version": 1,
+            "nodeId": "b92f4cea-21ae-47d9-9d88-1f82febf6b6a",
+            "name": "🌀 BV Smart Pipe Tree 1",
+            "mode": "root",
+            "predecessorId": null
+          },
+          "resolvedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false,
+              "missing": false,
+              "dormant": false
+            }
+          ]
+        },
+        "cnr_id": "bv_nodepack",
+        "ver": "f677a9d807da87226bbd7521f7c9f414b9a0d543",
+        "Node name for S&R": "BV Smart Pipe"
+      },
+      "widgets_values": [
+        "[{\"id\":\"8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef\",\"name\":\"prompt\",\"ordinal\":1,\"type\":\"STRING\",\"showInput\":true,\"showOutput\":false,\"missing\":false,\"dormant\":false,\"connected\":true},{\"id\":\"5c881b13-e3ab-4caf-9a09-92659fba6419\",\"name\":\"style\",\"ordinal\":2,\"type\":\"STRING\",\"showInput\":true,\"showOutput\":false,\"missing\":false,\"dormant\":false,\"connected\":true}]",
+        "{\"version\":1,\"nodeId\":\"b92f4cea-21ae-47d9-9d88-1f82febf6b6a\",\"name\":\"🌀 BV Smart Pipe Tree 1\",\"mode\":\"root\",\"predecessorId\":null}",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 198,
+      "type": "BV Smart Pipe",
+      "pos": [
+        320,
+        300
+      ],
+      "size": [
+        400,
+        134
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "shape": 7,
+          "type": "BV_SMART_PIPE",
+          "link": null
+        },
+        {
+          "label": "negative_prompt",
+          "localized_name": "negative_prompt",
+          "name": "v_001",
+          "shape": 7,
+          "type": "STRING",
+          "link": 187
+        },
+        {
+          "label": "＋ Add Slot",
+          "localized_name": "＋ Add Slot",
+          "name": "bv_add_slot",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "type": "BV_SMART_PIPE",
+          "links": null
+        }
+      ],
+      "title": "🌀 BV Smart Pipe Tree 2",
+      "properties": {
+        "bvSmartPipe": {
+          "version": 1,
+          "localSlots": [
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false
+            }
+          ],
+          "inheritedSlots": [],
+          "nextOrdinal": 2,
+          "routing": {
+            "version": 1,
+            "nodeId": "33bcd3e4-ef21-495c-84c5-71b0429eb3eb",
+            "name": "🌀 BV Smart Pipe Tree 2",
+            "mode": "root",
+            "predecessorId": null
+          },
+          "resolvedSlots": [
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": true,
+              "showOutput": false,
+              "missing": false,
+              "dormant": false
+            }
+          ]
+        },
+        "cnr_id": "bv_nodepack",
+        "ver": "f677a9d807da87226bbd7521f7c9f414b9a0d543",
+        "Node name for S&R": "BV Smart Pipe"
+      },
+      "widgets_values": [
+        "[{\"id\":\"24bc820c-6056-4690-b39d-b4eb7c4159e5\",\"name\":\"negative_prompt\",\"ordinal\":1,\"type\":\"STRING\",\"showInput\":true,\"showOutput\":false,\"missing\":false,\"dormant\":false,\"connected\":true}]",
+        "{\"version\":1,\"nodeId\":\"33bcd3e4-ef21-495c-84c5-71b0429eb3eb\",\"name\":\"🌀 BV Smart Pipe Tree 2\",\"mode\":\"root\",\"predecessorId\":null}",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 201,
+      "type": "BV Smart Pipe",
+      "pos": [
+        1260,
+        150
+      ],
+      "size": [
+        400,
+        112
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "shape": 7,
+          "type": "BV_SMART_PIPE",
+          "link": null
+        },
+        {
+          "label": "＋ Add Slot",
+          "localized_name": "＋ Add Slot",
+          "name": "bv_add_slot",
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "type": "BV_SMART_PIPE",
+          "links": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "links": [
+            189
+          ]
+        },
+        {
+          "localized_name": "style",
+          "name": "style",
+          "type": "STRING",
+          "links": [
+            190
+          ]
+        },
+        {
+          "localized_name": "negative_prompt",
+          "name": "negative_prompt",
+          "type": "STRING",
+          "links": [
+            191
+          ]
+        }
+      ],
+      "title": "🌀 BV Smart Pipe After Merge",
+      "properties": {
+        "bvSmartPipe": {
+          "version": 1,
+          "localSlots": [],
+          "inheritedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            }
+          ],
+          "nextOrdinal": 1,
+          "routing": {
+            "version": 1,
+            "nodeId": "9197f74f-ccda-4abd-a2bd-36f10a46dc37",
+            "name": "🌀 BV Smart Pipe After Merge",
+            "mode": "root",
+            "predecessorId": null
+          },
+          "resolvedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            }
+          ]
+        },
+        "cnr_id": "bv_nodepack",
+        "ver": "f677a9d807da87226bbd7521f7c9f414b9a0d543",
+        "Node name for S&R": "BV Smart Pipe"
+      },
+      "widgets_values": [
+        "[{\"id\":\"8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef\",\"name\":\"prompt\",\"ordinal\":1,\"type\":\"STRING\",\"showInput\":false,\"showOutput\":true,\"missing\":false,\"dormant\":false,\"connected\":true},{\"id\":\"5c881b13-e3ab-4caf-9a09-92659fba6419\",\"name\":\"style\",\"ordinal\":2,\"type\":\"STRING\",\"showInput\":false,\"showOutput\":true,\"missing\":false,\"dormant\":false,\"connected\":true},{\"id\":\"24bc820c-6056-4690-b39d-b4eb7c4159e5\",\"name\":\"negative_prompt\",\"ordinal\":1,\"type\":\"STRING\",\"showInput\":false,\"showOutput\":true,\"missing\":false,\"dormant\":false,\"connected\":true}]",
+        "{\"version\":1,\"nodeId\":\"9197f74f-ccda-4abd-a2bd-36f10a46dc37\",\"name\":\"🌀 BV Smart Pipe After Merge\",\"mode\":\"root\",\"predecessorId\":null}",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 200,
+      "type": "BV Smart Pipe Merge",
+      "pos": [
+        820,
+        170
+      ],
+      "size": [
+        400,
+        88
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "bv_smart_pipe_merge_json",
+          "name": "bv_smart_pipe_merge_json",
+          "type": "STRING",
+          "widget": {
+            "name": "bv_smart_pipe_merge_json"
+          },
+          "link": null
+        },
+        {
+          "label": "+ Add Pipe Source",
+          "name": "bv_add_pipe_source",
+          "type": "BV_SMART_PIPE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "pipe",
+          "name": "pipe",
+          "type": "BV_SMART_PIPE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "bvSmartPipeMerge": {
+          "version": 1,
+          "nodeId": "3fd0bf23-544a-4898-b436-d86f881e251b",
+          "name": "🌀 BV Smart Pipe Merge",
+          "sources": [
+            {
+              "key": "pipe_001",
+              "mode": "wireless",
+              "address": "f049fca5-f1b5-4051-a0f6-efbc1165047d/b92f4cea-21ae-47d9-9d88-1f82febf6b6a",
+              "label": "🌀 BV Smart Pipe"
+            },
+            {
+              "key": "pipe_002",
+              "mode": "wireless",
+              "address": "f049fca5-f1b5-4051-a0f6-efbc1165047d/33bcd3e4-ef21-495c-84c5-71b0429eb3eb",
+              "label": "🌀 BV Smart Pipe_1"
+            }
+          ],
+          "nextOrdinal": 9
+        },
+        "cnr_id": "bv_nodepack",
+        "ver": "f677a9d807da87226bbd7521f7c9f414b9a0d543",
+        "Node name for S&R": "BV Smart Pipe Merge",
+        "bvSmartPipe": {
+          "version": 1,
+          "localSlots": [],
+          "inheritedSlots": [],
+          "nextOrdinal": 1,
+          "routing": {
+            "version": 1,
+            "nodeId": "6ce82530-0e9b-4e0d-94bd-9b3c7fcc6477",
+            "name": "🌀 BV Smart Pipe Merge",
+            "mode": "root",
+            "predecessorId": null
+          }
+        }
+      },
+      "widgets_values": [
+        "[{\"key\":\"pipe_001\",\"mode\":\"wireless\",\"address\":\"f049fca5-f1b5-4051-a0f6-efbc1165047d/b92f4cea-21ae-47d9-9d88-1f82febf6b6a\",\"label\":\"🌀 BV Smart Pipe\"},{\"key\":\"pipe_002\",\"mode\":\"wireless\",\"address\":\"f049fca5-f1b5-4051-a0f6-efbc1165047d/33bcd3e4-ef21-495c-84c5-71b0429eb3eb\",\"label\":\"🌀 BV Smart Pipe_1\"}]",
+        null
+      ]
+    },
+    {
+      "id": 205,
+      "type": "PrimitiveString",
+      "pos": [
+        20,
+        310
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "value",
+          "name": "value",
+          "type": "STRING",
+          "widget": {
+            "name": "value"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            187
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.1",
+        "Node name for S&R": "PrimitiveString"
+      },
+      "widgets_values": [
+        "text, watermark"
+      ]
+    },
+    {
+      "id": 206,
+      "type": "PrimitiveString",
+      "pos": [
+        20,
+        150
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "value",
+          "name": "value",
+          "type": "STRING",
+          "widget": {
+            "name": "value"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            188
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.33.1",
+        "Node name for S&R": "PrimitiveString"
+      },
+      "widgets_values": [
+        "cinematic"
+      ]
+    },
+    {
+      "id": 207,
+      "type": "ShowText|pysssss",
+      "pos": [
+        1740,
+        40
+      ],
+      "size": [
+        260,
+        90
+      ],
+      "flags": {},
+      "order": 207,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "link": 189
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-custom-scripts",
+        "ver": "1.2.5",
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "A lighthouse above a stormy sea"
+      ]
+    },
+    {
+      "id": 208,
+      "type": "ShowText|pysssss",
+      "pos": [
+        1740,
+        170
+      ],
+      "size": [
+        260,
+        90
+      ],
+      "flags": {},
+      "order": 208,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "link": 190
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-custom-scripts",
+        "ver": "1.2.5",
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "cinematic"
+      ]
+    },
+    {
+      "id": 209,
+      "type": "ShowText|pysssss",
+      "pos": [
+        1740,
+        300
+      ],
+      "size": [
+        260,
+        90
+      ],
+      "flags": {},
+      "order": 209,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "link": 191
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "STRING",
+          "name": "STRING",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-custom-scripts",
+        "ver": "1.2.5",
+        "Node name for S&R": "ShowText|pysssss"
+      },
+      "widgets_values": [
+        "text, watermark"
+      ]
+    }
+  ],
+  "links": [
+    [
+      185,
+      204,
+      0,
+      199,
+      1,
+      "STRING"
+    ],
+    [
+      187,
+      205,
+      0,
+      198,
+      1,
+      "STRING"
+    ],
+    [
+      188,
+      206,
+      0,
+      199,
+      2,
+      "STRING"
+    ],
+    [
+      189,
+      201,
+      1,
+      207,
+      0,
+      "STRING"
+    ],
+    [
+      190,
+      201,
+      2,
+      208,
+      0,
+      "STRING"
+    ],
+    [
+      191,
+      201,
+      3,
+      209,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "bvSmartPipeRootId": "f049fca5-f1b5-4051-a0f6-efbc1165047d",
+    "bvSmartPipeRoutes": {
+      "f049fca5-f1b5-4051-a0f6-efbc1165047d/3fd0bf23-544a-4898-b436-d86f881e251b": {
+        "version": 1,
+        "kind": "merge",
+        "sources": [
+          {
+            "key": "pipe_001",
+            "mode": "wireless",
+            "address": "f049fca5-f1b5-4051-a0f6-efbc1165047d/b92f4cea-21ae-47d9-9d88-1f82febf6b6a",
+            "label": "🌀 BV Smart Pipe"
+          },
+          {
+            "key": "pipe_002",
+            "mode": "wireless",
+            "address": "f049fca5-f1b5-4051-a0f6-efbc1165047d/33bcd3e4-ef21-495c-84c5-71b0429eb3eb",
+            "label": "🌀 BV Smart Pipe_1"
+          }
+        ]
+      },
+      "f049fca5-f1b5-4051-a0f6-efbc1165047d/9197f74f-ccda-4abd-a2bd-36f10a46dc37": {
+        "version": 1,
+        "predecessorAddress": "f049fca5-f1b5-4051-a0f6-efbc1165047d/3fd0bf23-544a-4898-b436-d86f881e251b",
+        "projection": {
+          "version": 1,
+          "inheritedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            }
+          ],
+          "resolvedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "5c881b13-e3ab-4caf-9a09-92659fba6419",
+              "name": "style",
+              "ordinal": 2,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            },
+            {
+              "id": "24bc820c-6056-4690-b39d-b4eb7c4159e5",
+              "name": "negative_prompt",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": true,
+              "missing": false,
+              "dormant": false
+            }
+          ]
+        }
+      },
+      "f049fca5-f1b5-4051-a0f6-efbc1165047d/aa5e59bb-8e36-47a0-835f-4680ea920f55": {
+        "version": 1,
+        "predecessorAddress": "f049fca5-f1b5-4051-a0f6-efbc1165047d/3fd0bf23-544a-4898-b436-d86f881e251b",
+        "projection": {
+          "version": 1,
+          "inheritedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "string",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": false,
+              "missing": false,
+              "dormant": false
+            }
+          ],
+          "resolvedSlots": [
+            {
+              "id": "8ae4a8de-7caa-428b-8ee6-9e83bdefc3ef",
+              "name": "string",
+              "ordinal": 1,
+              "type": "STRING",
+              "showInput": false,
+              "showOutput": false,
+              "missing": false,
+              "dormant": false
+            }
+          ]
+        }
+      }
+    },
+    "bv_settings": {
+      "controlConfig": {
+        "version": 2,
+        "forceActive": true,
+        "controls": [
+          {
+            "id": "dc451bb5-f2fd-493d-9b23-60cccc096895",
+            "name": "Generate only",
+            "enabled": true,
+            "assignments": [
+              {
+                "groupId": "0b5a1942-dce0-43c2-8602-67334deea095",
+                "groupPath": "Upscale",
+                "groupTitle": "Upscale",
+                "action": "bypass",
+                "unresolved": false
+              }
+            ]
+          },
+          {
+            "id": "1717ed65-1353-4c24-8153-178819e8b83a",
+            "name": "Upscale only",
+            "enabled": true,
+            "assignments": [
+              {
+                "groupId": "ab2f73e5-a1b5-49c9-b876-fd3e27613861",
+                "groupPath": "Generate",
+                "groupTitle": "Generate",
+                "action": "activate",
+                "unresolved": false
+              },
+              {
+                "groupId": "0b5a1942-dce0-43c2-8602-67334deea095",
+                "groupPath": "Upscale",
+                "groupTitle": "Upscale",
+                "action": "mute",
+                "unresolved": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "ds": {
+      "scale": 0.72,
+      "offset": [
+        100,
+        250
+      ]
+    }
+  },
+  "version": 0.4
+}

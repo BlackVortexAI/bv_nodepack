@@ -19,7 +19,7 @@ class BVSubgraphHeading:
     FUNCTION = "run"
     CATEGORY = "🌀 BV Node Pack/subgraph"
 
-    def run(self, value):
+    def run(self, value, font_size, show_divider):
         return (value,)
 
 
