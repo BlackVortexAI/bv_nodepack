@@ -93,6 +93,7 @@
 .geometry-layers { padding: 0 5px 6px 20px; }
 .geometry-row { display: grid; grid-template-columns: 20px minmax(0,1fr) 24px 24px 20px; align-items: center; gap: 3px; padding: 4px; border-radius: 4px; cursor: pointer; color: var(--bv-muted-text-color); }
 .geometry-row.selected { color: var(--bv-text-color); background: #ffffff12; outline: 1px solid var(--bv-primary-color); }
+.geometry-row.selected:not(.primary-selection) { outline-color: color-mix(in srgb, var(--bv-primary-color) 55%, transparent); }
 .geometry-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bv-regional-work { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #0f1114; }
 .artboard-viewport { position: absolute; inset: 0; overflow: hidden; touch-action: none; user-select: none; }
@@ -212,6 +213,12 @@
 .option-hint { padding: 10px; border: 1px dashed #ffffff22; border-radius: 5px; color: var(--bv-muted-text-color); }
 .inspector details textarea { min-height: 90px; }
 .stroke-width-meta { color: var(--bv-muted-text-color); font-variant-numeric: tabular-nums; }
+.region-color-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 8px; padding: 8px; border: 1px solid #ffffff18; border-radius: 6px; }
+.region-color-control label { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 58px; align-items: center; }
+.region-color-control input[type="color"] { width: 58px; height: 30px; padding: 2px; cursor: pointer; }
+.region-color-control code { color: var(--bv-muted-text-color); font-size: 12px; }
+.region-color-control button { justify-self: end; }
+.region-color-control small { grid-column: 1 / -1; color: var(--bv-muted-text-color); }
 
 /* Compact application menu; ComfyUI's global button rules otherwise enlarge it. */
 .bv-regional-shell header { min-height: 38px; padding: 5px 8px; gap: 7px; }

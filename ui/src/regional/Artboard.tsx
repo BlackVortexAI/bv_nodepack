@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bounds, Handle } from "./geometry";
-import { Geometry, geometryAuthoring, geometryLayerId, geometryLayers, Point, RegionalDocument, Region } from "./model";
+import { Geometry, geometryAuthoring, geometryLayerId, geometryMaskGroups, Point, RegionalDocument, Region } from "./model";
 import { regionsInPaintOrder } from "./interaction";
 import ToolPalette, { BrushSettings, Tool } from "./ToolPalette";
 import type { ArtboardView } from "./editorState";
@@ -35,6 +35,7 @@ const HANDLES: Array<{ id: Handle; x: number; y: number }> = [{ id: "nw", x: 0, 
 function MaskShape({ geometry, canvas }: { geometry: Geometry; canvas: RegionalDocument["canvas"] }) {
     const color = geometry.operation === "add" ? "white" : "black";
     if (geometry.type === "rect") return <rect x={geometry.x * canvas.width} y={geometry.y * canvas.height} width={geometry.width * canvas.width} height={geometry.height * canvas.height} fill={color}/>;
+    if (geometry.type === "raster_mask") { const id = `raster-${geometry.id}`; return <><defs><mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><image href={geometry.data_url} x={geometry.x * canvas.width} y={geometry.y * canvas.height} width={geometry.width * canvas.width} height={geometry.height * canvas.height} preserveAspectRatio="none"/></mask></defs><rect width={canvas.width} height={canvas.height} fill={color} mask={`url(#${id})`}/></>; }
     const cap = geometry.shape === "square" ? "square" : "round", size = geometry.size * Math.min(canvas.width, canvas.height), blurId = `bv-brush-soft-${geometry.id}`;
     const softness = (1 - geometry.hardness) * size / 6;
     const softFilter = softness > .05 ? `url(#${blurId})` : undefined;
@@ -52,8 +53,7 @@ function MaskShape({ geometry, canvas }: { geometry: Geometry; canvas: RegionalD
 }
 
 function RegionMask({ region, geometries, canvas, opacity }: { region: Region; geometries: Geometry[]; canvas: RegionalDocument["canvas"]; opacity: number }) {
-    const projected = { ...region, geometry: geometries };
-    return <g opacity={opacity}>{geometryLayers(projected).filter(layer => layer.enabled && layer.authoring.visible).map(layer => {
+    return <g opacity={opacity}>{geometryMaskGroups(geometries).filter(layer => layer.enabled && layer.geometries.some((geometry, index) => geometryAuthoring(geometry, index).visible)).map(layer => {
         const id = `bv-mask-${region.id}-${layer.id}`;
         return <g key={layer.id}><defs><mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><rect width={canvas.width} height={canvas.height} fill="black"/>{layer.geometries.filter((geometry, index) => geometry.enabled !== false && geometryAuthoring(geometry, index).visible).map(geometry => <MaskShape key={geometry.id} geometry={geometry} canvas={canvas}/>)}</mask></defs><rect width={canvas.width} height={canvas.height} fill={region.authoring.color} mask={`url(#${id})`}/></g>;
     })}</g>;

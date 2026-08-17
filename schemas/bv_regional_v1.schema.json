@@ -181,6 +181,9 @@
               },
               {
                 "$ref": "#/$defs/brushStroke"
+              },
+              {
+                "$ref": "#/$defs/rasterMask"
               }
             ]
           }
@@ -257,6 +260,9 @@
             "layer_id": {
               "$ref": "#/$defs/id"
             },
+            "mask_group_id": {
+              "$ref": "#/$defs/id"
+            },
             "enabled": {
               "type": "boolean"
             },
@@ -309,6 +315,9 @@
             "layer_id": {
               "$ref": "#/$defs/id"
             },
+            "mask_group_id": {
+              "$ref": "#/$defs/id"
+            },
             "enabled": {
               "type": "boolean"
             },
@@ -338,6 +347,32 @@
                 "$ref": "#/$defs/brushPoint"
               }
             }
+          }
+        }
+      ]
+    },
+    "rasterMask": {
+      "allOf": [
+        { "$ref": "#/$defs/geometryBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "operation", "x", "y", "width", "height", "pixel_width", "pixel_height", "data_url"],
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "type": { "const": "raster_mask" },
+            "operation": { "enum": ["add", "subtract"] },
+            "layer_id": { "$ref": "#/$defs/id" },
+            "mask_group_id": { "$ref": "#/$defs/id" },
+            "enabled": { "type": "boolean" },
+            "authoring": { "$ref": "#/$defs/geometryAuthoring" },
+            "x": { "$ref": "#/$defs/unitInterval" },
+            "y": { "$ref": "#/$defs/unitInterval" },
+            "width": { "$ref": "#/$defs/positiveUnitInterval" },
+            "height": { "$ref": "#/$defs/positiveUnitInterval" },
+            "pixel_width": { "type": "integer", "minimum": 1, "maximum": 65536 },
+            "pixel_height": { "type": "integer", "minimum": 1, "maximum": 65536 },
+            "data_url": { "type": "string", "pattern": "^data:image/png;base64,[A-Za-z0-9+/]+=*$", "maxLength": 67108864 }
           }
         }
       ]

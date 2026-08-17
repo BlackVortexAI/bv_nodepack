@@ -8,13 +8,15 @@ import QuickPromptEditor from "./regional/QuickPromptEditor";
 import { emptyDocument, parseDocument } from "./regional/model";
 import { normalizeRegionId, regionChoices } from "./regional/regionSelector";
 import { documentTargetChoices, resolveDocumentTarget } from "./regional/documentTargets";
-import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled } from "./completion/settings";
+import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionPlacementPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_PLACEMENT_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled, setCompletionPlacement } from "./completion/settings";
 import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
 import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdapter";
+import { watchActiveWorkflow } from "./regional/workflowLifecycle";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
 bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
+bindCompletionPlacementPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_PLACEMENT_SETTING_ID, value));
 import "./components/control/bv_control_center";
 
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
@@ -166,6 +168,14 @@ function BVRoot() {
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
 
     useEffect(() => {
+        if (!regionalOpen && !quickEditOpen) return;
+        return watchActiveWorkflow(comfyApp, comfyApi, () => {
+            setRegionalOpen(false);
+            setQuickEditOpen(false);
+        });
+    }, [quickEditOpen, regionalOpen]);
+
+    useEffect(() => {
         const open = () => setPortalOpen(true);
         window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
         return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
@@ -262,6 +272,15 @@ comfyApp.registerExtension({
         category: ["BV Node Pack", "Prompting", "Enable autocomplete"],
         tooltip: "Enable BV-owned prompt completion. Disable this when another autocomplete extension should control prompt fields.",
         onChange: (value: boolean) => setCompletionEnabled(Boolean(value)),
+    }, {
+        id: COMPLETION_PLACEMENT_SETTING_ID as any,
+        name: "Autocomplete Popup Position",
+        type: "combo",
+        defaultValue: "caret",
+        options: [{ text: "At Caret", value: "caret" }, { text: "Below Text Field", value: "field" }],
+        category: ["BV Node Pack", "Prompting", "Popup position"],
+        tooltip: "Open suggestions at the active caret or below the complete text field.",
+        onChange: (value: string) => setCompletionPlacement(value),
     }, {
         id: COMPLETION_DATASETS_SETTING_ID as any,
         name: "Completion Datasets",

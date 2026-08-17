@@ -1,8 +1,12 @@
+import base64
 import copy
+import io
 import json
 from pathlib import Path
 import sys
 import unittest
+
+from PIL import Image
 
 
 ROOT = Path(__file__).parents[1]
@@ -20,6 +24,13 @@ from util.regional.document import (  # noqa: E402
 def fixture():
     with (ROOT / "tests" / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def raster_data_url():
+    image = Image.new("RGBA", (2, 1), (255, 255, 255, 255))
+    payload = io.BytesIO()
+    image.save(payload, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode("ascii")
 
 
 class RegionalDocumentTests(unittest.TestCase):
@@ -79,6 +90,26 @@ class RegionalDocumentTests(unittest.TestCase):
         shapes[1]["layer_id"] = layer_id
         parsed = parse_document(document)
         self.assertEqual(parsed["regions"][0]["geometry"][0]["layer_id"], parsed["regions"][0]["geometry"][1]["layer_id"])
+
+    def test_raster_mask_contract_is_validated(self):
+        document = fixture()
+        shape = {
+            "id": "20000000-0000-4000-8000-000000000095",
+            "type": "raster_mask",
+            "operation": "add",
+            "x": 0.1,
+            "y": 0.2,
+            "width": 0.4,
+            "height": 0.3,
+            "pixel_width": 2,
+            "pixel_height": 1,
+            "data_url": raster_data_url(),
+        }
+        document["regions"][0]["geometry"] = [shape]
+        self.assertEqual(parse_document(document)["regions"][0]["geometry"][0]["type"], "raster_mask")
+        shape["data_url"] = "data:image/png;base64,bm90IGEgcG5n"
+        with self.assertRaisesRegex(RegionalValidationError, "PNG data"):
+            parse_document(document)
 
 
 if __name__ == "__main__":

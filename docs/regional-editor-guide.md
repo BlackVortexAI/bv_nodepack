@@ -1,5 +1,7 @@
 # BV Regional Editor Guide
 
+![BV Regional Editor with overlapping rectangle and brush regions](assets/regional/regional-editor-title.png)
+
 The BV Regional Editor authors a model-neutral `BV_REGIONAL` document. Geometry,
 prompts and authoring metadata are stored once; model-specific compiler nodes
 decide how much of that contract a backend can execute.
@@ -26,6 +28,7 @@ guides the golden light arc.
 | --- | --- | --- |
 | Native/Krea-style | `BV Regional Native Conditioning` | Standard ComfyUI masked conditioning; no model attention patch |
 | Anima | `BV Regional Anima Conditioning` | Built-in Anima attention patch; standard KSampler |
+| Anima LLLite layout | `BV Regional Color Control Image` or `BV Regional Anima LLLite` | Solid color control image; optional native ComfyUI model-patch apply |
 | External Anima fallback | `BV Regional Anima Adapter` | Compiles for the optional Sen-sou node pack |
 
 ## Editor layout
@@ -71,6 +74,12 @@ Floating mode remains at viewport scale while the graph is zoomed or panned.
 - Brush layers support round/square tips, size, hardness, opacity and optional stylus pressure.
 - Subtractive brush strokes remove from the selected brush layer; they do not create white masks.
 - Regions and layers can be renamed, reordered, locked, hidden, disabled, duplicated or deleted.
+- Ctrl-click toggles individual layer selection; Shift-click selects a contiguous layer range.
+- **Layers > Merge Selected Layers** (`Ctrl E`) combines selected Rectangle and Brush layers inside one region without changing their rendered Add/Subtract result.
+- Merged compound layers retain independent internal mask groups, so an existing subtract operation never starts erasing geometry that belonged to another source layer.
+- **Layers > Split Compound Layer** (`Ctrl Shift E`) restores those retained mask groups as independently editable layers without changing the rendered mask.
+- A region receives an automatic display color. **Region > Display Color** can override it, and **Reset to Automatic** restores the palette color. This authoring color never changes mask output or sampling.
+- **Layers > Split Disconnected Areas** rasterizes the selected layer at the document canvas resolution and turns every disconnected visible island into an independent raster-mask layer. This is intentionally destructive for vector editing; Undo restores the original Rectangle/Brush operations.
 - Regions may overlap. Version 1 executes the overlap mode `joint`.
 - Canvas width and height control the authoring aspect ratio even when no background exists.
 
@@ -167,6 +176,9 @@ canonical underscore form remains available as metadata.
 Autocomplete is optional. Disable it under **Settings → BV Node Pack → Prompting**
 or from **Edit → Prompt Autocomplete** when another extension should own prompt fields.
 Several CSV/TSV datasets may be enabled and ordered; the topmost source wins duplicate tags.
+Suggestions open at the active caret by default. Change **Autocomplete Popup Position**
+to **Below Text Field** in the same settings section, or use **Edit → Popup Position**
+inside the Regional Editor, to restore field-aligned placement.
 
 <details>
 <summary><strong>Completion surfaces</strong></summary>
@@ -215,6 +227,24 @@ Import either the metadata-bearing
 [`workflow PNG`](../examples/images/anima-android-dance-regional-showcase.png)
 or the editor-only
 [`regional document`](examples/anima-android-dance-regional-showcase.bv-regional.json).
+
+### Experimental LLLite composition
+
+`BV Regional Color Control Image` deterministically converts every enabled region
+to one solid control color on a white background. Display colors are intentionally
+ignored, feathering does not create mixed colors, and the lower numeric priority
+wins an overlap. Its `legend_json` is intended for inspection and downstream tools.
+
+`BV Regional Anima LLLite` additionally loads a user-installed `MODEL_PATCH` from
+`ComfyUI/models/model_patches/` and calls ComfyUI core's Anima LLLite runtime. The
+regional weights are not shipped or downloaded by BV; obtain them from
+[Sen-sou's model repository](https://huggingface.co/Sen-sou/Anima-LLLite-Regional-Controlnet).
+The adapter supplies layout guidance, not prompt/color binding. Its combination
+with the BV Anima attention backend has been validated with a controlled
+active/bypass render and pixel-checked control image, but remains experimental
+because it composes two model-patching mechanisms. See the dedicated
+[`Anima LLLite regional-control guide`](anima-lllite-regional-control.md) for the
+patch order, verified settings, A/B images, limitations and licensing boundary.
 
 ## Current limits
 

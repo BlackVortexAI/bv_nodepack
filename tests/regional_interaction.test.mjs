@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { brushAddLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
+import { mergeSelectedLayers, selectLayers, splitCompoundLayer } from "../ui/src/regional/layerOperations.ts";
+import { connectedAreas } from "../ui/src/regional/connectedComponents.ts";
 
 test("select ignores pointer jitter instead of mutating a compound brush mask", () => {
     assert.equal(shouldStartSelectionMove({ x: 100, y: 100 }, { x: 101, y: 101 }), false);
@@ -39,4 +41,60 @@ test("brush add creates a layer when the selection cannot be extended", () => {
     assert.equal(brushAddLayerTarget({ id: "rectangle", enabled: true, authoring: { locked: false }, geometries: [{ type: "rect" }] }), null);
     assert.equal(brushAddLayerTarget({ id: "locked", enabled: true, authoring: { locked: true }, geometries: [{ type: "brush_stroke" }] }), null);
     assert.equal(brushAddLayerTarget({ id: "disabled", enabled: false, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] }), null);
+});
+
+test("layer selection supports toggle and visual range selection", () => {
+    const order = ["top", "middle", "bottom"];
+    const first = selectLayers({ ids: [], primary: null, anchor: null }, "top", order, "replace");
+    const toggled = selectLayers(first, "bottom", order, "toggle");
+    assert.deepEqual(toggled.ids, ["top", "bottom"]);
+    const range = selectLayers(first, "bottom", order, "range");
+    assert.deepEqual(range.ids, ["top", "middle", "bottom"]);
+    assert.equal(range.primary, "bottom");
+});
+
+test("merge preserves original mask groups while creating one compound editor layer", () => {
+    const region = { geometry: [
+        { id: "add-a", layer_id: "layer-a", type: "rect", operation: "add", authoring: { name: "A", visible: true, locked: false } },
+        { id: "cut-a", layer_id: "layer-a", type: "rect", operation: "subtract", authoring: { name: "A", visible: true, locked: false } },
+        { id: "add-b", layer_id: "layer-b", type: "brush_stroke", operation: "add", authoring: { name: "B", visible: true, locked: false } },
+    ] };
+    assert.equal(mergeSelectedLayers(region, ["layer-a", "layer-b"], "layer-b"), true);
+    assert.deepEqual(region.geometry.map(item => item.layer_id), ["layer-b", "layer-b", "layer-b"]);
+    assert.deepEqual(region.geometry.map(item => item.mask_group_id), ["layer-a", "layer-a", "layer-b"]);
+    assert.deepEqual(region.geometry.map(item => item.authoring.name), ["B", "B", "B"]);
+});
+
+test("split compound layer restores independent editable layers without changing operations", () => {
+    const region = { geometry: [
+        { id: "add-a", layer_id: "compound", mask_group_id: "group-a", operation: "add", authoring: { name: "Combined", visible: true, locked: false } },
+        { id: "cut-a", layer_id: "compound", mask_group_id: "group-a", operation: "subtract", authoring: { name: "Combined", visible: true, locked: false } },
+        { id: "add-b", layer_id: "compound", mask_group_id: "group-b", operation: "add", authoring: { name: "Combined", visible: true, locked: false } },
+    ] };
+    const ids = ["split-a", "split-b"];
+    assert.deepEqual(splitCompoundLayer(region, "compound", () => ids.shift()), ["split-a", "split-b"]);
+    assert.deepEqual(region.geometry.map(item => item.layer_id), ["split-a", "split-a", "split-b"]);
+    assert.deepEqual(region.geometry.map(item => item.mask_group_id), [undefined, undefined, undefined]);
+    assert.deepEqual(region.geometry.map(item => item.authoring.name), ["Combined 1", "Combined 1", "Combined 2"]);
+});
+
+test("connected areas separates two brush islands but keeps diagonal pixels together", () => {
+    const alpha = new Uint8ClampedArray([
+        255, 0, 0, 255,
+        0, 255, 0, 255,
+        0, 0, 0, 0,
+    ]);
+    const result = connectedAreas(alpha, 4, 3);
+    assert.equal(result.areas.length, 2);
+    assert.deepEqual(result.areas.map(area => ({ x: area.x, y: area.y, width: area.width, height: area.height, pixels: area.pixels })), [
+        { x: 0, y: 0, width: 2, height: 2, pixels: 2 },
+        { x: 3, y: 0, width: 1, height: 2, pixels: 2 },
+    ]);
+});
+
+test("connected areas ignores an effectively invisible antialiasing bridge", () => {
+    const alpha = new Uint8ClampedArray([255, 255, 1, 255, 255]);
+    const result = connectedAreas(alpha, 5, 1);
+    assert.equal(result.areas.length, 2);
+    assert.deepEqual(result.areas.map(area => area.pixels), [2, 2]);
 });

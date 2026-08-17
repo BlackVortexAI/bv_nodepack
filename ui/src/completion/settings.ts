@@ -2,12 +2,44 @@ import { useEffect, useState } from "react";
 
 export const COMPLETION_SETTING_ID = "BV.NodePack.Completion.Enabled";
 export const COMPLETION_DATASETS_SETTING_ID = "BV.NodePack.Completion.Datasets";
+export const COMPLETION_PLACEMENT_SETTING_ID = "BV.NodePack.Completion.Placement";
 const STORAGE_KEY = "bv-nodepack:completion-enabled";
 export const COMPLETION_CHANGE_EVENT = "bv-completion-enabled-changed";
+export const COMPLETION_PLACEMENT_CHANGE_EVENT = "bv-completion-placement-changed";
 const DATASET_STORAGE_KEY = "bv-nodepack:completion-datasets";
+const PLACEMENT_STORAGE_KEY = "bv-nodepack:completion-placement";
 const DATASET_CHANGE_EVENT = "bv-completion-datasets-changed";
 let persistPreference: ((enabled: boolean) => void) | null = null;
 let persistDatasets: ((value: string) => void) | null = null;
+let persistPlacement: ((value: CompletionPlacement) => void) | null = null;
+
+export type CompletionPlacement = "caret" | "field";
+
+export function completionPlacement(): CompletionPlacement {
+    try { return localStorage.getItem(PLACEMENT_STORAGE_KEY) === "field" ? "field" : "caret"; }
+    catch { return "caret"; }
+}
+
+export function bindCompletionPlacementPersistence(writer: (value: CompletionPlacement) => void) {
+    persistPlacement = writer;
+}
+
+export function setCompletionPlacement(value: unknown, persist = false) {
+    const placement: CompletionPlacement = value === "field" ? "field" : "caret";
+    try { localStorage.setItem(PLACEMENT_STORAGE_KEY, placement); } catch {}
+    if (persist) persistPlacement?.(placement);
+    window.dispatchEvent(new CustomEvent(COMPLETION_PLACEMENT_CHANGE_EVENT, { detail: { placement } }));
+}
+
+export function useCompletionPlacement() {
+    const [placement, setPlacement] = useState(completionPlacement);
+    useEffect(() => {
+        const update = (event: Event) => setPlacement((event as CustomEvent).detail?.placement === "field" ? "field" : "caret");
+        window.addEventListener(COMPLETION_PLACEMENT_CHANGE_EVENT, update);
+        return () => window.removeEventListener(COMPLETION_PLACEMENT_CHANGE_EVENT, update);
+    }, []);
+    return placement;
+}
 
 export function completionEnabled() {
     try { return localStorage.getItem(STORAGE_KEY) !== "false"; }

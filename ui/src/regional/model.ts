@@ -1,8 +1,9 @@
 export type PromptPair = { positive_source: string; negative_source: string };
 export type Point = { x: number; y: number; pressure: number };
 export type Geometry =
-    | { id: string; layer_id?: string; type: "rect"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number }
-    | { id: string; layer_id?: string; type: "brush_stroke"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; shape?: "round" | "square"; pressure_mode?: "constant" | "stylus"; size: number; hardness: number; opacity: number; points: Point[] };
+    | { id: string; layer_id?: string; mask_group_id?: string; type: "rect"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number }
+    | { id: string; layer_id?: string; mask_group_id?: string; type: "brush_stroke"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; shape?: "round" | "square"; pressure_mode?: "constant" | "stylus"; size: number; hardness: number; opacity: number; points: Point[] }
+    | { id: string; layer_id?: string; mask_group_id?: string; type: "raster_mask"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number; pixel_width: number; pixel_height: number; data_url: string };
 export type GeometryAuthoring = { name: string; visible: boolean; locked: boolean };
 export type GeometryLayer = { id: string; geometries: Geometry[]; authoring: GeometryAuthoring; enabled: boolean };
 export type Region = {
@@ -20,6 +21,7 @@ export type RegionalDocument = {
 };
 
 export const COLORS = ["#E45756", "#4C78A8", "#54A24B", "#F2CF5B", "#B279A2", "#FF9DA6"];
+export const automaticRegionColor = (index: number) => COLORS[index % COLORS.length];
 export const uuid = () => crypto.randomUUID();
 export const emptyDocument = (): RegionalDocument => ({
     schema: "bv.regional", version: 1, document_id: uuid(), title: "Regional Prompt",
@@ -30,21 +32,28 @@ export const emptyDocument = (): RegionalDocument => ({
 export const newRegion = (index: number): Region => ({
     id: uuid(), name: `Region ${index + 1}`, parent_region_id: null, enabled: true, strength: 1, priority: index,
     prompts: { positive_source: "", negative_source: "" }, mask: { feather: 0.01 }, geometry: [],
-    authoring: { visible: true, locked: false, color: COLORS[index % COLORS.length] },
+    authoring: { visible: true, locked: false, color: automaticRegionColor(index) },
 });
 export const clone = <T,>(value: T): T => structuredClone(value);
 export function preserveDocumentIdentity<T extends { document_id: string }>(imported: T, documentId: string): T {
     return { ...imported, document_id: documentId };
 }
-export const geometryAuthoring = (geometry: Geometry, index = 0): GeometryAuthoring => geometry.authoring ?? { name: `${geometry.type === "rect" ? "Rectangle" : "Brush"} ${index + 1}`, visible: true, locked: false };
+export const geometryAuthoring = (geometry: Geometry, index = 0): GeometryAuthoring => geometry.authoring ?? { name: `${geometry.type === "rect" ? "Rectangle" : geometry.type === "raster_mask" ? "Raster" : "Brush"} ${index + 1}`, visible: true, locked: false };
 export const geometryLayerId = (geometry: Geometry) => geometry.layer_id ?? geometry.id;
-export function geometryLayers(region: Region): GeometryLayer[] {
-    const layers = new Map<string, Geometry[]>();
-    for (const geometry of region.geometry) {
-        const id = geometryLayerId(geometry), existing = layers.get(id);
-        if (existing) existing.push(geometry); else layers.set(id, [geometry]);
+export const geometryMaskGroupId = (geometry: Geometry) => geometry.mask_group_id ?? geometryLayerId(geometry);
+export function geometryGroups(geometries: Geometry[], idFor: (geometry: Geometry) => string): GeometryLayer[] {
+    const groups = new Map<string, Geometry[]>();
+    for (const geometry of geometries) {
+        const id = idFor(geometry), existing = groups.get(id);
+        if (existing) existing.push(geometry); else groups.set(id, [geometry]);
     }
-    return [...layers].map(([id, geometries], index) => ({ id, geometries, authoring: geometryAuthoring(geometries[0], index), enabled: geometries.some(geometry => geometry.enabled !== false) }));
+    return [...groups].map(([id, items], index) => ({ id, geometries: items, authoring: geometryAuthoring(items[0], index), enabled: items.some(geometry => geometry.enabled !== false) }));
+}
+export function geometryLayers(region: Region): GeometryLayer[] {
+    return geometryGroups(region.geometry, geometryLayerId);
+}
+export function geometryMaskGroups(geometries: Geometry[]): GeometryLayer[] {
+    return geometryGroups(geometries, geometryMaskGroupId);
 }
 export function parseDocument(value: unknown): RegionalDocument {
     const document = typeof value === "string" ? JSON.parse(value) : clone(value);

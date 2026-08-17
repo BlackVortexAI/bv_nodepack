@@ -6,7 +6,7 @@ export type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 export function boundsOf(geometry: Geometry, canvas: CanvasSize = { width: 1, height: 1 }): Bounds {
-    if (geometry.type === "rect") return { x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height };
+    if (geometry.type === "rect" || geometry.type === "raster_mask") return { x: geometry.x, y: geometry.y, width: geometry.width, height: geometry.height };
     const xs = geometry.points.map(point => point.x), ys = geometry.points.map(point => point.y);
     const short = Math.min(canvas.width, canvas.height), radiusX = geometry.size * short / canvas.width / 2, radiusY = geometry.size * short / canvas.height / 2;
     const x = clamp(Math.min(...xs) - radiusX), y = clamp(Math.min(...ys) - radiusY);
@@ -22,7 +22,7 @@ function distanceToSegment(point: Point, start: Point, end: Point) {
 }
 
 export function hitTest(geometry: Geometry, point: Point, canvas: CanvasSize = { width: 1, height: 1 }) {
-    if (geometry.type === "rect") return point.x >= geometry.x && point.x <= geometry.x + geometry.width && point.y >= geometry.y && point.y <= geometry.y + geometry.height;
+    if (geometry.type === "rect" || geometry.type === "raster_mask") return point.x >= geometry.x && point.x <= geometry.x + geometry.width && point.y >= geometry.y && point.y <= geometry.y + geometry.height;
     const scaled = (value: Point): Point => ({ ...value, x: value.x * canvas.width, y: value.y * canvas.height });
     const radius = geometry.size * Math.min(canvas.width, canvas.height) / 2, target = scaled(point);
     if (geometry.points.length === 1) return Math.hypot(target.x - geometry.points[0].x * canvas.width, target.y - geometry.points[0].y * canvas.height) <= radius;
@@ -33,7 +33,7 @@ export function moveGeometry(source: Geometry, dx: number, dy: number, canvas?: 
     const geometry = clone(source), bounds = boundsOf(source, canvas);
     dx = clamp(dx, -bounds.x, 1 - bounds.x - bounds.width);
     dy = clamp(dy, -bounds.y, 1 - bounds.y - bounds.height);
-    if (geometry.type === "rect") { geometry.x += dx; geometry.y += dy; }
+    if (geometry.type === "rect" || geometry.type === "raster_mask") { geometry.x += dx; geometry.y += dy; }
     else geometry.points = geometry.points.map(point => ({ ...point, x: clamp(point.x + dx), y: clamp(point.y + dy) }));
     return geometry;
 }
@@ -58,7 +58,7 @@ export function setBounds(source: Geometry, target: Bounds, canvas?: CanvasSize)
     target.height = clamp(target.height, .002, 1 - target.y);
     const geometry = clone(source), original = boundsOf(source, canvas);
     const sx = target.width / Math.max(original.width, .000001), sy = target.height / Math.max(original.height, .000001);
-    if (geometry.type === "rect") return { ...geometry, ...target };
+    if (geometry.type === "rect" || geometry.type === "raster_mask") return { ...geometry, ...target };
     geometry.points = geometry.points.map(point => ({ ...point, x: clamp(target.x + (point.x - original.x) * sx), y: clamp(target.y + (point.y - original.y) * sy) }));
     geometry.size = clamp(geometry.size * Math.sqrt(sx * sy), .001, 1);
     return geometry;
@@ -77,7 +77,7 @@ export function moveLayer(geometries: Geometry[], dx: number, dy: number, canvas
     dy = clamp(dy, -bounds.y, 1 - bounds.y - bounds.height);
     return geometries.map(geometry => {
         const result = clone(geometry);
-        if (result.type === "rect") { result.x += dx; result.y += dy; }
+        if (result.type === "rect" || result.type === "raster_mask") { result.x += dx; result.y += dy; }
         else result.points = result.points.map(point => ({ ...point, x: point.x + dx, y: point.y + dy }));
         return result;
     });
@@ -90,7 +90,7 @@ export function setLayerBounds(geometries: Geometry[], target: Bounds, canvas?: 
     const sx = target.width / Math.max(original.width, .000001), sy = target.height / Math.max(original.height, .000001);
     return geometries.map(source => {
         const geometry = clone(source);
-        if (geometry.type === "rect") {
+        if (geometry.type === "rect" || geometry.type === "raster_mask") {
             geometry.x = target.x + (geometry.x - original.x) * sx; geometry.y = target.y + (geometry.y - original.y) * sy;
             geometry.width *= sx; geometry.height *= sy;
         } else {

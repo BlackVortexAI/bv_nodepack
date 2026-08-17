@@ -92,6 +92,51 @@ class RegionalNodeTests(unittest.TestCase):
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
 
+    def test_color_control_node_is_registered_and_returns_image_with_legend(self):
+        node = self.module.BVRegionalColorControlImageNode()
+        image, legend_json = node.compile(fixture())
+        legend = json.loads(legend_json)
+        self.assertIs(
+            self.module.NODE_CLASS_MAPPINGS["BV Regional Color Control Image"],
+            self.module.BVRegionalColorControlImageNode,
+        )
+        self.assertEqual(tuple(image.shape), (1, 1024, 1536, 3))
+        self.assertEqual(legend["schema"], "bv.regional.color_control")
+
+    def test_anima_lllite_node_loads_core_model_patch_and_applies_compiled_image(self):
+        calls = {}
+
+        class FakeLoader:
+            def load_model_patch(self, name):
+                calls["name"] = name
+                return ("loaded-patch",)
+
+        class FakeApply:
+            def apply_patch(self, model, model_patch, image, strength, start_percent, end_percent, mask=None):
+                calls["apply"] = (model, model_patch, tuple(image.shape), strength, start_percent, end_percent, mask)
+                return ("patched-model",)
+
+        fake_core = types.ModuleType("comfy_extras.nodes_model_patch")
+        fake_core.ModelPatchLoader = FakeLoader
+        fake_core.AnimaLLLiteApply = FakeApply
+        with unittest.mock.patch.dict(sys.modules, {"comfy_extras.nodes_model_patch": fake_core}):
+            result = self.module.BVRegionalAnimaLLLiteNode().apply(
+                "source-model", fixture(), "anima-regional.safetensors", 0.75, 0.1, 0.8
+            )
+
+        self.assertIs(
+            self.module.NODE_CLASS_MAPPINGS["BV Regional Anima LLLite"],
+            self.module.BVRegionalAnimaLLLiteNode,
+        )
+        self.assertEqual(result[0], "patched-model")
+        self.assertEqual(calls["name"], "anima-regional.safetensors")
+        self.assertEqual(calls["apply"], ("source-model", "loaded-patch", (1, 1024, 1536, 3), 0.75, 0.1, 0.8, None))
+        self.assertEqual(json.loads(result[2])["schema"], "bv.regional.color_control")
+
+    def test_anima_lllite_node_rejects_an_inverted_sampling_range(self):
+        with self.assertRaisesRegex(ValueError, "start_percent must not exceed end_percent"):
+            self.module.BVRegionalAnimaLLLiteNode().apply("model", fixture(), "patch.safetensors", 1, 0.9, 0.2)
+
     def test_image_sender_targets_document_and_preserves_image_passthrough(self):
         sender = self.module.BVRegionalImageSendNode()
         sender.save_images = lambda images, *_args: {"ui": {"images": [{"filename": "preview.png"}]}}

@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { collectSuggestions, completionRequest, CompletionContext, CompletionSuggestion, insertSuggestion } from "./engine";
 import { localCompletionProvider } from "./localProvider";
-import { useCompletionEnabled } from "./settings";
+import { useCompletionEnabled, useCompletionPlacement } from "./settings";
+import { completionPopupPosition } from "./position";
 
 type Props = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; onValue: (value: string) => void; completionContext: CompletionContext };
 
 export default function PromptTextarea({ value, onValue, completionContext, onKeyDown, onBlur, ...props }: Props) {
     const enabled = useCompletionEnabled();
+    const placement = useCompletionPlacement();
     const textarea = useRef<HTMLTextAreaElement>(null);
     const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
     const [selected, setSelected] = useState(0);
@@ -27,9 +29,9 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
         timerRef.current = window.setTimeout(async () => {
             const items = await collectSuggestions(request, [localCompletionProvider], controller.signal);
             if (controller.signal.aborted) return;
-            const rect = textarea.current?.getBoundingClientRect();
+            const element = textarea.current;
             setSuggestions(items); setSelected(0);
-            setPopup(items.length && rect ? { left: rect.left, top: Math.min(window.innerHeight - 220, rect.bottom + 4), width: rect.width } : null);
+            setPopup(items.length && element ? completionPopupPosition(element, placement) : null);
         }, 120);
     };
     const accept = (index = selected) => {
@@ -41,6 +43,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     };
 
     useEffect(() => { if (!enabled) close(); }, [enabled]);
+    useEffect(() => { if (popup && textarea.current) setPopup(completionPopupPosition(textarea.current, placement)); }, [placement]);
     useEffect(() => () => { abortRef.current?.abort(); if (timerRef.current != null) window.clearTimeout(timerRef.current); }, []);
     return <>
         <textarea {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart); }} onKeyDown={event => {

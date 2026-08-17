@@ -111,13 +111,17 @@ layer mask. The v1 operations are:
 - `add`: `result = max(result, shape)`;
 - `subtract`: `result = result * (1 - shape)`.
 
-Rectangle and brush-stroke shapes are the only v1 geometry types. A one-point
+Version 1 supports rectangles, brush strokes and cropped raster masks. A one-point
 brush stroke is a valid dot. Brush pressure scales the local brush opacity.
-Region feathering is applied after all geometry operations.
+`raster_mask` stores a white-alpha PNG crop plus its normalized canvas bounds and
+native pixel dimensions. It is used for pixel-preserving results of destructive
+editor operations such as splitting disconnected areas. Region feathering is
+applied after all geometry operations.
 
-Each `layer_id` is evaluated independently; completed layer masks are combined
-with `max` before region feathering. A subtract operation therefore affects
-only its selected layer and cannot erase another layer in the same region.
+Each mask group is evaluated independently; completed group masks are combined
+with `max` before region feathering. `mask_group_id` identifies that group when
+present and otherwise falls back to `layer_id`. A subtract operation therefore
+affects only its mask group and cannot erase another group in the same region.
 Documents without any `layer_id` retain the historical flat evaluation by
 placing their operations into one implicit legacy layer.
 
@@ -125,6 +129,7 @@ Geometry may carry the backward-compatible optional fields:
 
 - `enabled`: when false, the operation is skipped by mask renderers;
 - `layer_id`: groups multiple ordered Add/Subtract operations into one visible editor layer;
+- `mask_group_id`: preserves independent Add/Subtract evaluation inside a merged compound layer;
 - `authoring.name`: user-facing layer name;
 - `authoring.visible`: editor presentation only;
 - `authoring.locked`: editor interaction only.
@@ -141,7 +146,9 @@ editor materializes that implicit layer ID when it next persists the document.
 Repeated `layer_id` values are intentional and do not weaken the global
 uniqueness requirement for geometry `id` values. Moving, resizing,
 duplicating, reordering, or deleting a layer acts on every operation sharing
-that `layer_id` while operation order remains stable.
+that `layer_id` while operation order remains stable. Merging layers assigns a
+common `layer_id` but retains their former identities as `mask_group_id`, so
+Rectangle and Brush layers can be combined without changing the rendered mask.
 
 The exact rasterization and rounding rules will be locked by shared TypeScript
 and Python golden fixtures before the renderer is exposed to callers.

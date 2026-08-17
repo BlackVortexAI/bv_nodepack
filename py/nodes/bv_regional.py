@@ -15,6 +15,7 @@ from ..util.regional.document import (
 )
 from ..util.regional.mask_renderer import mask_bbox, render_selection
 from ..util.regional.anima_adapter import ANIMA_REGIONS, compile_anima_adapter
+from ..util.regional.color_control import compile_color_control
 from ..util.regional.native_conditioning import compile_native_conditioning
 
 
@@ -303,6 +304,75 @@ class BVRegionalAnimaConditioningNode:
         return patched_model, positive, negative
 
 
+class BVRegionalColorControlImageNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"regional": (REGIONAL, {})}}
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("control_image", "legend_json")
+    FUNCTION = "compile"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Compiles BV Regional into a solid RGB region-control image and a deterministic color legend."
+
+    def compile(self, regional):
+        image, legend = compile_color_control(regional)
+        return image, json.dumps(legend, ensure_ascii=False, sort_keys=True)
+
+
+class BVRegionalAnimaLLLiteNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        try:
+            import folder_paths
+
+            model_patches = folder_paths.get_filename_list("model_patches")
+        except (ImportError, KeyError):
+            model_patches = []
+        return {
+            "required": {
+                "model": ("MODEL", {}),
+                "regional": (REGIONAL, {}),
+                "model_patch_name": (model_patches,),
+                "strength": ("FLOAT", {"default": 1.0, "min": -10.0, "max": 10.0, "step": 0.01}),
+                "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "end_percent": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "IMAGE", "STRING")
+    RETURN_NAMES = ("patched_model", "control_image", "legend_json")
+    FUNCTION = "apply"
+    CATEGORY = CATEGORY
+    DESCRIPTION = (
+        "Loads a local Anima LLLite MODEL_PATCH, compiles BV Regional into its color control image, "
+        "and applies it through ComfyUI's native model-patch runtime."
+    )
+
+    def apply(self, model, regional, model_patch_name, strength, start_percent, end_percent):
+        if start_percent > end_percent:
+            raise ValueError("start_percent must not exceed end_percent")
+        try:
+            from comfy_extras.nodes_model_patch import AnimaLLLiteApply, ModelPatchLoader
+        except ImportError as error:
+            raise RuntimeError(
+                "BV Regional Anima LLLite requires a current ComfyUI build with "
+                "ModelPatchLoader and AnimaLLLiteApply support."
+            ) from error
+
+        control_image, legend = compile_color_control(regional)
+        model_patch = ModelPatchLoader().load_model_patch(model_patch_name)[0]
+        patched_model = AnimaLLLiteApply().apply_patch(
+            model,
+            model_patch,
+            control_image,
+            float(strength),
+            float(start_percent),
+            float(end_percent),
+        )[0]
+        return patched_model, control_image, json.dumps(legend, ensure_ascii=False, sort_keys=True)
+
+
 class _BVRegionalImageTargetMixin:
     @staticmethod
     def _validate_target(document_id):
@@ -377,6 +447,8 @@ NODE_CLASS_MAPPINGS = {
     "BV Regional Native Conditioning": BVRegionalNativeConditioningNode,
     "BV Regional Anima Adapter": BVRegionalAnimaAdapterNode,
     "BV Regional Anima Conditioning": BVRegionalAnimaConditioningNode,
+    "BV Regional Color Control Image": BVRegionalColorControlImageNode,
+    "BV Regional Anima LLLite": BVRegionalAnimaLLLiteNode,
     "BV Regional Image Send": BVRegionalImageSendNode,
     "BV Regional Image Save": BVRegionalImageSaveNode,
 }
@@ -391,6 +463,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Native Conditioning": "🌀 BV Regional Native Conditioning",
     "BV Regional Anima Adapter": "🌀 BV Regional Anima Adapter",
     "BV Regional Anima Conditioning": "🌀 BV Regional Anima Conditioning",
+    "BV Regional Color Control Image": "🌀 BV Regional Color Control Image",
+    "BV Regional Anima LLLite": "🌀 BV Regional Anima LLLite",
     "BV Regional Image Send": "🌀 BV Regional Preview Send",
     "BV Regional Image Save": "🌀 BV Regional Save Send",
 }

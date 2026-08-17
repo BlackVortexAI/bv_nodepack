@@ -1,13 +1,14 @@
 import React, { useState } from "react";
-import { geometryLayers, Region } from "./model";
+import { geometryLayers, geometryMaskGroupId, Region } from "./model";
 
 type Props = {
     regions: Region[];
     selectedRegionId: string | null;
     selectedLayerId: string | null;
+    selectedLayerIds: string[];
     isolate: boolean;
     onSelectRegion: (id: string) => void;
-    onSelectLayer: (id: string) => void;
+    onSelectLayer: (id: string, modifier: "replace" | "toggle" | "range") => void;
     onAddRegion: () => void;
     onRenameRegion: (id: string, name: string) => void;
     onRenameLayer: (id: string, name: string) => void;
@@ -49,14 +50,17 @@ export default function LayerPanel(props: Props) {
                 </div>
                 {selected && <div className="geometry-layers">
                     {[...geometryLayers(region)].reverse().map((layer, reverseIndex, layers) => {
-                        const selectedLayer = layer.id === props.selectedLayerId;
-                        return <div key={layer.id} className={`geometry-row ${selectedLayer ? "selected" : ""}`} onClick={() => props.onSelectLayer(layer.id)}>
-                            <span title={`${layer.geometries.length} Operation(en)`}>{layer.geometries[0].type === "rect" ? "▭" : "✎"}{layer.geometries.some(item => item.operation === "subtract") ? "−" : ""}</span>
+                        const selectedLayer = props.selectedLayerIds.includes(layer.id), primaryLayer = layer.id === props.selectedLayerId;
+                        const geometryTypes = new Set(layer.geometries.map(item => item.type));
+                        const maskGroups = new Set(layer.geometries.map(geometryMaskGroupId)).size;
+                        const layerIcon = geometryTypes.size > 1 || maskGroups > 1 ? "◈" : layer.geometries[0].type === "rect" ? "▭" : layer.geometries[0].type === "raster_mask" ? "▦" : "✎";
+                        return <div key={layer.id} className={`geometry-row ${selectedLayer ? "selected" : ""} ${primaryLayer ? "primary-selection" : ""}`} onClick={event => props.onSelectLayer(layer.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "replace")}>
+                            <span title={`${layer.geometries.length} operations · ${maskGroups} mask group${maskGroups === 1 ? "" : "s"}`}>{layerIcon}{layer.geometries.some(item => item.operation === "subtract") ? "−" : ""}</span>
                             <EditableName value={layer.authoring.name} onCommit={name => props.onRenameLayer(layer.id, name)}/>
                             <button title="Visible in editor" onClick={event => { event.stopPropagation(); props.onToggleLayer(layer.id, "visible"); }}>{layer.authoring.visible ? "◉" : "○"}</button>
                             <button title="Lock layer" onClick={event => { event.stopPropagation(); props.onToggleLayer(layer.id, "locked"); }}>{layer.authoring.locked ? "🔒" : "🔓"}</button>
                             <input title="Enable for mask output" type="checkbox" checked={layer.enabled} onClick={event => event.stopPropagation()} onChange={() => props.onToggleLayer(layer.id, "enabled")}/>
-                            {selectedLayer && <div className="layer-quick-actions">
+                            {primaryLayer && props.selectedLayerIds.length === 1 && <div className="layer-quick-actions">
                                 <button title="Move layer up" disabled={reverseIndex === 0} onClick={event => { event.stopPropagation(); props.onMoveLayer(layer.id, 1); }}>↑</button>
                                 <button title="Move layer down" disabled={reverseIndex === layers.length - 1} onClick={event => { event.stopPropagation(); props.onMoveLayer(layer.id, -1); }}>↓</button>
                                 <button title="Duplicate layer" onClick={event => { event.stopPropagation(); props.onDuplicateLayer(layer.id); }}>⧉</button>

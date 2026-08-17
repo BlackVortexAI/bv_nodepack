@@ -66,3 +66,14 @@ implementation is claimed unless another section of this file says otherwise.
 - [`comfy-ex-tagcomplete`](https://github.com/jupo-ai/comfy-ex-tagcomplete):
   completion interoperability and UX research. Its bundled tag-data relationship
   is documented in the first section of this file.
+- [`Anima-LLLite-Regional-Controlnet`](https://huggingface.co/Sen-sou/Anima-LLLite-Regional-Controlnet):
+  experimental color-layout adapter that motivated the optional BV Regional Anima
+  LLLite interoperability node. Its weights are not bundled or downloaded by BV.
+- [`ComfyUI-Anima-LLLite`](https://github.com/kohya-ss/ComfyUI-Anima-LLLite):
+  LLLite format and runtime reference. BV calls the corresponding native ComfyUI
+  core runtime and does not vendor this custom-node implementation.
+- [`ComfyUI`](https://github.com/Comfy-Org/ComfyUI): native `MODEL_PATCH` loading and
+  Anima LLLite application runtime used by the optional BV integration.
+- [`Anima`](https://huggingface.co/circlestone-labs/Anima): underlying model ecosystem;
+  users must review its current license and derivative-model terms separately from
+  any adapter repository label.

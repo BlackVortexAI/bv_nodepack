@@ -9,6 +9,14 @@ controls and deterministic latent utilities.
 The pack targets current ComfyUI workflows and treats stable data contracts,
 Subgraph behavior and graceful failure as first-class features.
 
+> [!NOTE]
+> **AI-assisted development:** BV Node Pack was created with extensive assistance
+> from generative AI during architecture exploration, implementation, debugging,
+> testing and documentation. Product direction, requirements, technical decisions,
+> code review and validation in real ComfyUI workflows remain human-led. This
+> project does not claim to be solely hand-written; AI-assisted contributions are
+> reviewed and tested before publication.
+
 > BV Node Pack includes frontend extensions. Restart ComfyUI and hard-refresh the
 > browser after installing or updating so Python nodes and JavaScript stay in sync.
 
@@ -16,7 +24,7 @@ Subgraph behavior and graceful failure as first-class features.
 
 | Feature | What it solves |
 | --- | --- |
-| [Regional Editor](#regional-prompting) | Author any number of named, overlapping rectangle and brush regions in a floating or workspace editor |
+| [Regional Editor](#regional-prompting) | Author named, overlapping rectangle and brush regions with editable display colors, compound-layer merge/split and disconnected-area splitting |
 | [Prompt Autocomplete](#prompt-autocomplete) | Local, optional CSV/TSV completion in BV editors and ordinary ComfyUI multiline fields |
 | [Prompt AST](#structured-prompt-ast) | Filter and reuse semantic prompt blocks without fragile string replacement |
 | [Smart Pipe](#smart-pipes) | Grow typed workflow state through wired or wireless branches while retaining stable slot identity |
@@ -50,6 +58,8 @@ restart ComfyUI and hard-refresh the browser.
 
 ## Regional prompting
 
+![BV Regional Editor with overlapping rectangle and brush regions](docs/assets/regional/regional-editor-title.png)
+
 The model-neutral `BV_REGIONAL` document separates authoring from execution. The
 editor stores prompts, geometry and stable identities; compiler nodes translate
 that document for a particular model/backend.
@@ -79,11 +89,13 @@ the spatial guidance.
 3. Add regions, then draw rectangles or additive/subtractive brush layers.
 4. Connect `regional` to a compiler:
    - **BV Regional Native Conditioning** for standard masked ComfyUI conditioning;
-   - **BV Regional Anima Conditioning** for the built-in Anima attention backend.
+   - **BV Regional Anima Conditioning** for the built-in Anima attention backend;
+   - **BV Regional Color Control Image** for a model-neutral solid RGB control image;
+   - **BV Regional Anima LLLite** to load and apply a local Anima LLLite model patch through ComfyUI core.
 5. Connect `patched_model`/`positive`/`negative` to a standard KSampler.
 6. Optionally return the latest image through **Preview Send** or **Save Send**.
 
-The editor supports overlap, priority ordering, undo/redo, layer controls, zoom,
+The editor supports overlap, priority ordering, undo/redo, multi-selection, lossless compound-layer merging and resolution-aware disconnected-area splitting, layer controls, zoom,
 pan, WYSIWYG aspect ratios, document import/export and persistent per-document UI state.
 
 Read the illustrated **[Regional Editor Guide](docs/regional-editor-guide.md)** for
@@ -157,6 +169,8 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Native Conditioning | Compiles Global, Background and region masks into standard conditioning |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
+| BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
+| BV Regional Anima LLLite | Loads a local Anima LLLite `MODEL_PATCH`, applies the rendered color control and emits the patched model plus debug image/legend |
 | BV Regional Preview Send | Sends a temporary image preview to a selected editor |
 | BV Regional Save Send | Saves and sends the same image to a selected editor |
 | BV Regional Debug | Shows canonical JSON, a summary and `document_id` |
@@ -164,6 +178,67 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Deconstructor | Exposes AST, text, source and reusable selection data |
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
+
+### Experimental Anima LLLite layout control
+
+**BV Regional Anima LLLite** adds learned layout guidance to the prompt-to-region
+binding supplied by **BV Regional Anima Conditioning**. It is an Anima `MODEL_PATCH`,
+not a classic ComfyUI `CONTROL_NET`: BV renders the regional document to a solid
+RGB image, ComfyUI loads the LLLite weights, and the patch modifies the Anima model
+during the selected sampling interval.
+
+```text
+Anima MODEL -> BV Regional Anima Conditioning -> BV Regional Anima LLLite -> KSampler
+                         |                                  |
+                         +-> positive / negative            +-> control image / legend
+```
+
+Download the adapter separately from
+[Sen-sou/Anima-LLLite-Regional-Controlnet](https://huggingface.co/Sen-sou/Anima-LLLite-Regional-Controlnet),
+place it under `ComfyUI/models/model_patches/`, then restart ComfyUI. BV does not
+bundle or download model weights. The verified reference starts with Strength
+`1.0`, Start `0.0`, End `1.0`; shorter intervals and lower strengths intentionally
+allow more model freedom.
+
+<details>
+<summary><strong>Workflow, control image and editor geometry</strong></summary>
+
+![Anima LLLite workflow](docs/assets/regional/anima-lllite-workflow.png)
+
+> The captured UI still shows KSampler `randomize`; switch it to `fixed` before
+> controlled comparisons. The A/B evidence below was verified from executed PNG
+> prompt metadata and uses the same actual seed.
+
+The generated control image contains exactly white plus one solid color per enabled
+region. Display colors, mask-display opacity and the background preview do not alter it.
+
+![Anima LLLite control image](docs/assets/regional/anima-lllite-control-image.png)
+
+The same rectangles, interaction overlap and painted light arc in the editor:
+
+![Anima LLLite editor overlay](docs/assets/regional/anima-lllite-editor-overlay.png)
+
+</details>
+
+<details>
+<summary><strong>Controlled A/B result — identical executed seed</strong></summary>
+
+Both images were executed with seed `766291715444885`, the same model, LoRA,
+prompts, regional document and sampler settings. Only the LLLite model patch differs.
+
+| LLLite active — Strength 1.0, 0.0–1.0 | LLLite bypassed |
+| --- | --- |
+| [![LLLite active](docs/assets/regional/anima-lllite-active.png)](docs/assets/regional/anima-lllite-active.png) | [![LLLite bypassed](docs/assets/regional/anima-lllite-bypass.png)](docs/assets/regional/anima-lllite-bypass.png) |
+
+The active patch keeps both subjects on a more comparable scale and depth plane.
+The bypassed render retains regional character binding but allows a much freer layout.
+
+</details>
+
+LLLite remains guidance rather than hard segmentation. It does not associate prompt
+text with a color by itself, guarantee object boundaries or force an interaction.
+Read the complete **[Anima LLLite regional-control guide](docs/anima-lllite-regional-control.md)**
+for architecture, settings, verified behavior, limitations and licensing boundaries.
 
 ## Prompt autocomplete
 
@@ -174,6 +249,8 @@ extension. The bundled `data/completion/bv_default_tags.csv` is active by defaul
 - Preserves descriptions, provenance, safety scores and unknown future metadata.
 - Inserts tag names with spaces while retaining canonical underscore tags as metadata.
 - Works in the Regional Editor, Quick Edit and ordinary ComfyUI multiline widgets.
+- Opens at the active caret by default; placement can be changed globally to below
+  the complete text field under **Settings → BV Node Pack → Prompting**.
 - Can be disabled globally or inside the editor when another completer should own fields.
 - Supports multiple ordered datasets; the topmost enabled source wins duplicate tags.
 
@@ -405,6 +482,19 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-17 — v0.4.0
+
+- Add native Anima LLLite layout control with deterministic regional color images,
+  debug legends, documented patch ordering and controlled A/B reference assets.
+- Add lossless compound-layer merge/split, resolution-aware disconnected-area
+  splitting and editable region display colors to the Regional Editor.
+- Close Regional Editor surfaces when switching workflows and preserve the active
+  workflow boundary safely.
+- Open prompt completions at the active caret by default, with optional field-aligned
+  placement in global settings and the editor menu.
+- Refresh the Regional Editor and autocomplete documentation assets and disclose
+  the project's AI-assisted development process.
+
 ### 2026-08-17 — v0.3.5
 
 - Restore repository-relative README image paths so GitHub and local Markdown
@@ -453,6 +543,11 @@ Technical references:
 Earlier history remains available in the Git log.
 
 ## Acknowledgements
+
+Generative AI systems served as collaborative development tools throughout this
+project, supporting research, code generation, refactoring, test design and
+documentation. Their contribution is acknowledged openly alongside the human
+architecture, creative direction, review and practical validation behind the pack.
 
 BV Node Pack is built on ComfyUI's extension ecosystem. Several open-source
 projects helped shape its product ideas, interaction patterns and technical research:

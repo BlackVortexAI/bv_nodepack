@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import base64
+import binascii
 import json
 import math
 import uuid
@@ -157,6 +159,11 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
                     uuid.UUID(str(shape["layer_id"]))
                 except (ValueError, TypeError, AttributeError):
                     issues.append(f"{shape_path}.layer_id must be a UUID")
+            if "mask_group_id" in shape:
+                try:
+                    uuid.UUID(str(shape["mask_group_id"]))
+                except (ValueError, TypeError, AttributeError):
+                    issues.append(f"{shape_path}.mask_group_id must be a UUID")
             if "enabled" in shape and not isinstance(shape["enabled"], bool):
                 issues.append(f"{shape_path}.enabled must be boolean")
             authoring = shape.get("authoring")
@@ -193,6 +200,24 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
                     for point_index, point in enumerate(points):
                         if not isinstance(point, dict) or any(not _finite_number(point.get(k)) or not 0 <= point.get(k) <= 1 for k in ("x", "y", "pressure")):
                             issues.append(f"{shape_path}.points[{point_index}] must contain normalized x, y, pressure")
+            elif shape_type == "raster_mask":
+                values = [shape.get(key) for key in ("x", "y", "width", "height")]
+                if not all(_finite_number(value) for value in values) or not (0 <= values[0] <= 1 and 0 <= values[1] <= 1 and values[2] > 0 and values[3] > 0 and values[0] + values[2] <= 1 + 1e-9 and values[1] + values[3] <= 1 + 1e-9):
+                    issues.append(f"{shape_path} raster bounds must stay inside normalized canvas")
+                for key in ("pixel_width", "pixel_height"):
+                    value = shape.get(key)
+                    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 65536:
+                        issues.append(f"{shape_path}.{key} must be an integer between 1 and 65536")
+                data_url = shape.get("data_url")
+                if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,") or len(data_url) > 67_108_864:
+                    issues.append(f"{shape_path}.data_url must be a PNG data URL no larger than 64 MiB")
+                else:
+                    try:
+                        payload = base64.b64decode(data_url.split(",", 1)[1], validate=True)
+                        if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+                            issues.append(f"{shape_path}.data_url must contain PNG data")
+                    except (binascii.Error, ValueError):
+                        issues.append(f"{shape_path}.data_url contains invalid base64")
             else:
                 issues.append(f"{shape_path}.type is unsupported")
 

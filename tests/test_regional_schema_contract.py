@@ -1,9 +1,12 @@
 import importlib.util
+import base64
+import io
 import json
 from pathlib import Path
 import unittest
 
 import jsonschema
+from PIL import Image
 
 
 ROOT = Path(__file__).parents[1]
@@ -104,6 +107,26 @@ class RegionalSchemaContractTests(unittest.TestCase):
         brush["authoring"] = {"name": "Hair brush", "visible": True, "locked": False}
         brush["shape"] = "square"
         brush["pressure_mode"] = "stylus"
+        jsonschema.Draft202012Validator(schema).validate(document)
+
+    def test_raster_mask_geometry_validates(self):
+        schema = load_json(SCHEMA_PATH)
+        document = load_json(FIXTURE_ROOT / "v1_hybrid_joint.json")
+        image = Image.new("RGBA", (2, 1), (255, 255, 255, 255))
+        payload = io.BytesIO()
+        image.save(payload, format="PNG")
+        document["regions"][0]["geometry"] = [{
+            "id": "20000000-0000-4000-8000-000000000094",
+            "type": "raster_mask",
+            "operation": "add",
+            "x": 0.1,
+            "y": 0.2,
+            "width": 0.4,
+            "height": 0.3,
+            "pixel_width": 2,
+            "pixel_height": 1,
+            "data_url": "data:image/png;base64," + base64.b64encode(payload.getvalue()).decode("ascii"),
+        }]
         jsonschema.Draft202012Validator(schema).validate(document)
 
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import math
+import base64
+import io
 from typing import Any
 
 import torch
 import torch.nn.functional as functional
+from PIL import Image
 
 from .document import parse_document
 
@@ -51,6 +54,24 @@ def _brush(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
     return result
 
 
+def _raster(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
+    payload = base64.b64decode(shape["data_url"].split(",", 1)[1], validate=True)
+    with Image.open(io.BytesIO(payload)) as source:
+        source.load()
+        if source.format != "PNG" or source.width != shape["pixel_width"] or source.height != shape["pixel_height"]:
+            raise ValueError("raster_mask PNG dimensions do not match its document metadata")
+        alpha = source.convert("RGBA").getchannel("A")
+        x0 = max(0, min(width - 1, round(shape["x"] * width)))
+        y0 = max(0, min(height - 1, round(shape["y"] * height)))
+        x1 = max(x0 + 1, min(width, round((shape["x"] + shape["width"]) * width)))
+        y1 = max(y0 + 1, min(height, round((shape["y"] + shape["height"]) * height)))
+        alpha = alpha.resize((x1 - x0, y1 - y0), Image.Resampling.BILINEAR)
+        values = torch.frombuffer(bytearray(alpha.tobytes()), dtype=torch.uint8).reshape(y1 - y0, x1 - x0).float() / 255.0
+    result = torch.zeros((height, width), dtype=torch.float32)
+    result[y0:y1, x0:x1] = values
+    return result
+
+
 def _feather(mask: torch.Tensor, amount: float, width: int, height: int) -> torch.Tensor:
     radius = min(64, round(amount * min(width, height)))
     if radius < 1:
@@ -69,14 +90,15 @@ def render_region(region: dict[str, Any], width: int, height: int) -> torch.Tens
     layers: dict[str, list[dict[str, Any]]] = {}
     legacy_layer = next((shape["id"] for shape in region["geometry"] if "layer_id" not in shape), "__legacy__")
     for shape in region["geometry"]:
-        layers.setdefault(shape.get("layer_id", legacy_layer), []).append(shape)
+        layer_id = shape.get("layer_id", legacy_layer)
+        layers.setdefault(shape.get("mask_group_id", layer_id), []).append(shape)
     mask = torch.zeros((height, width), dtype=torch.float32)
     for shapes in layers.values():
         layer_mask = torch.zeros((height, width), dtype=torch.float32)
         for shape in shapes:
             if not shape.get("enabled", True):
                 continue
-            shape_mask = _rect(shape, width, height) if shape["type"] == "rect" else _brush(shape, width, height)
+            shape_mask = _rect(shape, width, height) if shape["type"] == "rect" else _raster(shape, width, height) if shape["type"] == "raster_mask" else _brush(shape, width, height)
             layer_mask = torch.maximum(layer_mask, shape_mask) if shape["operation"] == "add" else layer_mask * (1 - shape_mask)
         mask = torch.maximum(mask, layer_mask)
     return _feather(mask, region["mask"]["feather"], width, height)

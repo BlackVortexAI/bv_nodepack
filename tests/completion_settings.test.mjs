@@ -7,5 +7,5 @@ const source = readFileSync(new URL("../ui/src/index.tsx", import.meta.url), "ut
 test("completion settings use distinct three-part ComfyUI category paths", () => {
     const paths = [...source.matchAll(/category:\s*\["BV Node Pack",\s*"Prompting"(?:,\s*"([^"]+)")?\]/g)]
         .map(match => match[1] ?? null);
-    assert.deepEqual(paths, ["Enable autocomplete", "Completion datasets"]);
+    assert.deepEqual(paths, ["Enable autocomplete", "Popup position", "Completion datasets"]);
 });

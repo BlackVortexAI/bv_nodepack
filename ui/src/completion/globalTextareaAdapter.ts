@@ -1,6 +1,7 @@
 import { collectSuggestions, completionRequest, insertSuggestion, type CompletionSuggestion } from "./engine";
 import { localCompletionProvider } from "./localProvider";
-import { COMPLETION_CHANGE_EVENT, completionEnabled } from "./settings";
+import { COMPLETION_CHANGE_EVENT, COMPLETION_PLACEMENT_CHANGE_EVENT, completionEnabled, completionPlacement } from "./settings";
+import { completionPopupPosition } from "./position";
 
 type Attached = { close: () => void; destroy: () => void };
 const attached = new Map<HTMLTextAreaElement, Attached>();
@@ -31,10 +32,10 @@ function attach(textarea: HTMLTextAreaElement) {
     };
     const position = () => {
         if (!popup) return;
-        const rect = textarea.getBoundingClientRect();
-        popup.style.left = `${rect.left}px`;
-        popup.style.top = `${Math.max(4, Math.min(window.innerHeight - popup.offsetHeight - 4, rect.bottom + 4))}px`;
-        popup.style.width = `${rect.width}px`;
+        const next = completionPopupPosition(textarea, completionPlacement(), popup.offsetHeight || 210);
+        popup.style.left = `${next.left}px`;
+        popup.style.top = `${next.top}px`;
+        popup.style.width = `${next.width}px`;
     };
     const render = () => {
         popup?.remove();
@@ -133,10 +134,13 @@ export function installGlobalTextareaCompletion() {
     }));
     observer.observe(document.body, { childList: true, subtree: true });
     const settingChanged = () => { if (!completionEnabled()) attached.forEach(value => value.close()); };
+    const placementChanged = () => attached.forEach(value => value.close());
     window.addEventListener(COMPLETION_CHANGE_EVENT, settingChanged);
+    window.addEventListener(COMPLETION_PLACEMENT_CHANGE_EVENT, placementChanged);
     uninstallGlobalAdapter = () => {
         observer.disconnect();
         window.removeEventListener(COMPLETION_CHANGE_EVENT, settingChanged);
+        window.removeEventListener(COMPLETION_PLACEMENT_CHANGE_EVENT, placementChanged);
         attached.forEach(value => value.destroy());
         attached.clear();
         uninstallGlobalAdapter = null;
