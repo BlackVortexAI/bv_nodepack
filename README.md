@@ -522,8 +522,9 @@ topmost dataset supplies the completion entry and its metadata.
 
 Autocomplete can be disabled globally in ComfyUI settings or from
 `Edit → Prompt Autocomplete` inside the Regional Editor. Disable it when another
-completion extension should own prompt fields. Integration with ordinary ComfyUI
-text widgets remains a later completion adapter.
+completion extension should own prompt fields. BV Autocomplete also attaches to
+ordinary ComfyUI multiline text widgets. Custom widgets can opt out with
+`data-bv-autocomplete="off"` on the textarea or one of its ancestors.
 
 See [Regional Editor MVP](docs/regional-editor-mvp.md) for the document contract,
 interaction details, model limitations, and validation scope.
@@ -682,6 +683,11 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-08-17 — v0.3.1
+- Extend BV Prompt Autocomplete to ordinary ComfyUI multiline text widgets.
+- Keep keyboard handling inside the active completion popup and provide an explicit widget opt-out.
+- Clean up listeners when nodes are removed and prevent duplicate adapter installation.
 
 ### 2026-08-17 — v0.3.0
 - Add the BV-owned lazy CSV/TSV completion provider with extensible metadata.

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export const COMPLETION_SETTING_ID = "BV.NodePack.Completion.Enabled";
 export const COMPLETION_DATASETS_SETTING_ID = "BV.NodePack.Completion.Datasets";
 const STORAGE_KEY = "bv-nodepack:completion-enabled";
-const CHANGE_EVENT = "bv-completion-enabled-changed";
+export const COMPLETION_CHANGE_EVENT = "bv-completion-enabled-changed";
 const DATASET_STORAGE_KEY = "bv-nodepack:completion-datasets";
 const DATASET_CHANGE_EVENT = "bv-completion-datasets-changed";
 let persistPreference: ((enabled: boolean) => void) | null = null;
@@ -21,15 +21,15 @@ export function bindCompletionSettingPersistence(writer: (enabled: boolean) => v
 export function setCompletionEnabled(enabled: boolean, persist = false) {
     try { localStorage.setItem(STORAGE_KEY, String(enabled)); } catch {}
     if (persist) persistPreference?.(enabled);
-    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { enabled } }));
+    window.dispatchEvent(new CustomEvent(COMPLETION_CHANGE_EVENT, { detail: { enabled } }));
 }
 
 export function useCompletionEnabled() {
     const [enabled, setEnabled] = useState(completionEnabled);
     useEffect(() => {
         const update = (event: Event) => setEnabled(Boolean((event as CustomEvent).detail?.enabled));
-        window.addEventListener(CHANGE_EVENT, update);
-        return () => window.removeEventListener(CHANGE_EVENT, update);
+        window.addEventListener(COMPLETION_CHANGE_EVENT, update);
+        return () => window.removeEventListener(COMPLETION_CHANGE_EVENT, update);
     }, []);
     return enabled;
 }

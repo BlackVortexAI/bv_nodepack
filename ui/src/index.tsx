@@ -10,6 +10,7 @@ import { normalizeRegionId, regionChoices } from "./regional/regionSelector";
 import { documentTargetChoices, resolveDocumentTarget } from "./regional/documentTargets";
 import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled } from "./completion/settings";
 import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
+import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdapter";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -247,6 +248,7 @@ comfyApp.registerExtension({
     name: "bv_nodepack.control_rack_portal",
     setup() {
         ensureMountedOnce();
+        installGlobalTextareaCompletion();
     },
 });
 
