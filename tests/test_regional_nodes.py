@@ -12,6 +12,18 @@ PACKAGE = "bv_nodepack_test"
 
 
 def load_node_module():
+    comfy_nodes = types.ModuleType("nodes")
+
+    class PreviewImage:
+        pass
+
+    class SaveImage:
+        pass
+
+    comfy_nodes.PreviewImage = PreviewImage
+    comfy_nodes.SaveImage = SaveImage
+    sys.modules["nodes"] = comfy_nodes
+
     package = types.ModuleType(PACKAGE)
     package.__path__ = [str(ROOT)]
     sys.modules[PACKAGE] = package
