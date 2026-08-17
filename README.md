@@ -490,6 +490,8 @@ Technical references:
   key during CI to prevent registry metadata drift.
 - Run TypeScript-backed frontend behavior tests through an explicit `tsx`
   loader so the Node 20 validation runner matches local test behavior.
+- Declare the shipped JavaScript test modules as ESM explicitly instead of
+  relying on Node 24 syntax detection that is unavailable in the Node 20 CI job.
 
 ### 2026-08-17 — v0.4.0
 
