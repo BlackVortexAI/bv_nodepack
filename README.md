@@ -482,6 +482,15 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-17 — v0.4.1
+
+- Publish an explicit, documented `node_list.json` so ComfyUI Registry and
+  Manager can identify all 31 nodes despite the pack's dynamic module loader.
+- Validate the manual node list against every declared `NODE_CLASS_MAPPINGS`
+  key during CI to prevent registry metadata drift.
+- Run TypeScript-backed frontend behavior tests through an explicit `tsx`
+  loader so the Node 20 validation runner matches local test behavior.
+
 ### 2026-08-17 — v0.4.0
 
 - Add native Anima LLLite layout control with deterministic regional color images,

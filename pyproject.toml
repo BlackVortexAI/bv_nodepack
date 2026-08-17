@@ -1,6 +1,6 @@
 [project]
 name = "bv_nodepack"
-version = "0.4.0"
+version = "0.4.1"
 description = "Visual regional prompting with Anima attention and LLLite layout backends, structured prompts, Smart Pipes, Subgraph controls, local autocomplete, and workflow utilities for current ComfyUI."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}

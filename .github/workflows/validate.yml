@@ -41,12 +41,13 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      - name: Run frontend behavior tests
-        run: node --test tests/*.test.mjs
-
       - name: Install UI dependencies
         working-directory: ui
         run: npm ci
+
+      - name: Run frontend behavior tests
+        working-directory: ui
+        run: npm test
 
       - name: Type-check UI
         working-directory: ui
