@@ -675,7 +675,7 @@ prompt
 ## Changelog
 
 ### 2026-08-17
-- Add the model-neutral BV Regional Editor and document toolchain.
+- v0.2.0 — Add the model-neutral BV Regional Editor and document toolchain.
 - Add native masked-conditioning and built-in Anima attention backends for standard KSampler workflows.
 - Add Quick Edit plus preview/save image senders with stable editor targeting.
 - Add the first optional prompt-autocomplete provider bridge.
