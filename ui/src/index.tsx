@@ -8,8 +8,12 @@ import QuickPromptEditor from "./regional/QuickPromptEditor";
 import { emptyDocument, parseDocument } from "./regional/model";
 import { normalizeRegionId, regionChoices } from "./regional/regionSelector";
 import { documentTargetChoices, resolveDocumentTarget } from "./regional/documentTargets";
+import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled } from "./completion/settings";
+import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
 const comfyApp = getApp();
 const comfyApi = getApi();
+bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
+bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
 import "./components/control/bv_control_center";
 
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
@@ -248,6 +252,23 @@ comfyApp.registerExtension({
 
 comfyApp.registerExtension({
     name: "bv_nodepack.regional_editor",
+    settings: [{
+        id: COMPLETION_SETTING_ID as any,
+        name: "Enable BV Prompt Autocomplete",
+        type: "boolean",
+        defaultValue: true,
+        category: ["BV Node Pack", "Prompting", "Enable autocomplete"],
+        tooltip: "Enable BV-owned prompt completion. Disable this when another autocomplete extension should control prompt fields.",
+        onChange: (value: boolean) => setCompletionEnabled(Boolean(value)),
+    }, {
+        id: COMPLETION_DATASETS_SETTING_ID as any,
+        name: "Completion Datasets",
+        type: renderCompletionDatasetSetting,
+        defaultValue: "",
+        category: ["BV Node Pack", "Prompting", "Completion datasets"],
+        tooltip: "Choose one or more local CSV/TSV datasets for BV Prompt Autocomplete.",
+        onChange: (value: string) => applyCompletionDatasetSetting(value),
+    }],
     commands: [{
         id: "bv.regional.openEditor",
         label: "Open BV Regional Editor",

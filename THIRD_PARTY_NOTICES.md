@@ -1,5 +1,16 @@
 # Third-party notices
 
+## Baseline completion tag data
+
+`data/completion/bv_default_tags.csv` was sourced from the
+tag-data bundle distributed with
+[`comfy-ex-tagcomplete`](https://github.com/jupo-ai/comfy-ex-tagcomplete),
+snapshot 3.2.0. It contains tag names, category identifiers, usage counts and
+aliases derived from public booru tag indexes. It is included as data, not as
+copied ExTagComplete program code. The original upstream project is MIT licensed;
+the factual source datasets may have separate terms imposed by their respective
+services.
+
 ## Comfyui-Anima-Regional-Conditioning
 
 `py/util/regional/anima_patcher.py` is derived from

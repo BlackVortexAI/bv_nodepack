@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import type { EditorMenu } from "./editorState";
+import { setCompletionEnabled, useCompletionEnabled } from "../completion/settings";
+import DatasetPicker from "../completion/DatasetPicker";
 
 type Props = {
     displayOpacity: number;
@@ -22,6 +24,7 @@ type Props = {
 };
 
 export default function EditorMenus(props: Props) {
+    const autocomplete = useCompletionEnabled();
     const menu = props.openMenu, root = useRef<HTMLDivElement>(null);
     const documentInput = useRef<HTMLInputElement>(null), regionsInput = useRef<HTMLInputElement>(null);
     useEffect(() => {
@@ -37,7 +40,7 @@ export default function EditorMenus(props: Props) {
             <button onClick={() => { props.onExportRegions(); props.onOpenMenu(null); }}>Export Regions</button>
             <button onClick={() => { regionsInput.current?.click(); props.onOpenMenu(null); }}>Add Regions</button>
         </div>}</div>
-        <div className="menu-item"><button onClick={() => toggle("edit")}>Edit</button>{menu === "edit" && <div className="menu-popover"><button disabled={!props.canUndo} onClick={props.onUndo}>Undo <kbd>Ctrl Z</kbd></button><button disabled={!props.canRedo} onClick={props.onRedo}>Redo <kbd>Ctrl Shift Z</kbd></button></div>}</div>
+        <div className="menu-item"><button onClick={() => toggle("edit")}>Edit</button>{menu === "edit" && <div className="menu-popover completion-menu"><button disabled={!props.canUndo} onClick={props.onUndo}>Undo <kbd>Ctrl Z</kbd></button><button disabled={!props.canRedo} onClick={props.onRedo}>Redo <kbd>Ctrl Shift Z</kbd></button><hr/><button className={autocomplete ? "active" : ""} onClick={() => setCompletionEnabled(!autocomplete, true)}>{autocomplete ? "✓ " : ""}Prompt Autocomplete</button><small>Optional. Disable it when using another completion extension.</small><hr/><DatasetPicker/></div>}</div>
         <div className="menu-item"><button onClick={() => toggle("view")}>View</button>{menu === "view" && <div className="menu-popover view-menu"><label>Mask Display <output>{Math.round(props.displayOpacity * 100)} %</output><input type="range" min=".05" max="1" step=".05" value={props.displayOpacity} onChange={event => props.onDisplayOpacity(+event.target.value)}/></label><button disabled={!props.hasSelection} className={props.isolate ? "active" : ""} onClick={props.onToggleIsolate}>Isolate Selection</button><small>Affects the editor display only.</small></div>}</div>
         <div className="menu-item"><button onClick={() => toggle("artboard")}>Artboard</button>{menu === "artboard" && <div className="menu-popover artboard-menu"><label>Width<input type="number" min="1" value={props.canvas.width} onChange={event => props.onCanvas({ ...props.canvas, width: Math.max(1, +event.target.value) })}/></label><label>Height<input type="number" min="1" value={props.canvas.height} onChange={event => props.onCanvas({ ...props.canvas, height: Math.max(1, +event.target.value) })}/></label></div>}</div>
         <div className="menu-item"><button onClick={() => toggle("layers")}>Layers</button>{menu === "layers" && <div className="menu-popover"><button disabled title="Planned feature">Split Disconnected Areas…</button><small>Connected-component detection will follow in a later iteration.</small></div>}</div>

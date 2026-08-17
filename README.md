@@ -511,10 +511,19 @@ The editor document can also be inspected and reused through **Debug**, **Select
 **Anima Adapter** remains available for workflows that intentionally use the
 external Anima regional-conditioning package.
 
-Prompt fields in the full editor and Quick Edit expose an optional autocomplete
-bridge to an installed `comfy-ex-tagcomplete`. The editor remains fully usable
-when that extension is absent. A BV-owned local tag provider and integration with
-ordinary ComfyUI text widgets are planned as later completion backends.
+Prompt fields in the full editor and Quick Edit use the optional BV Local Tags
+provider. It supports legacy four-column CSV data as well as extensible CSV/TSV
+files with descriptions, provenance and future custom metadata. Put a dataset at
+`data/completion/`. The bundled `bv_default_tags.csv` is selected by default, so no other custom-node package
+is required. `BV_COMPLETION_DATASET` may override it with an absolute CSV/TSV path.
+Dataset loading is lazy and cannot prevent the editor from opening.
+Multiple enabled datasets are ordered by priority. For duplicate tags, the
+topmost dataset supplies the completion entry and its metadata.
+
+Autocomplete can be disabled globally in ComfyUI settings or from
+`Edit → Prompt Autocomplete` inside the Regional Editor. Disable it when another
+completion extension should own prompt fields. Integration with ordinary ComfyUI
+text widgets remains a later completion adapter.
 
 See [Regional Editor MVP](docs/regional-editor-mvp.md) for the document contract,
 interaction details, model limitations, and validation scope.
@@ -673,6 +682,11 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-08-17 — v0.3.0
+- Add the BV-owned lazy CSV/TSV completion provider with extensible metadata.
+- Add global and editor-local controls for disabling prompt autocomplete.
+- Bundle `bv_default_tags.csv` so completion has no runtime dependency on another custom-node package.
 
 ### 2026-08-17
 - v0.2.0 — Add the model-neutral BV Regional Editor and document toolchain.

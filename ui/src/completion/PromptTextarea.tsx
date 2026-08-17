@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { collectSuggestions, completionRequest, CompletionContext, CompletionSuggestion, insertSuggestion } from "./engine";
-import { exTagCompleteProvider } from "./exTagProvider";
+import { localCompletionProvider } from "./localProvider";
+import { useCompletionEnabled } from "./settings";
 
 type Props = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; onValue: (value: string) => void; completionContext: CompletionContext };
 
 export default function PromptTextarea({ value, onValue, completionContext, onKeyDown, onBlur, ...props }: Props) {
+    const enabled = useCompletionEnabled();
     const textarea = useRef<HTMLTextAreaElement>(null);
     const [suggestions, setSuggestions] = useState<CompletionSuggestion[]>([]);
     const [selected, setSelected] = useState(0);
@@ -15,6 +17,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
 
     const close = () => { abortRef.current?.abort(); setSuggestions([]); setPopup(null); };
     const search = (text: string, caret: number) => {
+        if (!enabled) return close();
         if (timerRef.current != null) window.clearTimeout(timerRef.current);
         abortRef.current?.abort();
         const request = completionRequest(text, caret, completionContext);
@@ -22,7 +25,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
         if (!request) return close();
         const controller = new AbortController(); abortRef.current = controller;
         timerRef.current = window.setTimeout(async () => {
-            const items = await collectSuggestions(request, [exTagCompleteProvider], controller.signal);
+            const items = await collectSuggestions(request, [localCompletionProvider], controller.signal);
             if (controller.signal.aborted) return;
             const rect = textarea.current?.getBoundingClientRect();
             setSuggestions(items); setSelected(0);
@@ -37,6 +40,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
         requestAnimationFrame(() => { textarea.current?.focus(); textarea.current?.setSelectionRange(next.caret, next.caret); });
     };
 
+    useEffect(() => { if (!enabled) close(); }, [enabled]);
     useEffect(() => () => { abortRef.current?.abort(); if (timerRef.current != null) window.clearTimeout(timerRef.current); }, []);
     return <>
         <textarea {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart); }} onKeyDown={event => {
@@ -47,7 +51,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
             }
             onKeyDown?.(event);
         }} onBlur={event => { window.setTimeout(close, 120); onBlur?.(event); }}/>
-        {popup && <div className="bv-completion-popup" style={{ left: popup.left, top: popup.top, width: popup.width }} role="listbox">
+        {enabled && popup && <div className="bv-completion-popup" style={{ left: popup.left, top: popup.top, width: popup.width }} role="listbox">
             {suggestions.map((item, index) => <button type="button" key={item.id} className={index === selected ? "active" : ""} onMouseDown={event => { event.preventDefault(); accept(index); }}><span>{item.label}</span><small>{[item.category, item.detail, item.source].filter(Boolean).join(" · ")}</small></button>)}
         </div>}
     </>;

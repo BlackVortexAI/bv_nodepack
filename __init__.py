@@ -6,6 +6,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 
 WEB_DIRECTORY = "./js"
 
+try:
+    from .py.util.completion import routes as _completion_routes  # noqa: F401
+except Exception as error:
+    print(f"BV Node Pack: completion API unavailable: {error}")
+
 
 def get_ext_dir(subpath=None, mkdir=False):
     root = Path(__file__).parent

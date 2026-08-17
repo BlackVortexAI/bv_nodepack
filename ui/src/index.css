@@ -142,8 +142,24 @@
 
 .bv-completion-popup { position: fixed; z-index: 2147483647; max-height: 210px; overflow: auto; padding: 4px; background: #15181c; border: 1px solid #ffffff30; border-radius: 6px; box-shadow: 0 10px 32px #000c; }
 .bv-completion-popup button { display: grid; width: 100%; gap: 1px; padding: 6px 8px; color: var(--bv-text-color); text-align: left; background: transparent; border: 0; border-radius: 4px; cursor: pointer; }
-.bv-completion-popup button:hover, .bv-completion-popup button.active { background: var(--bv-primary-color); color: white; }
+.bv-completion-popup button:hover, .bv-completion-popup button.active { background: #245f87; color: #fff; }
+.bv-completion-popup button:hover small, .bv-completion-popup button.active small { color: #dcefff; }
 .bv-completion-popup small { overflow: hidden; color: var(--bv-muted-text-color); text-overflow: ellipsis; white-space: nowrap; }
+.completion-menu { min-width: 320px; }
+.completion-dataset-picker { display: grid; gap: 6px; padding: 5px 8px 8px; }
+.completion-dataset-picker > label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 7px; }
+.completion-dataset-picker > label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.completion-dataset-picker > label small { color: var(--bv-muted-text-color); }
+.completion-dataset-picker .dataset-error { color: #ffaca6; white-space: normal; }
+.bv-settings-datasets { display: grid; gap: 8px; width: min(680px, 100%); }
+.bv-settings-datasets > small { color: var(--descrip-text, #a1a1aa); }
+.bv-settings-datasets > div { display: grid; gap: 6px; }
+.bv-settings-datasets label { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 9px; padding: 7px 9px; border: 1px solid var(--border-color, #ffffff24); border-radius: 6px; }
+.bv-settings-datasets label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bv-settings-datasets label small { color: var(--descrip-text, #a1a1aa); }
+.bv-settings-datasets .dataset-error { color: #ffaca6; }
+.dataset-order { display: inline-flex; gap: 3px; }
+.dataset-order button { min-width: 24px; padding: 1px 5px; }
 .bv-regional-error { margin: 20px; padding: 15px; color: #ffaca6; border: 1px solid #ff756d; border-radius: 6px; }
 
 .editor-menus { display: flex; align-items: center; gap: 2px; }

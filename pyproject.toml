@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
-version = "0.2.0"
-description = "Advanced ComfyUI workflow toolkit featuring a model-neutral regional prompting editor with native and Anima conditioning backends, image feedback senders, structured AST prompts, wireless Smart Pipes, Subgraph-native controls, composable UI nodes, and flexible latent utilities."
+version = "0.3.0"
+description = "Advanced ComfyUI workflow toolkit featuring a model-neutral regional prompting editor, native and Anima conditioning backends, optional local CSV/TSV prompt completion with a bundled default dataset, image feedback senders, structured AST prompts, wireless Smart Pipes, Subgraph-native controls, composable UI nodes, and flexible latent utilities."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]
