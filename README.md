@@ -1,6 +1,6 @@
 # BV Node Pack for ComfyUI
 
-![BV Node Pack hero](docs/assets/registry/bv-nodepack-banner.png)
+![BV Node Pack hero](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/registry/bv-nodepack-banner.png)
 
 BV Node Pack is a collection of deep workflow tools for **regional prompting**,
 **structured prompts**, **Smart Pipes**, **Subgraph interfaces**, reusable graph
@@ -54,7 +54,7 @@ The model-neutral `BV_REGIONAL` document separates authoring from execution. The
 editor stores prompts, geometry and stable identities; compiler nodes translate
 that document for a particular model/backend.
 
-[![Anima regional prompting result](examples/images/anima-android-dance-regional-showcase.png)](examples/images/anima-android-dance-regional-showcase.png)
+[![Anima regional prompting result](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/anima-android-dance-regional-showcase.png)](examples/images/anima-android-dance-regional-showcase.png)
 
 This Anima example uses two independently conditioned androids, small overlapping
 interaction rectangles around their hands and a painted light-arc region. The
@@ -94,33 +94,33 @@ tools, prompts, model behavior, image feedback, document utilities and current l
 
 The node exposes both entry points directly:
 
-![BV Regional Prompt node](docs/assets/regional/regional-prompt-node.png)
+![BV Regional Prompt node](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/regional-prompt-node.png)
 
 The same actions are available from the ComfyUI toolbar for the currently selected
 regional document:
 
-![BV toolbar actions](docs/assets/regional/toolbar-actions.png)
+![BV toolbar actions](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/toolbar-actions.png)
 
-![Open editor toolbar action](docs/assets/regional/toolbar-editor-hover.png)
+![Open editor toolbar action](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/toolbar-editor-hover.png)
 
-![Quick Edit toolbar action](docs/assets/regional/toolbar-quick-hover.png)
+![Quick Edit toolbar action](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/toolbar-quick-hover.png)
 
 Quick Edit provides prompt-only access without opening the artboard:
 
-![Regional Quick Edit](docs/assets/regional/quick-edit.png)
+![Regional Quick Edit](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/quick-edit.png)
 
 </details>
 
 <details>
 <summary><strong>Workspace, floating mode and display controls</strong></summary>
 
-![Regional Editor workspace mode](docs/assets/regional/editor-workspace.png)
+![Regional Editor workspace mode](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/editor-workspace.png)
 
-![Regional Editor floating mode](docs/assets/regional/editor-floating.png)
+![Regional Editor floating mode](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/editor-floating.png)
 
 Mask visibility and background-image opacity are editor-only display settings:
 
-![Regional Editor display controls](docs/assets/regional/view-controls.png)
+![Regional Editor display controls](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/view-controls.png)
 
 </details>
 
@@ -130,22 +130,22 @@ Mask visibility and background-image opacity are editor-only display settings:
 Each character uses a main rectangle plus an independently selectable interaction
 rectangle. The brush region demonstrates a non-rectangular light arc.
 
-![Cyan character main region](docs/assets/regional/region-cyan-main.png)
+![Cyan character main region](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/region-cyan-main.png)
 
-![Cyan interaction region](docs/assets/regional/region-cyan-interaction.png)
+![Cyan interaction region](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/region-cyan-interaction.png)
 
-![Amber character main region](docs/assets/regional/region-amber-main.png)
+![Amber character main region](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/region-amber-main.png)
 
-![Amber interaction region](docs/assets/regional/region-amber-interaction.png)
+![Amber interaction region](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/region-amber-interaction.png)
 
-![Painted light arc region](docs/assets/regional/region-brush-arc.png)
+![Painted light arc region](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/region-brush-arc.png)
 
 </details>
 
 <details>
 <summary><strong>Minimal Anima workflow</strong></summary>
 
-![Anima regional workflow](docs/assets/regional/anima-workflow.png)
+![Anima regional workflow](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/anima-workflow.png)
 
 </details>
 
@@ -183,18 +183,18 @@ An absolute dataset may be forced with the `BV_COMPLETION_DATASET` environment v
 <details>
 <summary><strong>Autocomplete in Quick Edit, the full editor and native multiline widgets</strong></summary>
 
-![Autocomplete in Quick Edit](docs/assets/regional/autocomplete-quick-edit.png)
+![Autocomplete in Quick Edit](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/autocomplete-quick-edit.png)
 
-![Autocomplete in the full Regional Editor](docs/assets/regional/autocomplete-editor.png)
+![Autocomplete in the full Regional Editor](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/autocomplete-editor.png)
 
-![Autocomplete in a native multiline widget](docs/assets/regional/autocomplete-multiline.png)
+![Autocomplete in a native multiline widget](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/autocomplete-multiline.png)
 
 </details>
 
 <details>
 <summary><strong>Dataset selection, priority and global enable switch</strong></summary>
 
-![BV Prompt Autocomplete settings](docs/assets/regional/completion-settings.png)
+![BV Prompt Autocomplete settings](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/regional/completion-settings.png)
 
 </details>
 
@@ -220,7 +220,7 @@ Inherited slots can be passed through unchanged or overridden at the current nod
 Because every slot has a stable logical identity, downstream connections continue to
 refer to the correct value even when labels change or an upstream slot is temporarily missing.
 
-[![Smart Pipe wireless merge](examples/images/smart-pipe-wireless-merge.png)](examples/images/smart-pipe-wireless-merge.png)
+[![Smart Pipe wireless merge](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/smart-pipe-wireless-merge.png)](examples/images/smart-pipe-wireless-merge.png)
 
 - Wired and wireless routing can be mixed.
 - Each branch inherits only its own upstream slots and can grow independently.
@@ -241,7 +241,7 @@ Configure slots through **Configure Smart Pipe**. The legacy **BV Pipe Config** 
 
 Prompt AST nodes preserve semantic categories instead of repeatedly parsing flattened text.
 
-[![Prompt AST categories](examples/images/prompt-ast-categories.png)](examples/images/prompt-ast-categories.png)
+[![Prompt AST categories](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/prompt-ast-categories.png)](examples/images/prompt-ast-categories.png)
 
 | Node | Purpose |
 | --- | --- |
@@ -257,7 +257,7 @@ See the **[Prompt AST syntax and markup guide](docs/prompt-ast-guide.md)**.
 These nodes build readable, purpose-specific Subgraph surfaces instead of exposing
 an undifferentiated list of widgets.
 
-[![Subgraph UI layout](examples/images/subgraph-ui-layout.png)](examples/images/subgraph-ui-layout.png)
+[![Subgraph UI layout](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/subgraph-ui-layout.png)](examples/images/subgraph-ui-layout.png)
 
 | Node | Purpose |
 | --- | --- |
@@ -283,33 +283,33 @@ To project one of these presentation nodes onto a Subgraph interface:
 
 The heading input is exposed between the controls that should appear above and below it.
 
-![Heading wired inside a Subgraph](docs/screenshots/bv_subgraph_heading_in_subgraph.png)
+![Heading wired inside a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_subgraph_heading_in_subgraph.png)
 
 The parent Subgraph node renders that exposed position as a heading:
 
-![Heading rendered on a Subgraph](docs/screenshots/bv_subgraph_heading_subgraph.png)
+![Heading rendered on a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_subgraph_heading_subgraph.png)
 
 The heading text, font size and optional divider remain configurable on the inner node:
 
-![Editing a Subgraph heading](docs/screenshots/bv_subgraph_heading_edit.png)
+![Editing a Subgraph heading](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_subgraph_heading_edit.png)
 
 </details>
 
 <details>
 <summary><strong>Divider: internal wiring and resulting Subgraph</strong></summary>
 
-![Divider wired inside a Subgraph](docs/screenshots/bv_divider_in_subgraph.png)
+![Divider wired inside a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_divider_in_subgraph.png)
 
-![Divider rendered on a Subgraph](docs/screenshots/bv_divider_subgraph.png)
+![Divider rendered on a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_divider_subgraph.png)
 
 </details>
 
 <details>
 <summary><strong>Spacer: internal wiring and resulting Subgraph</strong></summary>
 
-![Spacer wired inside a Subgraph](docs/screenshots/bv_spacer_in_subgraph.png)
+![Spacer wired inside a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_spacer_in_subgraph.png)
 
-![Spacer rendered on a Subgraph](docs/screenshots/bv_spacer_subgraph.png)
+![Spacer rendered on a Subgraph](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/screenshots/bv_spacer_subgraph.png)
 
 </details>
 
@@ -318,7 +318,7 @@ The heading text, font size and optional divider remain configurable on the inne
 **BV Control Center** defines named workflow states and applies explicit
 `Activate`, `Mute` or `Bypass` actions to graph/Subgraph groups.
 
-[![Control Center workflow states](examples/images/control-center-workflow-states.png)](examples/images/control-center-workflow-states.png)
+[![Control Center workflow states](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/control-center-workflow-states.png)](examples/images/control-center-workflow-states.png)
 
 - Multiple Control Center nodes remain synchronized.
 - Groups are discovered recursively in the root graph and inside Subgraphs,
@@ -337,7 +337,7 @@ The heading text, font size and optional divider remain configurable on the inne
 Each named state can assign `Activate`, `Mute` or `Bypass` to any discovered root
 or Subgraph group.
 
-![Control Center configuration](examples/images/control-center-config.png)
+![Control Center configuration](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/control-center-config.png)
 
 </details>
 
@@ -350,7 +350,7 @@ or Subgraph group.
 | BV Seed | Provides fixed, random-each-queue and last-queued modes with Subgraph projection |
 | BV Hex Color To Int | Converts three- or six-digit hex colors to integers |
 
-[![Random-ratio latent](examples/images/empty-latent-random-ratio.png)](examples/images/empty-latent-random-ratio.png)
+[![Random-ratio latent](https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/examples/images/empty-latent-random-ratio.png)](examples/images/empty-latent-random-ratio.png)
 
 `BV Latent Random Aspect Ratio` is deprecated but retained for workflow compatibility.
 
@@ -404,6 +404,11 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-17 — v0.3.4
+
+- Use explicit Raw GitHub URLs for every README image instead of relying on
+  repository-relative image resolution.
 
 ### 2026-08-17 — v0.3.3
 
