@@ -1,6 +1,6 @@
 # BV Node Pack for ComfyUI
 
-![BV Node Pack hero](docs/assets/bv-nodepack-hero.svg)
+![BV Node Pack hero](docs/assets/registry/bv-nodepack-banner.png)
 
 BV Node Pack is a collection of deep workflow tools for **regional prompting**,
 **structured prompts**, **Smart Pipes**, **Subgraph interfaces**, reusable graph
@@ -404,6 +404,10 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-17 — v0.3.3
+
+- Use the Registry PNG banner for reliable README rendering on GitHub and mirrors.
 
 ### 2026-08-17 — v0.3.2
 
