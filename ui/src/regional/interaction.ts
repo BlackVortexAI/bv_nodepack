@@ -1,4 +1,15 @@
 export type ScreenPoint = { x: number; y: number };
+type BrushLayerCandidate = {
+    id: string;
+    enabled: boolean;
+    authoring: { locked: boolean };
+    geometries: Array<{ type: string }>;
+};
+
+export function brushAddLayerTarget(layer: BrushLayerCandidate | null) {
+    if (!layer || !layer.enabled || layer.authoring.locked) return null;
+    return layer.geometries.some(geometry => geometry.type === "brush_stroke") ? layer.id : null;
+}
 
 export function shouldStartSelectionMove(start: ScreenPoint, current: ScreenPoint, threshold = 3) {
     return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;

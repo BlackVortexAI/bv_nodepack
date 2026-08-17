@@ -21,7 +21,6 @@ In Version 1 ist nur die Overlap-Semantik `joint` ausführbar. Die reservierten 
 - `BV Regional Preview Send` (interne kompatible Klassenkennung `BV Regional Image Send`): sendet ein temporäres Preview-Ergebnis an den Editor eines ausgewählten `BV Regional Prompt`. Die sichtbare Auswahl verwendet Node-Titel und Node-ID, während intern die stabile `document_id` gespeichert wird. Bei mehreren ausgeführten Sendern gewinnt das zuletzt beim Frontend eingetroffene Ergebnis; entfernte Ziele werden nicht stillschweigend auf ein anderes Dokument umgebogen.
 - `BV Regional Save Send` (interne Klassenkennung `BV Regional Image Save`): speichert das Bild regulär im ComfyUI-Output, sendet dasselbe gespeicherte Ergebnis an den ausgewählten Editor und reicht das Bild am Ausgang weiter. Zielauflösung und Last-Sender-Wins-Semantik entsprechen der Preview-Variante.
   Das modellbezogene Backend wird erst beim Ausführen dieser Node importiert. Fehlende optionale Abhängigkeiten oder inkompatible ComfyUI-Patcher-Schnittstellen dürfen deshalb nicht die Registrierung des übrigen BV NodePacks verhindern.
-- `BV Regional Image Send`: IMAGE-Passthrough, das eine temporäre Preview an eine `document_id` sendet. Pro Dokument gewinnt die zuletzt ausgeführte Sender-Node.
 
 ## Editor-Verhalten
 
@@ -75,23 +74,23 @@ Geometrieebenen besitzen dafür rückwärtskompatible optionale Felder `enabled`
 
 ## Hintergrundbilder
 
-`BV Regional Image Send` speichert ausschließlich eine ComfyUI-Temp-Preview. Die Browser-Session ordnet das letzte Ergebnis anhand der `document_id` zu. Das Bild wird nicht in `BV_REGIONAL` und nicht als Base64 im Workflow persistiert. Ein Workflow-Reload beginnt daher absichtlich ohne Sender-Hintergrund, bis die Sender-Node erneut ausgeführt wird.
+`BV Regional Preview Send` speichert ausschließlich eine ComfyUI-Temp-Preview. Die Browser-Session ordnet das letzte Ergebnis anhand der `document_id` zu. Das Bild wird nicht in `BV_REGIONAL` und nicht als Base64 im Workflow persistiert. Ein Workflow-Reload beginnt daher absichtlich ohne Sender-Hintergrund, bis die Sender-Node erneut ausgeführt wird.
 
-## Geplante Editor-Erweiterungen
+## Prompt-Bearbeitung und Completion
 
 ### Prompt-Schnellbearbeitung
 
-Ohne den vollständigen Editor zu öffnen, soll eine kompakte Prompt-Palette erreichbar sein. Sie bietet direkte Ziele für Global, Background und jede Region und zeigt jeweils Positive und Negative als editierbare Textfelder. Die Zielauswahl verwendet sichtbare Namen, speichert intern jedoch stabile IDs. Änderungen laufen durch dieselbe Validierungs-, AST- und Undo-Pipeline wie Änderungen im vollständigen Editor; es entsteht keine zweite Prompt-Datenquelle.
+Ohne den vollständigen Editor zu öffnen, ist eine kompakte Prompt-Palette erreichbar. Sie bietet direkte Ziele für Global, Background und jede Region und zeigt jeweils Positive und Negative als editierbare Textfelder. Die Zielauswahl verwendet sichtbare Namen, speichert intern jedoch stabile IDs. Änderungen laufen durch dieselbe Validierungs- und Dokumentpipeline wie Änderungen im vollständigen Editor; es entsteht keine zweite Prompt-Datenquelle.
 
-Die Schnellbearbeitung soll sowohl über die jeweilige `BV Regional Prompt`-Node als auch über die globale Action-Bar-Oberfläche für das aktuell gewählte Dokument erreichbar sein. Bei mehreren Editor-Nodes muss vor dem Bearbeiten eindeutig sichtbar sein, welches Dokument aktiv ist.
+Die Schnellbearbeitung ist sowohl über die jeweilige `BV Regional Prompt`-Node als auch über die globale Action-Bar-Oberfläche erreichbar. Bei mehreren Editor-Nodes zeigt die Dokumentauswahl eindeutig, welches Dokument aktiv ist; das zuletzt gewählte Prompt-Ziel wird pro Dokument gespeichert.
 
 ### Autovervollständigung und Textassistenz
 
-Die Promptfelder verwenden `BV Global Completion`, ein nodepack-weites Completion-Modul mit austauschbarer Suggestion-Provider-Schnittstelle. Dieselbe Engine integriert neben BV React-Editoren auch geeignete klassische ComfyUI- und Nodes-2.0-Multiline-Widgets, sodass Benutzer kein zweites Completion-System benötigen. Details und Integrationsverträge stehen in `docs/specs/bv-global-completion.md`.
+Die Promptfelder verwenden `BV Global Completion`, ein nodepack-weites Completion-Modul mit austauschbarer Suggestion-Provider-Schnittstelle. Dieselbe Engine integriert neben BV React-Editoren auch geeignete klassische ComfyUI- und Nodes-2.0-Multiline-Widgets. Sie verwendet lokale CSV-/TSV-Datasets, unterstützt priorisierte Quellen und kann global oder im Editor deaktiviert werden. Details und Integrationsverträge stehen in `docs/specs/bv-global-completion.md`.
 
 `comfy-ex-tagcomplete` und vergleichbare Widget-Extensions können abgekoppelte React-/Floating-Textfelder nicht über einen gemeinsamen stabilen nativen Opt-in-Hook registrieren. BV emuliert deshalb weder Node-DOM noch importiert es private Frontendklassen fremder Extensions. Normale `<textarea>`-Semantik und bubbling `input`-Events bleiben für allgemeine Interoperabilität erhalten. Bridges zu einzelnen Fremdsystemen sind außerhalb des MVP als optionale Adapter denkbar, dürfen aber weder Kernfunktion noch lokales Datenformat bestimmen.
 
-Das Completion-System wird von Beginn an für weitere Providerklassen vorbereitet: lokale Tagdaten, Embeddings, LoRAs, Wildcards, AST-/Kontextvorschläge sowie später Rechtschreib-, Übersetzungs- oder Sprachassistenz. Vorschläge verändern den kanonischen Prompt niemals ohne explizite Benutzerübernahme und jede Übernahme muss über den normalen Editor-Undo-Pfad rückgängig sein.
+Das Completion-System ist für weitere Providerklassen vorbereitet: Embeddings, LoRAs, Wildcards, AST-/Kontextvorschläge sowie später Rechtschreib-, Übersetzungs- oder Sprachassistenz. Vorschläge verändern den kanonischen Prompt niemals ohne explizite Benutzerübernahme.
 
 Rechtschreib- oder Sprachkorrektur wird als separater optionaler Text-Assistant vorgesehen. Sie darf niemals ungefragt den kanonischen Prompt verändern und muss Vorschlag, Übernahme und Rücknahme klar trennen. Eine mögliche TextLab-Integration wird erst nach Prüfung ihrer konkreten Schnittstelle festgelegt.
 
@@ -112,7 +111,7 @@ Interaktiv verifiziert:
 - Krea 2 über `BV Regional Native Conditioning`: lokale Farb-/Musterzuordnung und Prompt-Swap funktionieren; getrennte Instanzerzeugung ohne Global-Komposition bleibt eine Grenze des nativen Backends.
 - Anima über den eingebauten `BV Regional Anima Conditioning`-Patcher: zwei getrennte Charaktere, regionale Haar-/Outfit-Zuordnung, Background-Routing und normaler KSampler funktionieren im realen GPU-Lauf. Der externe Sen-sou-Apply-Node war dabei nicht Bestandteil des Ausführungspfads.
 
-Vor dem ersten Release noch interaktiv in ComfyUI prüfen:
+Interaktive Smoke-Test-Matrix für Releases:
 
 1. Node anlegen, Editor über Node und Action Bar öffnen.
 2. Zwei `BV Regional Prompt`-Nodes anlegen und im Editor wechseln.

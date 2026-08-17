@@ -18,14 +18,23 @@ test("editor state is isolated by stable document id", () => {
 });
 
 test("invalid persisted values are normalized without entering semantic document data", () => {
-    const normalized = normalizeEditorState({ mode: "garbage", panels: { left: -1, right: 9000 }, artboard: { zoom: 99 }, displayOpacity: -4 }, viewport);
+    const normalized = normalizeEditorState({ mode: "garbage", panels: { left: -1, right: 9000 }, artboard: { zoom: 99 }, displayOpacity: -4, backgroundOpacity: 4 }, viewport);
     assert.equal(normalized.version, 1);
     assert.equal(normalized.mode, "workspace");
     assert.deepEqual(normalized.panels, { left: 210, right: 620 });
     assert.equal(normalized.artboard.zoom, 8);
     assert.equal(normalized.displayOpacity, .05);
+    assert.equal(normalized.backgroundOpacity, 1);
     assert.equal(normalized.openMenu, null);
     assert.equal("document_id" in normalized, false);
+});
+
+test("background display opacity survives save and reload per document", () => {
+    const storage = memoryStorage(), state = defaultEditorState(viewport);
+    state.backgroundOpacity = .35;
+    saveEditorState("doc", state, storage);
+    assert.equal(loadEditorState("doc", storage, viewport).backgroundOpacity, .35);
+    assert.equal(loadEditorState("other-doc", storage, viewport).backgroundOpacity, 1);
 });
 
 test("floating windows remain recoverable after viewport changes", () => {

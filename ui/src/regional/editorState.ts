@@ -13,6 +13,7 @@ export type EditorViewState = {
     selectedRegionId: string | null;
     selectedLayerId: string | null;
     displayOpacity: number;
+    backgroundOpacity: number;
     isolate: boolean;
     tool: Tool;
     brush: BrushSettings;
@@ -83,6 +84,7 @@ export function defaultEditorState(viewport = { width: window.innerWidth, height
         selectedRegionId: null,
         selectedLayerId: null,
         displayOpacity: .5,
+        backgroundOpacity: 1,
         isolate: false,
         tool: "select",
         brush: { size: .04, hardness: .75, opacity: 1, shape: "round", pressureMode: "constant" },
@@ -117,6 +119,7 @@ export function normalizeEditorState(value: unknown, viewport = { width: window.
         selectedRegionId: typeof input.selectedRegionId === "string" ? input.selectedRegionId : null,
         selectedLayerId: typeof input.selectedLayerId === "string" ? input.selectedLayerId : null,
         displayOpacity: clamp(finite(input.displayOpacity, .5), .05, 1),
+        backgroundOpacity: clamp(finite(input.backgroundOpacity, 1), 0, 1),
         isolate: input.isolate === true,
         tool: tools.includes(input.tool as Tool) ? input.tool as Tool : "select",
         brush: {

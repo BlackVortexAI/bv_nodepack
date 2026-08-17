@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-labelledby="title desc">
+  <title id="title">BV Node Pack for ComfyUI</title>
+  <desc id="desc">A dark ComfyUI-inspired workflow showing regional prompting, structured prompts, smart pipes and subgraph controls.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0f14"/><stop offset="1" stop-color="#151c26"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#269ee8"/><stop offset="1" stop-color="#7667f5"/></linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity=".045"/></pattern>
+    <filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity=".55"/></filter>
+  </defs>
+  <rect width="1600" height="640" rx="34" fill="url(#bg)"/>
+  <rect width="1600" height="640" rx="34" fill="url(#grid)"/>
+  <circle cx="1360" cy="80" r="260" fill="#269ee8" opacity=".08"/>
+  <circle cx="180" cy="590" r="300" fill="#7667f5" opacity=".08"/>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g transform="translate(90 92)">
+      <circle cx="34" cy="34" r="34" fill="url(#accent)"/>
+      <path d="M19 35c8-18 26-18 31-5 5 14-13 27-25 17-9-7-3-23 11-21 9 2 9 13 1 15" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+      <text x="92" y="34" fill="#fff" font-size="48" font-weight="750">BV Node Pack</text>
+      <text x="94" y="70" fill="#a9b8ca" font-size="22">Deep workflow tools for ComfyUI</text>
+    </g>
+
+    <g filter="url(#shadow)">
+      <g transform="translate(92 240)">
+        <rect width="315" height="230" rx="14" fill="#222831" stroke="#4c78a8" stroke-width="2"/>
+        <rect width="315" height="48" rx="14" fill="#2b3440"/><rect y="36" width="315" height="12" fill="#2b3440"/>
+        <circle cx="25" cy="24" r="8" fill="#4c78a8"/><text x="45" y="31" fill="#fff" font-size="20" font-weight="650">Regional Prompt</text>
+        <text x="24" y="84" fill="#93a4b7" font-size="15">GLOBAL</text><rect x="24" y="98" width="267" height="35" rx="6" fill="#151a20"/>
+        <text x="24" y="164" fill="#93a4b7" font-size="15">REGIONS</text>
+        <rect x="24" y="178" width="118" height="28" rx="6" fill="#e45756" opacity=".75"/><rect x="154" y="178" width="137" height="28" rx="6" fill="#4c78a8" opacity=".85"/>
+        <circle cx="315" cy="82" r="7" fill="#64dc85"/>
+      </g>
+
+      <g transform="translate(500 208)">
+        <rect width="600" height="300" rx="16" fill="#181d24" stroke="#394555" stroke-width="2"/>
+        <rect width="600" height="48" rx="16" fill="#232a33"/><rect y="36" width="600" height="12" fill="#232a33"/>
+        <text x="24" y="31" fill="#fff" font-size="19" font-weight="650">BV Regional Editor</text>
+        <rect x="22" y="68" width="140" height="204" rx="8" fill="#101419" stroke="#303946"/>
+        <text x="38" y="98" fill="#b8c5d3" font-size="14">LAYERS</text>
+        <rect x="38" y="116" width="108" height="30" rx="5" fill="#e45756" opacity=".72"/><rect x="38" y="156" width="108" height="30" rx="5" fill="#4c78a8" opacity=".8"/>
+        <rect x="182" y="68" width="270" height="204" rx="8" fill="#0c1015" stroke="#303946"/>
+        <rect x="214" y="94" width="206" height="152" rx="4" fill="#252c34"/>
+        <rect x="228" y="109" width="90" height="122" fill="#e45756" opacity=".55"/><rect x="304" y="120" width="102" height="111" fill="#4c78a8" opacity=".62"/>
+        <rect x="472" y="68" width="106" height="204" rx="8" fill="#101419" stroke="#303946"/>
+        <text x="486" y="98" fill="#b8c5d3" font-size="14">PROMPT</text>
+        <rect x="486" y="114" width="78" height="62" rx="5" fill="#191f27"/><rect x="486" y="186" width="78" height="62" rx="5" fill="#191f27"/>
+      </g>
+
+      <g transform="translate(1195 250)">
+        <rect width="310" height="188" rx="14" fill="#222831" stroke="#7667f5" stroke-width="2"/>
+        <rect width="310" height="46" rx="14" fill="#2b3440"/><rect y="34" width="310" height="12" fill="#2b3440"/>
+        <circle cx="24" cy="23" r="8" fill="#7667f5"/><text x="44" y="30" fill="#fff" font-size="19" font-weight="650">Anima Conditioning</text>
+        <text x="22" y="83" fill="#9faec0" font-size="14">MODEL</text><circle cx="0" cy="78" r="7" fill="#b58bd8"/>
+        <text x="22" y="117" fill="#9faec0" font-size="14">CLIP</text><circle cx="0" cy="112" r="7" fill="#f4df45"/>
+        <text x="22" y="151" fill="#9faec0" font-size="14">BV_REGIONAL</text><circle cx="0" cy="146" r="7" fill="#64dc85"/>
+        <circle cx="310" cy="82" r="7" fill="#b58bd8"/><circle cx="310" cy="116" r="7" fill="#f4a340"/><circle cx="310" cy="150" r="7" fill="#f4a340"/>
+      </g>
+    </g>
+
+    <path d="M407 322C450 322 455 350 500 350" fill="none" stroke="#64dc85" stroke-width="5" opacity=".9"/>
+    <path d="M1100 358C1142 358 1152 396 1195 396" fill="none" stroke="#64dc85" stroke-width="5" opacity=".9"/>
+    <text x="800" y="574" text-anchor="middle" fill="#d9e4ef" font-size="20">Regional prompting · Prompt AST · Smart Pipes · Subgraph UI · Local autocomplete</text>
+  </g>
+</svg>

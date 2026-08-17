@@ -33,6 +33,9 @@ export const newRegion = (index: number): Region => ({
     authoring: { visible: true, locked: false, color: COLORS[index % COLORS.length] },
 });
 export const clone = <T,>(value: T): T => structuredClone(value);
+export function preserveDocumentIdentity<T extends { document_id: string }>(imported: T, documentId: string): T {
+    return { ...imported, document_id: documentId };
+}
 export const geometryAuthoring = (geometry: Geometry, index = 0): GeometryAuthoring => geometry.authoring ?? { name: `${geometry.type === "rect" ? "Rectangle" : "Brush"} ${index + 1}`, visible: true, locked: false };
 export const geometryLayerId = (geometry: Geometry) => geometry.layer_id ?? geometry.id;
 export function geometryLayers(region: Region): GeometryLayer[] {

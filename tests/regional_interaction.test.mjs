@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
+import { brushAddLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
 
 test("select ignores pointer jitter instead of mutating a compound brush mask", () => {
     assert.equal(shouldStartSelectionMove({ x: 100, y: 100 }, { x: 101, y: 101 }), false);
@@ -27,4 +27,16 @@ test("only drawing appends the pointer-up point to a brush stroke", () => {
     assert.equal(shouldAppendFinalBrushPoint("draw-brush"), true);
     assert.equal(shouldAppendFinalBrushPoint("move"), false);
     assert.equal(shouldAppendFinalBrushPoint("resize"), false);
+});
+
+test("brush add extends the selected editable brush layer", () => {
+    const layer = { id: "brush-layer", enabled: true, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] };
+    assert.equal(brushAddLayerTarget(layer), "brush-layer");
+});
+
+test("brush add creates a layer when the selection cannot be extended", () => {
+    assert.equal(brushAddLayerTarget(null), null);
+    assert.equal(brushAddLayerTarget({ id: "rectangle", enabled: true, authoring: { locked: false }, geometries: [{ type: "rect" }] }), null);
+    assert.equal(brushAddLayerTarget({ id: "locked", enabled: true, authoring: { locked: true }, geometries: [{ type: "brush_stroke" }] }), null);
+    assert.equal(brushAddLayerTarget({ id: "disabled", enabled: false, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] }), null);
 });

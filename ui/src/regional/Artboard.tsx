@@ -17,6 +17,7 @@ type Props = {
     brush: BrushSettings;
     canSubtract: boolean;
     displayOpacity: number;
+    backgroundOpacity: number;
     isolate: boolean;
     onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
     onPointerMove: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -103,9 +104,18 @@ export default function Artboard(props: Props) {
         <ToolPalette tool={props.tool} brush={props.brush} canSubtract={props.canSubtract} canvas={document.canvas} onTool={props.onTool} onBrush={props.onBrush}/>
         <div className="artboard-stage" style={{ width: document.canvas.width, height: document.canvas.height, transform: `translate(${stageLeft}px, ${stageTop}px) scale(${zoom})` }}><div
         className={`bv-regional-canvas tool-${props.tool}`}
-        style={{ width: document.canvas.width, height: document.canvas.height, backgroundImage: props.background ? `linear-gradient(#0002,#0002), url(${JSON.stringify(props.background)})` : undefined, backgroundSize: props.background ? "cover" : undefined }}
+        style={{ width: document.canvas.width, height: document.canvas.height }}
         onPointerDown={props.onPointerDown} onPointerMove={props.onPointerMove} onPointerUp={props.onPointerUp} onPointerCancel={props.onPointerCancel} onPointerLeave={props.onPointerLeave}
     >
+        {props.background && (
+          <div
+            className="bv-background-image"
+            style={{
+              backgroundImage: `linear-gradient(#0002,#0002), url(${JSON.stringify(props.background)})`,
+              opacity: props.backgroundOpacity,
+            }}
+          />
+        )}
         <svg className="bv-composition" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">{regionsInPaintOrder(document.regions.filter(region => region.enabled && region.authoring.visible)).map(region => <RegionMask key={region.id} region={region} geometries={geometriesFor(region)} canvas={document.canvas} opacity={props.displayOpacity}/>)}</svg>
         {props.selectionBounds && <svg className="bv-selection-overlay" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">
             <rect className="brush-bounds" x={props.selectionBounds.x * document.canvas.width} y={props.selectionBounds.y * document.canvas.height} width={props.selectionBounds.width * document.canvas.width} height={props.selectionBounds.height * document.canvas.height}/>

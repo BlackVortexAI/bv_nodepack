@@ -1,5 +1,10 @@
 # Third-party notices
 
+This file records third-party code or data incorporated into BV Node Pack and the
+licenses or provenance obligations that accompany it. Projects that influenced
+design or research without contributing copied code are acknowledged separately
+below and in the README.
+
 ## Baseline completion tag data
 
 `data/completion/bv_default_tags.csv` was sourced from the
@@ -37,3 +42,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Inspiration and research acknowledgements
+
+The following projects informed product design, interoperability research or
+architecture discussions. They are not bundled runtime dependencies, and no copied
+implementation is claimed unless another section of this file says otherwise.
+
+- [`rgthree-comfy`](https://github.com/rgthree/rgthree-comfy): compact workflow,
+  control and seed interaction patterns.
+- [`ComfyUI_agilly1989_motorway`](https://github.com/agilly1989/ComfyUI_agilly1989_motorway):
+  the original inspiration for configurable, user-named values carried and
+  overridden along BV Pipe chains.
+- [`cg-use-everywhere`](https://github.com/chrisgoringe/cg-use-everywhere):
+  wireless value broadcasting and routing-control concepts that informed the
+  Smart Pipe wireless design.
+- [`ComfyUI-KJNodes`](https://github.com/kijai/ComfyUI-KJNodes): the Ideogram
+  prompt-builder editor and detached authoring workflow.
+- [`ComfyUI_LC123_nodes`](https://github.com/lonecatone23/ComfyUI_LC123_nodes):
+  painted regional authoring plus Krea 2 and Anima workflow references.
+- [`RES4LYF`](https://github.com/ClownsharkBatwing/RES4LYF): clean-room research
+  reference for regional attention, overlap semantics and backend boundaries.
+- [`comfy-ex-tagcomplete`](https://github.com/jupo-ai/comfy-ex-tagcomplete):
+  completion interoperability and UX research. Its bundled tag-data relationship
+  is documented in the first section of this file.

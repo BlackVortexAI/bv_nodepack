@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
-version = "0.3.1"
-description = "Advanced ComfyUI workflow toolkit featuring a model-neutral regional prompting editor, native and Anima conditioning backends, optional local CSV/TSV prompt completion for BV and ordinary ComfyUI multiline fields, image feedback senders, structured AST prompts, wireless Smart Pipes, Subgraph-native controls, composable UI nodes, and flexible latent utilities."
+version = "0.3.2"
+description = "Regional prompting, structured prompts, Smart Pipes, Subgraph controls, local autocomplete, and workflow utilities for current ComfyUI."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]
@@ -18,4 +18,5 @@ Documentation = "https://github.com/BlackVortexAI/bv_nodepack/wiki"
 [tool.comfy]
 PublisherId = "blackvortex"
 DisplayName = "BV-NodePack"
-Icon = ""
+Icon = "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/registry/bv-nodepack-icon.png"
+Banner = "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/docs/assets/registry/bv-nodepack-banner.png"
