@@ -1,0 +1,33 @@
+import React from "react";
+import { Bounds } from "./geometry";
+import { GeometryLayer, PromptPair, Region } from "./model";
+import PromptTextarea from "../completion/PromptTextarea";
+
+type Props = {
+    region: Region | null;
+    layer: GeometryLayer | null;
+    bounds: Bounds | null;
+    canvas: { width: number; height: number };
+    globalPrompts: PromptPair;
+    backgroundPrompts: PromptPair;
+    negativeMode: "auto" | "prompt" | "zero_out";
+    onNegativeMode: (value: Props["negativeMode"]) => void;
+    onGlobalPrompts: (value: PromptPair) => void;
+    onBackgroundPrompts: (value: PromptPair) => void;
+    onRegion: (fn: (region: Region) => void) => void;
+    onLayerBounds: (bounds: Bounds) => void;
+    onBrushSetting: (field: "size" | "hardness" | "opacity" | "shape" | "pressure_mode", value: number | string) => void;
+    promptSections: { region: boolean; global: boolean; background: boolean };
+    onPromptSection: (section: keyof Props["promptSections"], open: boolean) => void;
+};
+
+const PromptEditor = ({ title, scope, value, open, onOpen, onChange }: { title: string; scope: "global" | "background" | "region"; value: PromptPair; open: boolean; onOpen: (open: boolean) => void; onChange: (value: PromptPair) => void }) => <details open={open} onToggle={event => onOpen(event.currentTarget.open)}><summary>{title}</summary><label>Positive<PromptTextarea value={value.positive_source} onValue={positive_source => onChange({ ...value, positive_source })} completionContext={{ scope, polarity: "positive" }}/></label><label>Negative<PromptTextarea value={value.negative_source} onValue={negative_source => onChange({ ...value, negative_source })} completionContext={{ scope, polarity: "negative" }}/></label></details>;
+
+export default function OptionsPanel(props: Props) {
+    const brush = props.layer?.geometries.find(geometry => geometry.type === "brush_stroke");
+    return <aside className="inspector">
+        {props.layer && props.bounds ? <section className="option-section"><h3>Layer</h3><div className="bounds-grid">{(["x", "y", "width", "height"] as const).map(key => <label key={key}>{key}<input type="number" min="0" max="1" step=".001" value={+props.bounds![key].toFixed(4)} onChange={event => props.onLayerBounds({ ...props.bounds!, [key]: +event.target.value })}/></label>)}</div>{brush && <><label title="Changes the width of all existing brush strokes in the selected layer. Positions and paths remain unchanged.">Existing Stroke Width<input type="number" min=".001" max="1" step=".005" value={brush.size} onChange={event => props.onBrushSetting("size", +event.target.value)}/><small className="stroke-width-meta">{brush.size.toFixed(3)} canvas ratio · ≈ {Math.round(brush.size * Math.min(props.canvas.width, props.canvas.height))} px</small></label><label>Hardness<input type="number" min="0" max="1" step=".05" value={brush.hardness} onChange={event => props.onBrushSetting("hardness", +event.target.value)}/></label><label>Opacity<input type="number" min="0" max="1" step=".05" value={brush.opacity} onChange={event => props.onBrushSetting("opacity", +event.target.value)}/></label><label>Shape<select value={brush.shape ?? "round"} onChange={event => props.onBrushSetting("shape", event.target.value)}><option value="round">Round</option><option value="square">Square</option></select></label><label>Pressure<select value={brush.pressure_mode ?? "constant"} onChange={event => props.onBrushSetting("pressure_mode", event.target.value)}><option value="constant">Constant</option><option value="stylus">Stylus</option></select></label></>}</section> : <p className="option-hint">Select a layer on the left or create new geometry.</p>}
+        {props.region && <section className="option-section"><h3>Region</h3><label>Strength<input type="number" min="0" max="10" step=".05" value={props.region.strength} onChange={event => props.onRegion(region => { region.strength = +event.target.value; })}/></label><label>Feather<input type="number" min="0" max=".5" step=".005" value={props.region.mask.feather} onChange={event => props.onRegion(region => { region.mask.feather = +event.target.value; })}/></label><PromptEditor title="Region Prompt" scope="region" value={props.region.prompts} open={props.promptSections.region} onOpen={open => props.onPromptSection("region", open)} onChange={value => props.onRegion(region => { region.prompts = value; })}/></section>}
+        <section className="option-section"><h3>Document Prompts</h3><label>Negative Mode<select value={props.negativeMode} onChange={event => props.onNegativeMode(event.target.value as Props["negativeMode"])}><option value="auto">auto</option><option value="prompt">prompt</option><option value="zero_out">zero_out</option></select></label><PromptEditor title="Global" scope="global" value={props.globalPrompts} open={props.promptSections.global} onOpen={open => props.onPromptSection("global", open)} onChange={props.onGlobalPrompts}/><PromptEditor title="Background" scope="background" value={props.backgroundPrompts} open={props.promptSections.background} onOpen={open => props.onPromptSection("background", open)} onChange={props.onBackgroundPrompts}/></section>
+    </aside>;
+}

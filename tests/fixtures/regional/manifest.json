@@ -1,0 +1,16 @@
+{
+  "schema": "bv.regional.fixtures",
+  "version": 1,
+  "documents": [
+    {
+      "file": "v1_minimal.json",
+      "expected_regions": 0,
+      "expected_prompt_categories": []
+    },
+    {
+      "file": "v1_hybrid_joint.json",
+      "expected_regions": 3,
+      "expected_prompt_categories": ["person", "face", "eyes"]
+    }
+  ]
+}

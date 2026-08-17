@@ -22,6 +22,7 @@ A curated collection of **quality-of-life**, **UI**, and **prompting** nodes for
     - [Pipe Nodes](#pipe-nodes)
     - [UI / Layout Nodes](#ui--layout-nodes)
     - [Prompt / AST Nodes](#prompt--ast-nodes)
+    - [Regional Prompting Nodes](#regional-prompting-nodes)
     - [Latent Nodes](#latent-nodes)
     - [Util Nodes](#util-nodes)
     - [Control Nodes](#control-nodes)
@@ -489,6 +490,37 @@ category raises an error with its line and column.
 ![BV AST Example](workflows/workflow_AST_with_pipe.png)
 ---
 
+## Regional Prompting Nodes
+
+The Regional toolset stores prompts and editable geometry in the model-neutral
+`BV_REGIONAL` document format. The editor supports any number of named regions,
+rectangles and brush layers, overlapping masks, priorities, undo/redo, quick
+prompt editing, floating/workspace modes, and an optional background image.
+
+**Core workflow**
+
+1. Create a **BV Regional Prompt** node and open the editor from the node or toolbar.
+2. Define the Global and Background prompts, then add and paint the required regions.
+3. Connect the `regional` output to a model-specific compiler:
+   - **BV Regional Native Conditioning** produces standard masked ComfyUI conditioning.
+   - **BV Regional Anima Conditioning** applies the built-in Anima attention patch and works with a standard KSampler.
+4. Optionally use **BV Regional Preview Send** or **BV Regional Save Send** to send the latest generated image back to a selected editor. If several senders execute, the last completed sender wins.
+
+The editor document can also be inspected and reused through **Debug**, **Select**,
+**Deconstructor**, **Prompt Extract**, and **Mask Render** nodes. The legacy
+**Anima Adapter** remains available for workflows that intentionally use the
+external Anima regional-conditioning package.
+
+Prompt fields in the full editor and Quick Edit expose an optional autocomplete
+bridge to an installed `comfy-ex-tagcomplete`. The editor remains fully usable
+when that extension is absent. A BV-owned local tag provider and integration with
+ordinary ComfyUI text widgets are planned as later completion backends.
+
+See [Regional Editor MVP](docs/regional-editor-mvp.md) for the document contract,
+interaction details, model limitations, and validation scope.
+
+---
+
 ## Latent Nodes
 
 > A Collection of Latent Nodes.
@@ -641,6 +673,12 @@ prompt
 ---
 
 ## Changelog
+
+### 2026-08-17
+- Add the model-neutral BV Regional Editor and document toolchain.
+- Add native masked-conditioning and built-in Anima attention backends for standard KSampler workflows.
+- Add Quick Edit plus preview/save image senders with stable editor targeting.
+- Add the first optional prompt-autocomplete provider bridge.
 
 ### 2026-08-14
 - v0.1.0 — Add BV Smart Pipe and native random-ratio empty latents; harden AST, Dynamic Combo, Subgraph UI, Control Rack, debug, rotation, and HEX nodes.

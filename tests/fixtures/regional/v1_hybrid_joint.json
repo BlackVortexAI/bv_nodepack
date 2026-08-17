@@ -1,0 +1,154 @@
+{
+  "schema": "bv.regional",
+  "version": 1,
+  "document_id": "00000000-0000-4000-8000-000000000002",
+  "title": "Hybrid joint overlap",
+  "canvas": {
+    "width": 1536,
+    "height": 1024
+  },
+  "prompts": {
+    "global": {
+      "positive_source": "masterpiece, two people in a cafe",
+      "negative_source": "worst quality, watermark"
+    },
+    "background": {
+      "positive_source": "wooden tables, warm interior",
+      "negative_source": "empty room"
+    }
+  },
+  "negative_mode": "prompt",
+  "overlap": {
+    "mode": "joint"
+  },
+  "regions": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "name": "Person left",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 1.0,
+      "priority": 10,
+      "prompts": {
+        "positive_source": "@<person> blonde hair, red dress @@",
+        "negative_source": "black hair"
+      },
+      "mask": {
+        "feather": 0.01
+      },
+      "geometry": [
+        {
+          "id": "20000000-0000-4000-8000-000000000001",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.1,
+          "y": 0.1,
+          "width": 0.45,
+          "height": 0.8
+        },
+        {
+          "id": "20000000-0000-4000-8000-000000000002",
+          "type": "brush_stroke",
+          "operation": "add",
+          "size": 0.04,
+          "hardness": 0.75,
+          "opacity": 1.0,
+          "points": [
+            {
+              "x": 0.5,
+              "y": 0.35,
+              "pressure": 0.7
+            },
+            {
+              "x": 0.58,
+              "y": 0.4,
+              "pressure": 1.0
+            }
+          ]
+        },
+        {
+          "id": "20000000-0000-4000-8000-000000000003",
+          "type": "brush_stroke",
+          "operation": "subtract",
+          "size": 0.02,
+          "hardness": 1.0,
+          "opacity": 0.8,
+          "points": [
+            {
+              "x": 0.3,
+              "y": 0.5,
+              "pressure": 1.0
+            }
+          ]
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#E45756"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "name": "Face left",
+      "parent_region_id": "10000000-0000-4000-8000-000000000001",
+      "enabled": true,
+      "strength": 0.9,
+      "priority": 100,
+      "prompts": {
+        "positive_source": "@<face> symmetrical face, @<eyes> green eyes, detailed irises @@ @@",
+        "negative_source": "asymmetrical eyes"
+      },
+      "mask": {
+        "feather": 0.005
+      },
+      "geometry": [
+        {
+          "id": "20000000-0000-4000-8000-000000000004",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.22,
+          "y": 0.16,
+          "width": 0.2,
+          "height": 0.24
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#54A24B"
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "name": "Blue umbrella",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.7,
+      "priority": 20,
+      "prompts": {
+        "positive_source": "holding a blue umbrella",
+        "negative_source": "red umbrella"
+      },
+      "mask": {
+        "feather": 0.01
+      },
+      "geometry": [
+        {
+          "id": "20000000-0000-4000-8000-000000000005",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.42,
+          "y": 0.05,
+          "width": 0.4,
+          "height": 0.45
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#4C78A8"
+      }
+    }
+  ]
+}

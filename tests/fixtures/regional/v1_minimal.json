@@ -1,0 +1,25 @@
+{
+  "schema": "bv.regional",
+  "version": 1,
+  "document_id": "00000000-0000-4000-8000-000000000001",
+  "title": "Empty regional document",
+  "canvas": {
+    "width": 1024,
+    "height": 1024
+  },
+  "prompts": {
+    "global": {
+      "positive_source": "",
+      "negative_source": ""
+    },
+    "background": {
+      "positive_source": "",
+      "negative_source": ""
+    }
+  },
+  "negative_mode": "auto",
+  "overlap": {
+    "mode": "joint"
+  },
+  "regions": []
+}

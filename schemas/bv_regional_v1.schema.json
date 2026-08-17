@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackvortex.ai/schemas/bv_regional_v1.schema.json",
+  "title": "BV Regional Document v1",
+  "description": "Model-neutral authoring contract for BV regional prompting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "document_id",
+    "title",
+    "canvas",
+    "prompts",
+    "negative_mode",
+    "overlap",
+    "regions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "bv.regional"
+    },
+    "version": {
+      "const": 1
+    },
+    "document_id": {
+      "$ref": "#/$defs/id"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "canvas": {
+      "$ref": "#/$defs/canvas"
+    },
+    "prompts": {
+      "$ref": "#/$defs/documentPrompts"
+    },
+    "negative_mode": {
+      "enum": ["auto", "prompt", "zero_out"]
+    },
+    "overlap": {
+      "$ref": "#/$defs/overlap"
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/region"
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "unitInterval": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "positiveUnitInterval": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        }
+      }
+    },
+    "promptPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positive_source", "negative_source"],
+      "properties": {
+        "positive_source": {
+          "type": "string"
+        },
+        "negative_source": {
+          "type": "string"
+        }
+      }
+    },
+    "documentPrompts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global", "background"],
+      "properties": {
+        "global": {
+          "$ref": "#/$defs/promptPair"
+        },
+        "background": {
+          "$ref": "#/$defs/promptPair"
+        }
+      }
+    },
+    "overlap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "description": "Only joint is executable in v1. Other values reserve future document semantics.",
+          "enum": ["joint", "normalized", "priority", "exclusive"]
+        }
+      }
+    },
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "parent_region_id",
+        "enabled",
+        "strength",
+        "priority",
+        "prompts",
+        "mask",
+        "geometry",
+        "authoring"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "parent_region_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "prompts": {
+          "$ref": "#/$defs/promptPair"
+        },
+        "mask": {
+          "$ref": "#/$defs/regionMask"
+        },
+        "geometry": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/rectangle"
+              },
+              {
+                "$ref": "#/$defs/brushStroke"
+              }
+            ]
+          }
+        },
+        "authoring": {
+          "$ref": "#/$defs/regionAuthoring"
+        }
+      }
+    },
+    "regionMask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feather"],
+      "properties": {
+        "feather": {
+          "description": "Feather radius as a fraction of the shorter canvas edge.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.5
+        }
+      }
+    },
+    "regionAuthoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visible", "locked", "color"],
+      "properties": {
+        "visible": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
+      }
+    },
+    "geometryBase": {
+      "type": "object",
+      "required": ["id", "type", "operation"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string"
+        },
+        "operation": {
+          "enum": ["add", "subtract"]
+        }
+      }
+    },
+    "rectangle": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/geometryBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "type", "operation", "x", "y", "width", "height"],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "rect"
+            },
+            "operation": {
+              "enum": ["add", "subtract"]
+            },
+            "layer_id": {
+              "$ref": "#/$defs/id"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "authoring": {
+              "$ref": "#/$defs/geometryAuthoring"
+            },
+            "x": {
+              "$ref": "#/$defs/unitInterval"
+            },
+            "y": {
+              "$ref": "#/$defs/unitInterval"
+            },
+            "width": {
+              "$ref": "#/$defs/positiveUnitInterval"
+            },
+            "height": {
+              "$ref": "#/$defs/positiveUnitInterval"
+            }
+          }
+        }
+      ]
+    },
+    "brushStroke": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/geometryBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "operation",
+            "size",
+            "hardness",
+            "opacity",
+            "points"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "type": {
+              "const": "brush_stroke"
+            },
+            "operation": {
+              "enum": ["add", "subtract"]
+            },
+            "layer_id": {
+              "$ref": "#/$defs/id"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "authoring": {
+              "$ref": "#/$defs/geometryAuthoring"
+            },
+            "shape": {
+              "enum": ["round", "square"]
+            },
+            "pressure_mode": {
+              "enum": ["constant", "stylus"]
+            },
+            "size": {
+              "description": "Brush diameter as a fraction of the shorter canvas edge.",
+              "$ref": "#/$defs/positiveUnitInterval"
+            },
+            "hardness": {
+              "$ref": "#/$defs/unitInterval"
+            },
+            "opacity": {
+              "$ref": "#/$defs/unitInterval"
+            },
+            "points": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/brushPoint"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "geometryAuthoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "visible", "locked"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "visible": { "type": "boolean" },
+        "locked": { "type": "boolean" }
+      }
+    },
+    "brushPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "pressure"],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/unitInterval"
+        },
+        "y": {
+          "$ref": "#/$defs/unitInterval"
+        },
+        "pressure": {
+          "$ref": "#/$defs/unitInterval"
+        }
+      }
+    }
+  }
+}

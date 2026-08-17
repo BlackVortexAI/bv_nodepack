@@ -18,7 +18,7 @@ export default defineConfig({
         // Add more entries over time:
         "bv_nodepack.core": resolve(__dirname, "src/index.tsx"),
       },
-      external: ["../../scripts/app.js", "/scripts/app.js"],
+      external: ["../../scripts/app.js", "/scripts/app.js", "../../scripts/api.js", "/scripts/api.js"],
       output: {
         entryFileNames: "[name].js",
         format: "es",
