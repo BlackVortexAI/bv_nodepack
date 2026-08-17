@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import types
 import unittest
 
 import torch
@@ -7,6 +8,16 @@ import torch
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT.parents[1]))
 sys.path.insert(0, str(ROOT / "py"))
+
+# These unit tests exercise the pure attention-bias helpers. ComfyUI supplies
+# this module at runtime, but the standalone CI test environment intentionally
+# does not install the full application.
+comfy_module = types.ModuleType("comfy")
+comfy_module.__path__ = []
+patcher_extension_module = types.ModuleType("comfy.patcher_extension")
+comfy_module.patcher_extension = patcher_extension_module
+sys.modules["comfy"] = comfy_module
+sys.modules["comfy.patcher_extension"] = patcher_extension_module
 
 from util.regional.anima_patcher import (  # noqa: E402
     WRAPPER_KEY,
