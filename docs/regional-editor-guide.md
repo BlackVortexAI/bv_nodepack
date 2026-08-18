@@ -27,6 +27,7 @@ guides the golden light arc.
 | Backend | Connect | Behavior |
 | --- | --- | --- |
 | Native/Krea-style | `BV Regional Native Conditioning` | Standard ComfyUI masked conditioning; no model attention patch |
+| SDXL attention | `BV Regional SDXL Attention` | Model-internal cross-attention routing; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL; standard KSampler |
 | Anima | `BV Regional Anima Conditioning` | Built-in Anima attention patch; standard KSampler |
 | Anima LLLite layout | `BV Regional Color Control Image` or `BV Regional Anima LLLite` | Solid color control image; optional native ComfyUI model-patch apply |
 | External Anima fallback | `BV Regional Anima Adapter` | Compiles for the optional Sen-sou node pack |
@@ -142,6 +143,39 @@ seed, sampler, prompt composition, mask geometry and backend implementation.
 Treat masks as spatial intent. Validate important layouts across several seeds and
 adjust geometry, prompt wording and backend settings together.
 
+## SDXL attention backend
+
+`BV Regional SDXL Attention` is the strong regional backend for compatible SDXL
+checkpoints. It clones and patches the input model, independently encodes Global,
+Background and region prompts, and applies their spatial availability inside SDXL
+cross-attention. It does not require a custom sampler.
+
+- Global context remains available across the full latent.
+- Background context is available in the uncovered remainder.
+- Region contexts are available inside their rendered masks.
+- `joint` overlap exposes all overlapping regional contexts.
+- Positive and negative branches use the same regional document semantics.
+- Non-SDXL architectures fail with an explicit compatibility error.
+
+Start with Attention Strength `1.0`, Start `0.0`, End `0.5`. A longer interval can
+increase spatial adherence but may reduce the model's freedom to reconcile composition
+and fine details. This control is separate from each region's own Strength value.
+Attention Strength `0` is not a bypass: it disables regional and Background slots while
+Global remains active. Bypass the node when comparing against an unpatched model path.
+
+The current interactive compatibility matrix is:
+
+| Checkpoint family | Status | Evidence |
+| --- | --- | --- |
+| WAI Illustrious SDXL | Verified | Two full-body subjects, contrasting hair/outfit attributes, Background routing and slight overlap |
+| Pony Diffusion V6 XL | Verified | Contrasting regional attributes and placement; stronger out-of-the-box isolation than the untuned Native baseline |
+| Other SDXL checkpoints | Expected, unverified | Shared SDXL architecture; test before relying on production behavior |
+
+The Native comparisons use identical generation settings without backend-specific
+tuning. They demonstrate the default behavior observed in these workflows, not a
+claim that Native Conditioning cannot improve with adjusted strength, masks, feather
+or prompt weighting.
+
 ## Workspace, floating and Quick Edit
 
 Workspace mode fills the available browser viewport. Floating mode is independently
@@ -250,7 +284,7 @@ patch order, verified settings, A/B images, limitations and licensing boundary.
 
 - `joint` is the only executable overlap mode; normalized, exclusive and priority modes are reserved.
 - Native masked conditioning does not provide model-internal attention isolation.
-- The built-in attention backend currently targets Anima; other model families require future adapters.
+- Built-in attention backends currently target Anima and SDXL-family models; other model families require future adapters.
 - Parent-region IDs exist in the schema, but hierarchy authoring is not exposed yet.
 - Regional negative isolation depends on backend capability.
 - A region is conditioning guidance, not a guaranteed object-sized bounding box,

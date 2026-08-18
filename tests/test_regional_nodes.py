@@ -87,6 +87,16 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Native Conditioning"], self.module.BVRegionalNativeConditioningNode)
         self.assertEqual(self.module.BVRegionalNativeConditioningNode.RETURN_TYPES, ("CONDITIONING", "CONDITIONING"))
 
+    def test_sdxl_attention_node_is_registered_with_standard_sampler_outputs(self):
+        self.assertIs(
+            self.module.NODE_CLASS_MAPPINGS["BV Regional SDXL Attention"],
+            self.module.BVRegionalSDXLAttentionNode,
+        )
+        self.assertEqual(
+            self.module.BVRegionalSDXLAttentionNode.RETURN_TYPES,
+            ("MODEL", "CONDITIONING", "CONDITIONING"),
+        )
+
     def test_anima_adapter_is_registered_with_external_region_type(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Anima Adapter"], self.module.BVRegionalAnimaAdapterNode)
         self.assertEqual(

@@ -89,6 +89,8 @@ the spatial guidance.
 3. Add regions, then draw rectangles or additive/subtractive brush layers.
 4. Connect `regional` to a compiler:
    - **BV Regional Native Conditioning** for standard masked ComfyUI conditioning;
+   - **BV Regional SDXL Attention** for model-internal cross-attention routing on
+     compatible SDXL checkpoints;
    - **BV Regional Anima Conditioning** for the built-in Anima attention backend;
    - **BV Regional Color Control Image** for a model-neutral solid RGB control image;
    - **BV Regional Anima LLLite** to load and apply a local Anima LLLite model patch through ComfyUI core.
@@ -167,6 +169,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | --- | --- |
 | BV Regional Prompt | Owns and outputs the serialized `BV_REGIONAL` document |
 | BV Regional Native Conditioning | Compiles Global, Background and region masks into standard conditioning |
+| BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -178,6 +181,68 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Deconstructor | Exposes AST, text, source and reusable selection data |
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
+
+### SDXL attention routing
+
+**BV Regional SDXL Attention** patches a cloned SDXL model and routes independently
+encoded text slots through cross-attention. Global text remains available everywhere,
+Background text is limited to uncovered pixels, and each regional text slot is exposed
+inside its rendered mask. `joint` overlaps expose every participating region. The node
+returns a patched model plus positive and negative conditioning for a standard KSampler.
+
+The backend is architecture-based rather than checkpoint-specific. It is interactively
+verified with
+[WAI Illustrious SDXL v1.70](https://civitai.com/models/827184/wai-illustrious-sdxl?modelVersionId=2883731)
+and
+[Pony Diffusion V6 XL](https://civitai.com/models/257749/pony-diffusion-v6-xl?modelVersionId=290640).
+Other SDXL-family checkpoints are expected to use the same seam, but remain unverified
+until tested. Non-SDXL models are rejected instead of being patched speculatively.
+
+Recommended starting values are Attention Strength `1.0`, Start `0.0`, End `0.5`.
+The active interval controls how long spatial routing is applied; it is not equivalent
+to region strength. Attention routing remains generative guidance, not hard segmentation.
+Attention Strength `0` does not bypass the backend: it hides regional and Background
+slots while leaving Global context active. Bypass the node for a true unpatched A/B run.
+
+<details>
+<summary><strong>WAI Illustrious SDXL — Attention versus untuned Native baseline</strong></summary>
+
+The comparison used the same regional document, seed `486012994155188`, checkpoint,
+sampler, scheduler, steps, CFG and resolution. Native Conditioning was intentionally
+used without model-specific strength or mask tuning. The evidence therefore shows
+better out-of-the-box separation, not that Native Conditioning cannot be improved.
+
+| SDXL Attention | Native masked conditioning |
+| --- | --- |
+| ![Illustrious with SDXL attention routing](docs/assets/regional/sdxl-illustrious-attention.png) | ![Illustrious with untuned native conditioning](docs/assets/regional/sdxl-illustrious-native.png) |
+
+![Illustrious regional editor geometry](docs/assets/regional/sdxl-illustrious-editor.png)
+
+| Attention workflow | Native workflow |
+| --- | --- |
+| ![Illustrious SDXL attention workflow](docs/assets/regional/sdxl-illustrious-workflow.png) | ![Illustrious native conditioning workflow](docs/assets/regional/sdxl-illustrious-native-workflow.png) |
+
+</details>
+
+<details>
+<summary><strong>Pony Diffusion V6 XL — Attention versus untuned Native baseline</strong></summary>
+
+Pony was tested through the same generic SDXL backend. Attention routing kept the
+contrasting hair and clothing concepts more distinct. The untuned Native result kept
+rough left/right color placement but harmonized both subjects toward a shared design.
+Prompt style and overall rendering remain checkpoint behavior, not backend guarantees.
+
+| SDXL Attention | Native masked conditioning |
+| --- | --- |
+| ![Pony V6 XL with SDXL attention routing](docs/assets/regional/sdxl-pony-attention.png) | ![Pony V6 XL with untuned native conditioning](docs/assets/regional/sdxl-pony-native.png) |
+
+| Attention geometry | Native geometry |
+| --- | --- |
+| ![Pony SDXL attention editor geometry](docs/assets/regional/sdxl-pony-editor.png) | ![Pony native conditioning editor geometry](docs/assets/regional/sdxl-pony-native-editor.png) |
+
+</details>
+
+[Download the SDXL attribute-separation regional document](docs/examples/sdxl-attention-attribute-separation-test.bv-regional.json)
 
 ### Experimental Anima LLLite layout control
 
@@ -474,13 +539,25 @@ Technical references:
 
 - Regional overlap execution currently supports `joint`; other modes are reserved.
 - Native regional conditioning provides masks, not model-internal attention isolation.
-- The built-in patched attention backend currently targets Anima.
+- Built-in attention backends currently target Anima and SDXL-family models.
 - Regional negative isolation depends on backend capability.
 - Region placement, overlap and strength guide conditioning but cannot guarantee
   exact object boundaries, poses, depth order or pixel-perfect interactions.
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-18 — v0.5.0
+
+- Add a generic SDXL cross-attention routing backend for `BV_REGIONAL` documents
+  with standard-KSampler positive and negative conditioning.
+- Validate the backend in real GPU workflows with WAI Illustrious SDXL and Pony
+  Diffusion V6 XL, including controlled untuned Native Conditioning comparisons.
+- Keep Global context available everywhere, restrict Background to uncovered pixels,
+  route regions through rendered masks and preserve `joint` overlap semantics.
+- Reject non-SDXL model architectures explicitly and cover model detection, routing,
+  overlap, strength and failure behavior with regression tests.
+- Add an importable SDXL attribute-separation document and illustrated workflow evidence.
 
 ### 2026-08-17 — v0.4.1
 

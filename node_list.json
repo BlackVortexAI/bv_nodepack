@@ -21,6 +21,7 @@
   "BV Regional Image Send": "Send a preview image to a selected Regional Editor without saving it.",
   "BV Regional Mask Render": "Render the mask for a selected region from a BV Regional document.",
   "BV Regional Native Conditioning": "Compile a BV Regional document into native ComfyUI masked conditioning.",
+  "BV Regional SDXL Attention": "Route BV Regional prompts through SDXL cross-attention for Illustrious, Pony and compatible SDXL models.",
   "BV Regional Prompt": "Author named rectangle and brush regions with prompts in the visual Regional Editor.",
   "BV Regional Prompt Extract": "Extract the selected regional prompt payload for downstream processing.",
   "BV Regional Select": "Select a region by its stable identity from a BV Regional document.",
