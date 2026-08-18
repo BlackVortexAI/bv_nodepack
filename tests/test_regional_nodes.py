@@ -107,6 +107,16 @@ class RegionalNodeTests(unittest.TestCase):
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
 
+    def test_flux2_klein_attention_node_is_registered_with_standard_sampler_outputs(self):
+        self.assertIs(
+            self.module.NODE_CLASS_MAPPINGS["BV Regional FLUX.2 Klein 9B Attention"],
+            self.module.BVRegionalFlux2KleinAttentionNode,
+        )
+        self.assertEqual(
+            self.module.BVRegionalFlux2KleinAttentionNode.RETURN_TYPES,
+            ("MODEL", "CONDITIONING", "CONDITIONING"),
+        )
+
     def test_anima_adapter_is_registered_with_external_region_type(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Anima Adapter"], self.module.BVRegionalAnimaAdapterNode)
         self.assertEqual(

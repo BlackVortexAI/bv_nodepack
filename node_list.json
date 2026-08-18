@@ -23,6 +23,7 @@
   "BV Regional Native Conditioning": "Compile a BV Regional document into native ComfyUI masked conditioning.",
   "BV Regional SDXL Attention": "Route BV Regional prompts through SDXL cross-attention for Illustrious, Pony and compatible SDXL models.",
   "BV Regional Z-Image Attention": "Route BV Regional prompts through Z-Image Turbo joint attention with a standard KSampler.",
+  "BV Regional FLUX.2 Klein 9B Attention": "Route BV Regional prompts through the exact FLUX.2 Klein 9B joint-attention architecture with a standard KSampler.",
   "BV Regional Prompt": "Author named rectangle and brush regions with prompts in the visual Regional Editor.",
   "BV Regional Prompt Extract": "Extract the selected regional prompt payload for downstream processing.",
   "BV Regional Select": "Select a region by its stable identity from a BV Regional document.",

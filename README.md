@@ -92,6 +92,8 @@ the spatial guidance.
    - **BV Regional SDXL Attention** for model-internal cross-attention routing on
      compatible SDXL checkpoints;
    - **BV Regional Z-Image Attention** for joint-attention routing on Z-Image Turbo;
+   - **BV Regional FLUX.2 Klein 9B Attention** for exact-architecture joint-attention
+     routing on FLUX.2 Klein 9B;
    - **BV Regional Anima Conditioning** for the built-in Anima attention backend;
    - **BV Regional Color Control Image** for a model-neutral solid RGB control image;
    - **BV Regional Anima LLLite** to load and apply a local Anima LLLite model patch through ComfyUI core.
@@ -172,6 +174,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Native Conditioning | Compiles Global, Background and region masks into standard conditioning |
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
+| BV Regional FLUX.2 Klein 9B Attention | Routes Global, Background and regional text contexts through the exact FLUX.2 Klein 9B joint-attention architecture and emits sampler-ready zero negative conditioning |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -291,6 +294,49 @@ more precisely, while the Native result shifted the right suit toward beige and 
 </details>
 
 [Download the Z-Image Turbo attribute-separation regional document](docs/examples/zimage-turbo-attention-separation-test.bv-regional.json)
+
+### FLUX.2 Klein 9B attention routing
+
+**BV Regional FLUX.2 Klein 9B Attention** patches a cloned model and routes Global,
+Background and regional Qwen3-8B text contexts through all double- and single-stream
+joint-attention blocks. The result works with normal ComfyUI model-patcher sampling
+paths, including KSampler and SamplerCustom workflows; no BV-specific sampler is
+required.
+
+The node deliberately accepts only the exact FLUX.2 Klein 9B architecture. It rejects
+Klein 4B, full FLUX.2 and unrelated models instead of applying a speculative patch.
+The distilled 9B profile has no conventional negative-prompt branch, so the node emits
+zero negative conditioning for ComfyUI nodes that require a negative input. Model
+weights are not bundled and remain subject to the
+[FLUX Non-Commercial License](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B/blob/main/LICENSE.md).
+
+Attention Strength controls regional routing influence; Start and End define its active
+sampling interval. These controls are independent from each region's own strength.
+Regional attention remains generative guidance rather than hard segmentation.
+
+The backend does not replace or repair the model's sampling configuration. Keep the
+sampler, scheduler, step count, guidance, LoRAs and model-sampling settings that already
+work for the chosen FLUX.2 Klein setup. For a meaningful A/B comparison, hold those
+settings, the prompt and the seed constant and change only the regional backend.
+
+<details>
+<summary><strong>FLUX.2 Klein 9B — verified regional separation</strong></summary>
+
+The first local run used unsuitable external sampling settings and produced the same
+poor quality with and without the BV node. After correcting the caller-owned sampling
+configuration, the unpatched baseline and the regional run both rendered cleanly. The
+regional result retained that quality while keeping the white/cyan and black/orange
+character attributes spatially separated.
+
+![FLUX.2 Klein 9B regional attention result](docs/assets/regional/flux2-klein-attention.png)
+
+![FLUX.2 Klein 9B editor geometry](docs/assets/regional/flux2-klein-editor.png)
+
+![FLUX.2 Klein 9B regional attention workflow](docs/assets/regional/flux2-klein-workflow.png)
+
+</details>
+
+[Download the FLUX.2 Klein 9B separation-test regional document](docs/examples/flux2-klein-9b-attention-separation-test.bv-regional.json)
 
 ### Experimental Anima LLLite layout control
 
