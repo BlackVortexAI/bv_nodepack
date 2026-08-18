@@ -91,6 +91,7 @@ the spatial guidance.
    - **BV Regional Native Conditioning** for standard masked ComfyUI conditioning;
    - **BV Regional SDXL Attention** for model-internal cross-attention routing on
      compatible SDXL checkpoints;
+   - **BV Regional Z-Image Attention** for joint-attention routing on Z-Image Turbo;
    - **BV Regional Anima Conditioning** for the built-in Anima attention backend;
    - **BV Regional Color Control Image** for a model-neutral solid RGB control image;
    - **BV Regional Anima LLLite** to load and apply a local Anima LLLite model patch through ComfyUI core.
@@ -170,6 +171,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Prompt | Owns and outputs the serialized `BV_REGIONAL` document |
 | BV Regional Native Conditioning | Compiles Global, Background and region masks into standard conditioning |
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
+| BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -243,6 +245,52 @@ Prompt style and overall rendering remain checkpoint behavior, not backend guara
 </details>
 
 [Download the SDXL attribute-separation regional document](docs/examples/sdxl-attention-attribute-separation-test.bv-regional.json)
+
+### Z-Image Turbo attention routing
+
+**BV Regional Z-Image Attention** targets the Lumina2/S3-DiT-style joint-attention
+architecture used by Z-Image Turbo. It patches a cloned model, keeps Global text
+available throughout the image and spatially routes Background and regional text
+slots through the unified text/image attention matrix. `joint` overlaps expose all
+participating regional contexts.
+
+The verified model family is available from the official
+[Z-Image Turbo model page](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo).
+
+The node returns a patched model, positive conditioning and zero negative
+conditioning for a standard KSampler. Z-Image Turbo does not use a conventional
+negative CFG branch, but ComfyUI's KSampler still requires a negative input. The
+backend is architecture-gated and rejects FLUX, SDXL, Anima and unrelated models.
+
+Recommended starting values are Attention Strength `1.0`, Start `0.0`, End `0.5`.
+The backend was interactively verified at 1024 x 1024 with `res_multistep`, eight
+steps, CFG `1.0`, the `simple` scheduler and `ModelSamplingAuraFlow` shift `3.0`.
+These are test values rather than universal quality recommendations.
+
+<details>
+<summary><strong>Z-Image Turbo — Attention versus untuned Native baseline</strong></summary>
+
+The comparison used the same regional document, seed `336492265582909`, model,
+sampler, scheduler, steps, CFG and resolution. Native Conditioning was intentionally
+left at its default strength. Both approaches preserved broad left/right placement;
+joint-attention routing retained the requested white/cyan and black/orange attributes
+more precisely, while the Native result shifted the right suit toward beige and gold.
+
+| Z-Image Attention | Native masked conditioning |
+| --- | --- |
+| ![Z-Image Turbo with joint-attention routing](docs/assets/regional/zimage-attention.png) | ![Z-Image Turbo with untuned native conditioning](docs/assets/regional/zimage-native.png) |
+
+| Attention geometry | Native geometry |
+| --- | --- |
+| ![Z-Image Attention editor geometry](docs/assets/regional/zimage-editor.png) | ![Z-Image Native editor geometry](docs/assets/regional/zimage-native-editor.png) |
+
+| Attention workflow | Native workflow |
+| --- | --- |
+| ![Z-Image Attention workflow](docs/assets/regional/zimage-workflow.png) | ![Z-Image Native workflow](docs/assets/regional/zimage-native-workflow.png) |
+
+</details>
+
+[Download the Z-Image Turbo attribute-separation regional document](docs/examples/zimage-turbo-attention-separation-test.bv-regional.json)
 
 ### Experimental Anima LLLite layout control
 

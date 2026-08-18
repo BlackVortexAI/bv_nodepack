@@ -1,0 +1,102 @@
+{
+  "schema": "bv.regional",
+  "version": 1,
+  "document_id": "d53058e7-0c6e-44a8-b651-46bb82c56c91",
+  "title": "Z-Image Turbo Attention - Attribute Separation Test",
+  "canvas": {
+    "width": 1024,
+    "height": 1024
+  },
+  "prompts": {
+    "global": {
+      "positive_source": "Create a polished cinematic illustration of exactly two adult female humanoid explorers standing side by side. Show both characters completely from head to toe, facing the viewer, with visible space between them and a balanced symmetrical composition.",
+      "negative_source": ""
+    },
+    "background": {
+      "positive_source": "They stand inside a bright orbital observatory with panoramic windows, a distant blue planet, stars, polished metal flooring, and soft cinematic rim lighting.",
+      "negative_source": ""
+    }
+  },
+  "negative_mode": "zero_out",
+  "overlap": {
+    "mode": "joint"
+  },
+  "regions": [
+    {
+      "id": "d754d456-9b23-41f4-8664-64bedee27bcd",
+      "name": "Left - Cyan Explorer",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.9,
+      "priority": 0,
+      "prompts": {
+        "positive_source": "The woman on the left has a short silver-white bob haircut and wears a smooth white futuristic exploration suit with vivid cyan luminous panels, cyan gloves, and cyan boots.",
+        "negative_source": ""
+      },
+      "mask": {
+        "feather": 0.015
+      },
+      "geometry": [
+        {
+          "id": "ee7ba029-528f-4fd3-96df-9e4c318a3c68",
+          "layer_id": "ee7ba029-528f-4fd3-96df-9e4c318a3c68",
+          "type": "rect",
+          "operation": "add",
+          "enabled": true,
+          "x": 0.05,
+          "y": 0.12,
+          "width": 0.5,
+          "height": 0.83,
+          "authoring": {
+            "name": "Left character area",
+            "visible": true,
+            "locked": false
+          }
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#32C7D9"
+      }
+    },
+    {
+      "id": "1224d1db-0bc2-47fc-90d8-659468dc65e8",
+      "name": "Right - Amber Explorer",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.9,
+      "priority": 1,
+      "prompts": {
+        "positive_source": "The woman on the right has long deep-black hair and wears a glossy black futuristic exploration suit with vivid amber-orange luminous panels, orange gloves, and orange boots.",
+        "negative_source": ""
+      },
+      "mask": {
+        "feather": 0.015
+      },
+      "geometry": [
+        {
+          "id": "cc817e2e-c49e-4451-986e-d2fd54ff0603",
+          "layer_id": "cc817e2e-c49e-4451-986e-d2fd54ff0603",
+          "type": "rect",
+          "operation": "add",
+          "enabled": true,
+          "x": 0.45,
+          "y": 0.12,
+          "width": 0.5,
+          "height": 0.83,
+          "authoring": {
+            "name": "Right character area",
+            "visible": true,
+            "locked": false
+          }
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#F28E2B"
+      }
+    }
+  ]
+}

@@ -18,6 +18,7 @@ from ..util.regional.anima_adapter import ANIMA_REGIONS, compile_anima_adapter
 from ..util.regional.color_control import compile_color_control
 from ..util.regional.native_conditioning import compile_native_conditioning
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
+from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
 
 
 AST = "BV_AST"
@@ -263,6 +264,34 @@ class BVRegionalSDXLAttentionNode:
         return patched_model, positive, negative
 
 
+class BVRegionalZImageAttentionNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {}),
+                "clip": ("CLIP", {}),
+                "regional": (REGIONAL, {}),
+                "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("patched_model", "positive", "negative")
+    FUNCTION = "apply"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Joint-attention regional routing backend for Z-Image Turbo. Uses a standard KSampler."
+
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
+        positive, negative, slots, _ = compile_zimage_attention(regional, clip)
+        patched_model = apply_zimage_attention_patch(
+            model, slots, attention_strength, start_percent, end_percent
+        )
+        return patched_model, positive, negative
+
+
 class BVRegionalAnimaAdapterNode:
     @classmethod
     def INPUT_TYPES(cls):
@@ -492,6 +521,7 @@ NODE_CLASS_MAPPINGS = {
     "BV Regional Mask Render": BVRegionalMaskRenderNode,
     "BV Regional Native Conditioning": BVRegionalNativeConditioningNode,
     "BV Regional SDXL Attention": BVRegionalSDXLAttentionNode,
+    "BV Regional Z-Image Attention": BVRegionalZImageAttentionNode,
     "BV Regional Anima Adapter": BVRegionalAnimaAdapterNode,
     "BV Regional Anima Conditioning": BVRegionalAnimaConditioningNode,
     "BV Regional Color Control Image": BVRegionalColorControlImageNode,
@@ -509,6 +539,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Mask Render": "🌀 BV Regional Mask Render",
     "BV Regional Native Conditioning": "🌀 BV Regional Native Conditioning",
     "BV Regional SDXL Attention": "🌀 BV Regional SDXL Attention",
+    "BV Regional Z-Image Attention": "🌀 BV Regional Z-Image Attention",
     "BV Regional Anima Adapter": "🌀 BV Regional Anima Adapter",
     "BV Regional Anima Conditioning": "🌀 BV Regional Anima Conditioning",
     "BV Regional Color Control Image": "🌀 BV Regional Color Control Image",
