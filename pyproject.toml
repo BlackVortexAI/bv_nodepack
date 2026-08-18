@@ -1,7 +1,7 @@
 [project]
 name = "bv_nodepack"
-version = "0.7.0"
-description = "Visual regional prompting with FLUX.2 Klein 9B, Z-Image Turbo, SDXL and Anima attention backends, Anima LLLite layout control, structured prompts, Smart Pipes, Subgraph controls, local autocomplete, and workflow utilities for current ComfyUI."
+version = "0.8.0"
+description = "Visual regional prompting with experimental Krea 2, FLUX.2 Klein 9B, Z-Image Turbo, SDXL and Anima attention backends, plus Smart Pipes and ComfyUI workflow tools."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
 ]

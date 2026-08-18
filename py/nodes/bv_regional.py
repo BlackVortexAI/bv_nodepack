@@ -23,6 +23,7 @@ from ..util.regional.flux2_klein_attention import (
     compile_flux2_klein_attention,
     apply_flux2_klein_attention_patch,
 )
+from ..util.regional.krea2_attention import compile_krea2_attention, apply_krea2_attention_patch
 
 
 AST = "BV_AST"
@@ -332,6 +333,39 @@ class BVRegionalFlux2KleinAttentionNode:
         return patched_model, positive, negative
 
 
+class BVRegionalKrea2AttentionNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL", {}),
+                "clip": ("CLIP", {}),
+                "regional": (REGIONAL, {}),
+                "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
+    RETURN_NAMES = ("patched_model", "positive", "negative")
+    FUNCTION = "apply"
+    CATEGORY = CATEGORY
+    EXPERIMENTAL = True
+    DESCRIPTION = (
+        "Experimental joint-attention regional routing for Krea 2 Raw and Turbo. "
+        "Routes the 28 main DiT blocks with a standard KSampler; Krea's four upstream "
+        "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch."
+    )
+
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
+        positive, negative, slots, aspect_ratio = compile_krea2_attention(regional, clip)
+        patched_model = apply_krea2_attention_patch(
+            model, slots, aspect_ratio, attention_strength, start_percent, end_percent
+        )
+        return patched_model, positive, negative
+
+
 class BVRegionalAnimaAdapterNode:
     @classmethod
     def INPUT_TYPES(cls):
@@ -563,6 +597,7 @@ NODE_CLASS_MAPPINGS = {
     "BV Regional SDXL Attention": BVRegionalSDXLAttentionNode,
     "BV Regional Z-Image Attention": BVRegionalZImageAttentionNode,
     "BV Regional FLUX.2 Klein 9B Attention": BVRegionalFlux2KleinAttentionNode,
+    "BV Regional Krea 2 Attention": BVRegionalKrea2AttentionNode,
     "BV Regional Anima Adapter": BVRegionalAnimaAdapterNode,
     "BV Regional Anima Conditioning": BVRegionalAnimaConditioningNode,
     "BV Regional Color Control Image": BVRegionalColorControlImageNode,
@@ -582,6 +617,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional SDXL Attention": "🌀 BV Regional SDXL Attention",
     "BV Regional Z-Image Attention": "🌀 BV Regional Z-Image Attention",
     "BV Regional FLUX.2 Klein 9B Attention": "🌀 BV Regional FLUX.2 Klein 9B Attention",
+    "BV Regional Krea 2 Attention": "🌀 BV Regional Krea 2 Attention (Experimental)",
     "BV Regional Anima Adapter": "🌀 BV Regional Anima Adapter",
     "BV Regional Anima Conditioning": "🌀 BV Regional Anima Conditioning",
     "BV Regional Color Control Image": "🌀 BV Regional Color Control Image",

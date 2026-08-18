@@ -81,6 +81,11 @@ the spatial guidance.
 > lets overlapping pixels attend to multiple regional contexts; it does not force
 > the depicted subjects to interact. Region strength changes conditioning influence,
 > not boundary strictness.
+>
+> Reliable results come from the combination of clear prompt engineering, region
+> geometry and overlap suited to the actual spatial task, and the model's learned
+> priors. Attention routing guides the composition; it does not make an implausible
+> layout deterministic.
 
 ### Core workflow
 
@@ -94,6 +99,8 @@ the spatial guidance.
    - **BV Regional Z-Image Attention** for joint-attention routing on Z-Image Turbo;
    - **BV Regional FLUX.2 Klein 9B Attention** for exact-architecture joint-attention
      routing on FLUX.2 Klein 9B;
+   - **BV Regional Krea 2 Attention (Experimental)** for main single-stream
+     joint-attention routing on Krea 2;
    - **BV Regional Anima Conditioning** for the built-in Anima attention backend;
    - **BV Regional Color Control Image** for a model-neutral solid RGB control image;
    - **BV Regional Anima LLLite** to load and apply a local Anima LLLite model patch through ComfyUI core.
@@ -175,6 +182,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
 | BV Regional FLUX.2 Klein 9B Attention | Routes Global, Background and regional text contexts through the exact FLUX.2 Klein 9B joint-attention architecture and emits sampler-ready zero negative conditioning |
+| BV Regional Krea 2 Attention (Experimental) | Routes Global, Background and regional text contexts through Krea 2's 28 main single-stream attention blocks; four upstream text-fusion blocks remain global |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -337,6 +345,40 @@ character attributes spatially separated.
 </details>
 
 [Download the FLUX.2 Klein 9B separation-test regional document](docs/examples/flux2-klein-9b-attention-separation-test.bv-regional.json)
+
+### Experimental Krea 2 attention routing
+
+**BV Regional Krea 2 Attention (Experimental)** patches a cloned Krea 2 model and
+routes Global, Background and regional Qwen3-VL text contexts through all 28 main
+single-stream joint-attention blocks. It works with a normal KSampler.
+
+Four upstream text-fusion/refiner blocks execute before the public attention-patch
+seam and remain global. The backend therefore improves spatial prompt-to-region
+binding but is not strict end-to-end isolation.
+
+Krea 2 Raw retains conventional CFG and negative-prompt semantics. Krea 2 Turbo is
+normally used near CFG 1, where a separate negative branch has little or no practical
+effect. Attention Strength, Start and End control routing; per-region strength remains
+independent.
+
+The verified tests showed stable character and outfit separation, region reassignment,
+and a wide empty center when prompts and masks supported that composition. This is
+evidence of useful routing, not a guarantee: prompt engineering, region geometry and
+overlap, the actual need for regional separation, model priors, seed, and sampling
+settings still work together.
+
+<details>
+<summary><strong>Krea 2 — experimental regional separation</strong></summary>
+
+![Krea 2 attention result](docs/assets/regional/krea2-attention.png)
+
+![Krea 2 editor geometry](docs/assets/regional/krea2-editor.png)
+
+![Krea 2 workflow](docs/assets/regional/krea2-workflow.png)
+
+</details>
+
+[Download the Krea 2 separation-test regional document](examples/krea2-two-explorers-space-observatory.bv-regional.json)
 
 ### Experimental Anima LLLite layout control
 
@@ -609,6 +651,7 @@ Regional document fixtures:
 - [Anima: android dance with interaction overlap and painted light arc](docs/examples/anima-android-dance-regional-showcase.bv-regional.json)
 - [Anima: two characters in a space station](docs/examples/anima-two-characters-space-station.bv-regional.json)
 - [Krea 2: two women at a castle](docs/examples/krea2-two-women-castle.bv-regional.json)
+- [Krea 2: two explorers in a space observatory](examples/krea2-two-explorers-space-observatory.bv-regional.json)
 
 ## Architecture and compatibility
 
@@ -627,19 +670,31 @@ Technical references:
 - [Smart Pipe contract ADR](docs/adr/0001-separate-smart-pipe-contract.md)
 - [Renderer-independent Subgraph UI ADR](docs/adr/0002-renderer-independent-subgraph-ui.md)
 - [Wireless Smart Pipe ADR](docs/adr/0003-wireless-smart-pipe-spine.md)
+- [Krea 2 regional-attention research](docs/research/krea2-regional-attention-backend.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## Current scope
 
 - Regional overlap execution currently supports `joint`; other modes are reserved.
 - Native regional conditioning provides masks, not model-internal attention isolation.
-- Built-in attention backends currently target Anima and SDXL-family models.
+- Built-in attention backends currently target Anima, SDXL-family models,
+  Z-Image Turbo, FLUX.2 Klein 9B and experimental Krea 2.
 - Regional negative isolation depends on backend capability.
+- Regional results always combine prompt engineering, region geometry and overlap,
+  model priors and sampling; attention routing guides rather than forces exact composition.
 - Region placement, overlap and strength guide conditioning but cannot guarantee
   exact object boundaries, poses, depth order or pixel-perfect interactions.
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-18 — v0.8.0
+
+- Add an experimental Krea 2 regional joint-attention backend with normal KSampler compatibility.
+- Route Global, Background and regional Qwen3-VL contexts through all 28 main single-stream attention blocks.
+- Keep the four upstream text-fusion/refiner blocks global and document this as an explicit experimental isolation limit.
+- Normalize missing all-ones Krea attention masks and add architecture/memory guards, tests, an importable regional document and verified screenshots.
+- Document that successful regional composition combines prompt engineering, mask geometry, actual spatial need, model priors and sampling settings; attention routing is guidance, not hard layout enforcement.
 
 ### 2026-08-18 — v0.7.0
 

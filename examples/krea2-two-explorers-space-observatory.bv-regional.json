@@ -1,0 +1,102 @@
+{
+  "schema": "bv.regional",
+  "version": 1,
+  "document_id": "7ac9e7d4-1c38-48e7-8ba6-f2ea41388f7a",
+  "title": "Krea 2 - Two Explorers in a Space Observatory",
+  "canvas": {
+    "width": 1024,
+    "height": 1024
+  },
+  "prompts": {
+    "global": {
+      "positive_source": "A polished cinematic science-fiction photograph of exactly two adult female space explorers standing side by side, both completely visible from head to toe and facing the camera, balanced symmetrical composition, realistic materials, natural skin texture, controlled studio lighting, sharp focus.",
+      "negative_source": "A third person, duplicate person, fused bodies, mixed character designs, extra arms, extra hands, malformed hands, missing fingers, cropped body, body outside the frame, text, watermark."
+    },
+    "background": {
+      "positive_source": "The interior of a dark lunar research observatory with panoramic windows, the Earth and a rocky moon surface visible outside, metallic floor with subtle reflections and cinematic rim lighting.",
+      "negative_source": "Forest, meadow, medieval room, outdoor daylight scene."
+    }
+  },
+  "negative_mode": "prompt",
+  "overlap": {
+    "mode": "joint"
+  },
+  "regions": [
+    {
+      "id": "778c4078-c29b-4e36-b223-c0f4064286d9",
+      "name": "Left - Cyan Explorer",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.85,
+      "priority": 1,
+      "prompts": {
+        "positive_source": "The woman on the left has a short silver-white bob haircut and pale skin. She wears a clean matte-white armored spacesuit with cyan luminous seams, cyan gloves and cyan boots, with no orange parts.",
+        "negative_source": "Orange armor, orange glow, black spacesuit, long dark hair."
+      },
+      "mask": {
+        "feather": 0.02
+      },
+      "geometry": [
+        {
+          "id": "c5445a41-1dc0-46ec-a997-3f19f3378abf",
+          "layer_id": "c5445a41-1dc0-46ec-a997-3f19f3378abf",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.05,
+          "y": 0.12,
+          "width": 0.50,
+          "height": 0.83,
+          "enabled": true,
+          "authoring": {
+            "name": "Left explorer area",
+            "visible": true,
+            "locked": false
+          }
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#32C7D2"
+      }
+    },
+    {
+      "id": "4fcdb820-6850-4e34-b4fc-e907dde66426",
+      "name": "Right - Orange Explorer",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.85,
+      "priority": 0,
+      "prompts": {
+        "positive_source": "The woman on the right has long dark-brown wavy hair and warm olive skin. She wears a glossy black armored spacesuit with vivid orange panels, orange gloves and orange boots, with no cyan parts.",
+        "negative_source": "Cyan armor, cyan glow, white spacesuit, short silver hair."
+      },
+      "mask": {
+        "feather": 0.02
+      },
+      "geometry": [
+        {
+          "id": "56468214-0eeb-449f-a210-bda00d74d66b",
+          "layer_id": "56468214-0eeb-449f-a210-bda00d74d66b",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.45,
+          "y": 0.12,
+          "width": 0.50,
+          "height": 0.83,
+          "enabled": true,
+          "authoring": {
+            "name": "Right explorer area",
+            "visible": true,
+            "locked": false
+          }
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#F28E2B"
+      }
+    }
+  ]
+}
