@@ -7,6 +7,8 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, rejec
 async function drawOperation(context: CanvasRenderingContext2D, geometry: Geometry, width: number, height: number) {
     context.save(); context.globalCompositeOperation = geometry.operation === "subtract" ? "destination-out" : "source-over"; context.fillStyle = "white"; context.strokeStyle = "white";
     if (geometry.type === "rect") context.fillRect(geometry.x * width, geometry.y * height, geometry.width * width, geometry.height * height);
+    else if (geometry.type === "ellipse") { context.beginPath(); context.ellipse((geometry.x + geometry.width / 2) * width, (geometry.y + geometry.height / 2) * height, geometry.width * width / 2, geometry.height * height / 2, 0, 0, Math.PI * 2); context.fill(); }
+    else if (geometry.type === "polygon") { context.beginPath(); geometry.points.forEach((point, index) => index ? context.lineTo(point.x * width, point.y * height) : context.moveTo(point.x * width, point.y * height)); context.closePath(); context.fill(); }
     else if (geometry.type === "raster_mask") context.drawImage(await loadImage(geometry.data_url), geometry.x * width, geometry.y * height, geometry.width * width, geometry.height * height);
     else {
         const short = Math.min(width, height), points = geometry.points, nominalSize = geometry.size * short;

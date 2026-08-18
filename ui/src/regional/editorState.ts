@@ -15,6 +15,7 @@ export type EditorViewState = {
     displayOpacity: number;
     backgroundOpacity: number;
     isolate: boolean;
+    binaryMaskPreview: boolean;
     tool: Tool;
     brush: BrushSettings;
     openMenu: EditorMenu;
@@ -27,7 +28,7 @@ type StorageLike = Pick<Storage, "getItem" | "setItem">;
 const PREFIX = "bv-regional-editor-state-v1:";
 const finite = (value: unknown, fallback: number) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const tools: Tool[] = ["select", "rect", "brush-add", "brush-subtract"];
+const tools: Tool[] = ["select", "rect-add", "rect-subtract", "ellipse-add", "ellipse-subtract", "polygon-add", "polygon-subtract", "brush-add", "brush-subtract"];
 
 export function editorStateKey(documentId: string) { return `${PREFIX}${documentId}`; }
 
@@ -86,6 +87,7 @@ export function defaultEditorState(viewport = { width: window.innerWidth, height
         displayOpacity: .5,
         backgroundOpacity: 1,
         isolate: false,
+        binaryMaskPreview: false,
         tool: "select",
         brush: { size: .04, hardness: .75, opacity: 1, shape: "round", pressureMode: "constant" },
         openMenu: null,
@@ -121,7 +123,8 @@ export function normalizeEditorState(value: unknown, viewport = { width: window.
         displayOpacity: clamp(finite(input.displayOpacity, .5), .05, 1),
         backgroundOpacity: clamp(finite(input.backgroundOpacity, 1), 0, 1),
         isolate: input.isolate === true,
-        tool: tools.includes(input.tool as Tool) ? input.tool as Tool : "select",
+        tool: (input.tool as string | undefined) === "rect" ? "rect-add" : tools.includes(input.tool as Tool) ? input.tool as Tool : "select",
+        binaryMaskPreview: input.binaryMaskPreview === true,
         brush: {
             size: clamp(finite(brush.size, .04), .001, 1),
             hardness: clamp(finite(brush.hardness, .75), 0, 1),

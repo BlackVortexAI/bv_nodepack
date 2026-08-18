@@ -14,7 +14,7 @@ import { splitDisconnectedLayer } from "./disconnectedAreas";
 type NodeRef = { id: number | string; title?: string; widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>; graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } };
 type Props = { open: boolean; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; onClose: () => void };
 type Gesture =
-    | { mode: "draw-rect" | "draw-brush"; start: Point; commit: "add" | "subtract" }
+    | { mode: "draw-box" | "draw-brush" | "draw-polygon"; start: Point; commit: "add" | "subtract" }
     | { mode: "move"; start: Point; startScreen: { x: number; y: number }; original: Geometry[]; started: boolean }
     | { mode: "resize"; start: Point; original: Geometry[]; handle: Handle };
 
@@ -114,7 +114,7 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         setSelectedLayerIds(next.ids); setSelectedLayerId(next.primary); setSelectionAnchorId(next.anchor); setIsolate(false);
     };
     const activeOperations = draft && selectedLayerId && draft.every(item => geometryLayerId(item) === selectedLayerId)
-        ? (gesture.current?.mode === "draw-brush" || gesture.current?.mode === "draw-rect") && gesture.current.commit === "subtract" ? [...selectedOperations, ...draft] : draft
+        ? gesture.current && "commit" in gesture.current && gesture.current.commit === "subtract" ? [...selectedOperations, ...draft] : draft
         : selectedOperations;
     const selectionBounds = activeOperations.length && documentValue ? boundsOfLayer(activeOperations, documentValue.canvas) : null;
 
@@ -129,6 +129,13 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
     const updateRegion = (fn: (region: Region) => void) => mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) fn(region); });
     const updateLayer = (id: string, fn: (geometries: Geometry[], region: Region) => void) => mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) fn(layerOperations(region, id), region); });
     const cancelGesture = useCallback(() => { gesture.current = null; setDraft(null); }, []);
+    const finalizePolygon = useCallback(() => {
+        if (gesture.current?.mode !== "draw-polygon" || !draft?.length) return;
+        const final = draft.map(item => item.type === "polygon" ? { ...item, points: item.points.filter((point, index, points) => index === 0 || Math.hypot(point.x - points[index - 1].x, point.y - points[index - 1].y) > .001) } : item);
+        if (final.some(item => item.type !== "polygon" || item.points.length < 3)) return cancelGesture();
+        mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) region.geometry.push(...final); });
+        cancelGesture();
+    }, [cancelGesture, draft, mutate, selectedRegionId]);
     const undo = useCallback(() => { if (!documentValue || !history.length) return; const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setFuture([clone(documentValue), ...future]); persist(clone(previous), false); }, [documentValue, future, history, persist]);
     const redo = useCallback(() => { if (!documentValue || !future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory([...history, clone(documentValue)]); persist(clone(next), false); }, [documentValue, future, history, persist]);
 
@@ -177,6 +184,7 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         if (!open) return;
         const key = (event: KeyboardEvent) => {
             if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); cancelGesture(); return; }
+            if (event.key === "Enter" && gesture.current?.mode === "draw-polygon") { event.preventDefault(); event.stopImmediatePropagation(); finalizePolygon(); return; }
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e" && event.shiftKey && canSplitCompoundLayer) { event.preventDefault(); event.stopImmediatePropagation(); splitLayer(); return; }
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e" && canMergeLayers) { event.preventDefault(); event.stopImmediatePropagation(); mergeLayers(); return; }
             if ((event.key === "Delete" || event.key === "Backspace") && selectedLayerId && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) { event.preventDefault(); event.stopImmediatePropagation(); deleteLayer(selectedLayerId); return; }
@@ -184,13 +192,14 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
             event.preventDefault(); event.stopImmediatePropagation(); event.shiftKey ? redo() : undo();
         };
         window.addEventListener("keydown", key, true); return () => window.removeEventListener("keydown", key, true);
-    }, [cancelGesture, canMergeLayers, canSplitCompoundLayer, deleteLayer, open, redo, selectedLayerId, selectedLayerIds, undo]);
+    }, [cancelGesture, canMergeLayers, canSplitCompoundLayer, deleteLayer, finalizePolygon, open, redo, selectedLayerId, selectedLayerIds, undo]);
 
     const pointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         if (!documentValue || !selectedRegion || selectedRegion.authoring.locked) return;
-        const point = pointFor(event, brush.pressureMode); event.currentTarget.setPointerCapture(event.pointerId);
+        const point = pointFor(event, brush.pressureMode);
         const handle = (event.target as Element).closest?.("[data-handle]")?.getAttribute("data-handle") as Handle | null;
         if (tool === "select") {
+            event.currentTarget.setPointerCapture(event.pointerId);
             setDraft(null);
             if (handle && selectedLayer && !selectedLayer.authoring.locked) { gesture.current = { mode: "resize", start: point, original: clone(selectedOperations), handle }; return; }
             const hit = [...geometryLayers(selectedRegion)].reverse().find(layer => layer.enabled && layer.authoring.visible && layer.geometries.filter(item => item.operation === "add").some(item => hitTest(item, point, documentValue.canvas)));
@@ -198,21 +207,31 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
             if (hit && !hit.authoring.locked) gesture.current = { mode: "move", start: point, startScreen: { x: event.clientX, y: event.clientY }, original: clone(hit.geometries), started: false };
             return;
         }
-        if (tool === "brush-subtract" && (!selectedLayerId || selectedLayer?.authoring.locked)) return;
+        const subtract = tool.endsWith("subtract");
+        if (subtract && (!selectedLayerId || selectedLayer?.authoring.locked)) return;
+        if (tool.startsWith("polygon") && gesture.current?.mode === "draw-polygon") { setDraft(current => current?.map(item => item.type === "polygon" ? { ...item, points: [...item.points, point] } : item) ?? null); return; }
         const id = uuid(), reusableBrushLayerId = tool === "brush-add" ? brushAddLayerTarget(selectedLayer) : null;
-        const layerId = tool === "brush-subtract" ? selectedLayerId! : reusableBrushLayerId ?? id;
-        const authoring = tool === "brush-subtract" || reusableBrushLayerId ? selectedLayer?.authoring : { name: `${tool === "rect" ? "Rectangle" : "Brush"} ${geometryLayers(selectedRegion).length + 1}`, visible: true, locked: false };
-        if (tool === "rect") {
-            replaceLayerSelection(layerId); setDraft([{ id, layer_id: layerId, type: "rect", operation: "add", enabled: true, authoring, x: point.x, y: point.y, width: .001, height: .001 }]); gesture.current = { mode: "draw-rect", start: point, commit: "add" };
+        const layerId = subtract ? selectedLayerId! : reusableBrushLayerId ?? id;
+        const shapeName = tool.startsWith("rect") ? "Rectangle" : tool.startsWith("ellipse") ? "Ellipse" : tool.startsWith("polygon") ? "Polygon" : "Brush";
+        const authoring = subtract || reusableBrushLayerId ? selectedLayer?.authoring : { name: `${shapeName} ${geometryLayers(selectedRegion).length + 1}`, visible: true, locked: false };
+        const maskGroups = subtract ? [...new Set(selectedOperations.map(geometryMaskGroupId))] : [undefined];
+        if (tool.startsWith("rect") || tool.startsWith("ellipse")) {
+            event.currentTarget.setPointerCapture(event.pointerId);
+            const type = tool.startsWith("rect") ? "rect" : "ellipse";
+            setDraft(maskGroups.map((maskGroupId, index) => ({ id: index ? uuid() : id, layer_id: layerId, mask_group_id: maskGroupId, type, operation: subtract ? "subtract" : "add", enabled: true, authoring, x: point.x, y: point.y, width: .001, height: .001 })));
+            gesture.current = { mode: "draw-box", start: point, commit: subtract ? "subtract" : "add" }; if (!subtract) replaceLayerSelection(layerId);
+        } else if (tool.startsWith("polygon")) {
+            setDraft(maskGroups.map((maskGroupId, index) => ({ id: index ? uuid() : id, layer_id: layerId, mask_group_id: maskGroupId, type: "polygon", operation: subtract ? "subtract" : "add", enabled: true, authoring, points: [point] })));
+            gesture.current = { mode: "draw-polygon", start: point, commit: subtract ? "subtract" : "add" }; if (!subtract) replaceLayerSelection(layerId);
         } else {
-            const maskGroups = tool === "brush-subtract" ? [...new Set(selectedOperations.map(geometryMaskGroupId))] : [undefined];
+            event.currentTarget.setPointerCapture(event.pointerId);
             setDraft(maskGroups.map((maskGroupId, index) => ({ id: index ? uuid() : id, layer_id: layerId, mask_group_id: maskGroupId, type: "brush_stroke", operation: tool === "brush-add" ? "add" : "subtract", enabled: true, authoring, size: brush.size, hardness: brush.hardness, opacity: brush.opacity, shape: brush.shape, pressure_mode: brush.pressureMode, points: [point] })));
             gesture.current = { mode: "draw-brush", start: point, commit: tool === "brush-add" ? "add" : "subtract" }; if (tool === "brush-add") replaceLayerSelection(layerId);
         }
     };
     const pointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
         if (!documentValue) return; const point = pointFor(event, brush.pressureMode); setCursor(point); const active = gesture.current; if (!active) return;
-        if (active.mode === "draw-rect" && draft?.[0]?.type === "rect") { const geometry = draft[0]; setDraft([{ ...geometry, x: Math.min(active.start.x, point.x), y: Math.min(active.start.y, point.y), width: Math.max(.001, Math.abs(point.x - active.start.x)), height: Math.max(.001, Math.abs(point.y - active.start.y)) }]); }
+        if (active.mode === "draw-box" && (draft?.[0]?.type === "rect" || draft?.[0]?.type === "ellipse")) setDraft(draft.map(geometry => geometry.type === "rect" || geometry.type === "ellipse" ? { ...geometry, x: Math.min(active.start.x, point.x), y: Math.min(active.start.y, point.y), width: Math.max(.001, Math.abs(point.x - active.start.x)), height: Math.max(.001, Math.abs(point.y - active.start.y)) } : geometry));
         else if (active.mode === "draw-brush" && draft?.[0]?.type === "brush_stroke") setDraft(draft.map(item => item.type === "brush_stroke" ? { ...item, points: [...item.points, point] } : item));
         else if (active.mode === "move") { if (!active.started && !shouldStartSelectionMove(active.startScreen, { x: event.clientX, y: event.clientY })) return; active.started = true; setDraft(moveLayer(active.original, point.x - active.start.x, point.y - active.start.y, documentValue.canvas)); }
         else if (active.mode === "resize") setDraft(resizeLayer(active.original, active.handle, point.x - active.start.x, point.y - active.start.y, event.shiftKey, documentValue.canvas));
@@ -220,8 +239,9 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
     const pointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
         if (!documentValue || !gesture.current || !draft) return cancelGesture();
         const active = gesture.current, finalPoint = pointFor(event, brush.pressureMode);
+        if (active.mode === "draw-polygon") return;
         let final = shouldAppendFinalBrushPoint(active.mode) ? draft.map(item => item.type === "brush_stroke" ? { ...item, points: simplifyPoints([...item.points, finalPoint]) } : item) : draft;
-        if (active.mode === "draw-rect" && final[0].type === "rect" && (final[0].width <= .002 || final[0].height <= .002)) return cancelGesture();
+        if (active.mode === "draw-box" && (final[0].type === "rect" || final[0].type === "ellipse") && (final[0].width <= .002 || final[0].height <= .002)) return cancelGesture();
         mutate(value => {
             const region = value.regions.find(item => item.id === selectedRegionId); if (!region) return;
             if (active.mode.startsWith("draw")) region.geometry.push(...final);
@@ -229,6 +249,7 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         });
         cancelGesture();
     };
+    const doubleClick = (event: React.MouseEvent<HTMLDivElement>) => { if (gesture.current?.mode === "draw-polygon") { event.preventDefault(); finalizePolygon(); } };
 
     const moveRegion = (id: string, direction: -1 | 1) => mutate(value => { const index = value.regions.findIndex(region => region.id === id), target = index + direction; if (target < 0 || target >= value.regions.length) return; [value.regions[index], value.regions[target]] = [value.regions[target], value.regions[index]]; syncPriorities(value.regions); });
     const moveLayerOrder = (id: string, direction: -1 | 1) => updateLayer(id, (_items, region) => { const layers = geometryLayers(region), index = layers.findIndex(layer => layer.id === id), target = index + direction; if (target < 0 || target >= layers.length) return; [layers[index], layers[target]] = [layers[target], layers[index]]; region.geometry = layers.flatMap(layer => layer.geometries); });
@@ -242,12 +263,12 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
     if (!open) return null;
     const windowGeometry = activeWindowGeometry(viewState, { width: window.innerWidth, height: window.innerHeight });
     return <div ref={shell} className={`bv-regional-shell ${viewState.mode}`} role="dialog" aria-modal={viewState.mode === "workspace"} style={{ inset: "auto", left: windowGeometry.x, top: windowGeometry.y, width: windowGeometry.width, height: windowGeometry.height }} onKeyDown={event => event.stopPropagation()}>
-        <header onPointerDown={beginWindowDrag}><EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 1, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers} canSplitCompoundLayer={canSplitCompoundLayer} onSplitCompoundLayer={splitLayer} canSplitDisconnectedAreas={canSplitDisconnectedAreas} onSplitDisconnectedAreas={splitDisconnected} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/><div className="window-drag-handle"><span aria-hidden="true">⠿</span><strong>BV Regional Editor</strong></div><select value={node?.id ?? ""} onChange={event => setNode(nodes.find(item => String(item.id) === event.target.value) ?? null)}>{nodes.map(item => <option key={item.id} value={String(item.id)}>{`${item.title || "BV Regional Prompt"} · #${item.id}`}</option>)}</select><button className="window-mode-button" title={viewState.mode === "workspace" ? "Switch to floating window" : "Switch to workspace view"} onClick={() => setViewState(current => ({ ...current, mode: current.mode === "workspace" ? "floating" : "workspace" }))}>{viewState.mode === "workspace" ? "Float" : "Workspace"}</button><button title="Close" onClick={onClose}>×</button></header>
+        <header onPointerDown={beginWindowDrag}><EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 1, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers} canSplitCompoundLayer={canSplitCompoundLayer} onSplitCompoundLayer={splitLayer} canSplitDisconnectedAreas={canSplitDisconnectedAreas} onSplitDisconnectedAreas={splitDisconnected} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/><div className="window-drag-handle"><span aria-hidden="true">⠿</span><strong>BV Regional Editor</strong></div><select value={node?.id ?? ""} onChange={event => setNode(nodes.find(item => String(item.id) === event.target.value) ?? null)}>{nodes.map(item => <option key={item.id} value={String(item.id)}>{`${item.title || "BV Regional Prompt"} · #${item.id}`}</option>)}</select><button className="window-mode-button" title={viewState.mode === "workspace" ? "Switch to floating window" : "Switch to workspace view"} onClick={() => setViewState(current => ({ ...current, mode: current.mode === "workspace" ? "floating" : "workspace" }))}>{viewState.mode === "workspace" ? "Float" : "Workspace"}</button><button title="Close" onClick={onClose}>×</button></header>
         {error ? <div className="bv-regional-error">{error}</div> : documentValue && <>
             <main style={{ gridTemplateColumns: `${viewState.panels.left}px 6px minmax(300px, 1fr) 6px ${viewState.panels.right}px` }}>
                 <LayerPanel regions={documentValue.regions} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} selectedLayerIds={selectedLayerIds} isolate={isolate} onSelectRegion={id => { setSelectedRegionId(id); replaceLayerSelection(null); setIsolate(false); }} onSelectLayer={selectLayer} onAddRegion={() => mutate(value => { const region = newRegion(value.regions.length); value.regions.unshift(region); syncPriorities(value.regions); setSelectedRegionId(region.id); replaceLayerSelection(null); })} onRenameRegion={(id, name) => mutate(value => { value.regions.find(region => region.id === id)!.name = name; })} onRenameLayer={(id, name) => updateLayer(id, operations => operations.forEach(item => { item.authoring = { ...geometryAuthoring(item), name }; }))} onToggleRegion={(id, field) => mutate(value => { const region = value.regions.find(item => item.id === id)!; if (field === "enabled") region.enabled = !region.enabled; else region.authoring.locked = !region.authoring.locked; })} onToggleLayer={toggleLayer} onMoveRegion={moveRegion} onMoveLayer={moveLayerOrder} onDeleteRegion={deleteRegion} onDeleteLayer={deleteLayer} onDuplicateLayer={duplicateLayer} onToggleIsolate={() => setIsolate(value => !value)}/>
                 <div className="panel-splitter" onPointerDown={event => beginPanelResize("left", event)} onDoubleClick={() => setViewState(current => ({ ...current, panels: { ...current.panels, left: 290 } }))}/>
-                <Artboard key={documentValue.document_id} document={documentValue} background={backgrounds[documentValue.document_id]} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} draft={draft} selectionBounds={selectionBounds} cursor={cursor} tool={tool} brush={brush} canSubtract={!!selectedLayer && !selectedLayer.authoring.locked} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} initialView={viewState.artboard} onView={updateArtboardView} onTool={next => { setTool(next); cancelGesture(); }} onBrush={setBrush} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onPointerLeave={() => { if (!gesture.current) setCursor(null); }}/>
+                <Artboard key={documentValue.document_id} document={documentValue} background={backgrounds[documentValue.document_id]} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} draft={draft} selectionBounds={selectionBounds} cursor={cursor} tool={tool} brush={brush} canSubtract={!!selectedLayer && !selectedLayer.authoring.locked} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} initialView={viewState.artboard} onView={updateArtboardView} onTool={next => { setTool(next); cancelGesture(); }} onBrush={setBrush} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onPointerLeave={() => { if (!gesture.current) setCursor(null); }} onDoubleClick={doubleClick}/>
                 <div className="panel-splitter" onPointerDown={event => beginPanelResize("right", event)} onDoubleClick={() => setViewState(current => ({ ...current, panels: { ...current.panels, right: 340 } }))}/>
                 <OptionsPanel region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/>
             </main>

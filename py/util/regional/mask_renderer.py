@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as functional
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from .document import parse_document
 
@@ -20,6 +20,18 @@ def _rect(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
     result = torch.zeros((height, width), dtype=torch.float32)
     result[y0:y1, x0:x1] = 1.0
     return result
+
+
+def _ellipse(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
+    image = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(image).ellipse((shape["x"] * width, shape["y"] * height, (shape["x"] + shape["width"]) * width, (shape["y"] + shape["height"]) * height), fill=255)
+    return torch.frombuffer(bytearray(image.tobytes()), dtype=torch.uint8).reshape(height, width).float() / 255.0
+
+
+def _polygon(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
+    image = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(image).polygon([(point["x"] * width, point["y"] * height) for point in shape["points"]], fill=255)
+    return torch.frombuffer(bytearray(image.tobytes()), dtype=torch.uint8).reshape(height, width).float() / 255.0
 
 
 def _brush(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
@@ -98,7 +110,8 @@ def render_region(region: dict[str, Any], width: int, height: int) -> torch.Tens
         for shape in shapes:
             if not shape.get("enabled", True):
                 continue
-            shape_mask = _rect(shape, width, height) if shape["type"] == "rect" else _raster(shape, width, height) if shape["type"] == "raster_mask" else _brush(shape, width, height)
+            renderers = {"rect": _rect, "ellipse": _ellipse, "polygon": _polygon, "raster_mask": _raster, "brush_stroke": _brush}
+            shape_mask = renderers[shape["type"]](shape, width, height)
             layer_mask = torch.maximum(layer_mask, shape_mask) if shape["operation"] == "add" else layer_mask * (1 - shape_mask)
         mask = torch.maximum(mask, layer_mask)
     return _feather(mask, region["mask"]["feather"], width, height)

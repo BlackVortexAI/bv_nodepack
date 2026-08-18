@@ -71,9 +71,11 @@ Floating mode remains at viewport scale while the graph is zoomed or panned.
 
 ## Geometry and layers
 
-- Rectangles show a live preview while dragging and support move plus eight resize handles.
+- Rectangles and ellipses support independent Add/Subtract tools, live previews, move and eight resize handles.
+- Polygons use click-to-place vertices; press `Enter` or double-click to close and `Escape` to cancel.
+- Active Add/transform gestures use a cyan outline. Subtract gestures use a dashed red outline. The overlay includes live canvas-pixel dimensions and does not alter the document.
 - Brush layers support round/square tips, size, hardness, opacity and optional stylus pressure.
-- Subtractive brush strokes remove from the selected brush layer; they do not create white masks.
+- Subtractive shapes and brush strokes modify the selected unlocked compound mask; they do not create unrelated layers or white masks.
 - Regions and layers can be renamed, reordered, locked, hidden, disabled, duplicated or deleted.
 - Ctrl-click toggles individual layer selection; Shift-click selects a contiguous layer range.
 - **Layers > Merge Selected Layers** (`Ctrl E`) combines selected Rectangle and Brush layers inside one region without changing their rendered Add/Subtract result.
@@ -86,6 +88,8 @@ Floating mode remains at viewport scale while the graph is zoomed or panned.
 
 Mask overlay opacity and background-image opacity are display-only settings. They
 do not change exported masks, regional strength or the image returned by a sender.
+**View > Binary Mask Preview** displays the resolved enabled mask in black and white,
+including region feather, and blocks drawing or transforms while inspection is active.
 
 <details>
 <summary><strong>Display controls</strong></summary>

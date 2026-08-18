@@ -53,7 +53,7 @@ export default function LayerPanel(props: Props) {
                         const selectedLayer = props.selectedLayerIds.includes(layer.id), primaryLayer = layer.id === props.selectedLayerId;
                         const geometryTypes = new Set(layer.geometries.map(item => item.type));
                         const maskGroups = new Set(layer.geometries.map(geometryMaskGroupId)).size;
-                        const layerIcon = geometryTypes.size > 1 || maskGroups > 1 ? "◈" : layer.geometries[0].type === "rect" ? "▭" : layer.geometries[0].type === "raster_mask" ? "▦" : "✎";
+                        const layerIcon = geometryTypes.size > 1 || maskGroups > 1 ? "◈" : layer.geometries[0].type === "rect" ? "▭" : layer.geometries[0].type === "ellipse" ? "◯" : layer.geometries[0].type === "polygon" ? "⬠" : layer.geometries[0].type === "raster_mask" ? "▦" : "✎";
                         return <div key={layer.id} className={`geometry-row ${selectedLayer ? "selected" : ""} ${primaryLayer ? "primary-selection" : ""}`} onClick={event => props.onSelectLayer(layer.id, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "replace")}>
                             <span title={`${layer.geometries.length} operations · ${maskGroups} mask group${maskGroups === 1 ? "" : "s"}`}>{layerIcon}{layer.geometries.some(item => item.operation === "subtract") ? "−" : ""}</span>
                             <EditableName value={layer.authoring.name} onCommit={name => props.onRenameLayer(layer.id, name)}/>

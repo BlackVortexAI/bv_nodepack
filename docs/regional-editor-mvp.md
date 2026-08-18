@@ -33,11 +33,12 @@ Der nichtsemantische Editorzustand wird getrennt vom `BV_REGIONAL`-Dokument pro 
 
 Der Editor erhält zwei viewport-feste Betriebsarten. `Workspace` füllt den verfügbaren Viewport mit festen Rändern, folgt Browsergrößenänderungen automatisch und ist weder frei verschiebbar noch skalierbar. `Floating` ist frei verschiebbar und skalierbar; außerhalb des Fensters bleibt ComfyUI vollständig bedienbar, sodass der Benutzer parallel im Graph navigieren und arbeiten kann. Graph-Zoom und Graph-Pan dürfen Position oder Größe des Floating-Fensters nicht beeinflussen. Der Floating-Modus speichert seine Fenstergeometrie pro `document_id`; beide Modi können ohne Verlust von Dokument-, Undo- oder Auswahlzustand wechseln.
 
-Implementiert ist ein versionierter lokaler View-State pro `document_id`. Er speichert Workspace-/Floating-Geometrie, Panelbreiten, Artboard-Zoom/Pan/Fit, aktive Region und Ebene, Werkzeug, Brush-Einstellungen, Anzeige-Deckkraft, Isolation und das zuletzt geöffnete Top-Menü. Alte, beschädigte, außerhalb des Viewports liegende oder wegen Storage-Quota nicht speicherbare Zustände werden sicher normalisiert beziehungsweise ignoriert; sie verändern niemals `BV_REGIONAL`.
+Implementiert ist ein versionierter lokaler View-State pro `document_id`. Er speichert Workspace-/Floating-Geometrie, Panelbreiten, Artboard-Zoom/Pan/Fit, aktive Region und Ebene, Werkzeug, Brush-Einstellungen, Anzeige-Deckkraft, Isolation, binäre Maskenvorschau und das zuletzt geöffnete Top-Menü. Alte, beschädigte, außerhalb des Viewports liegende oder wegen Storage-Quota nicht speicherbare Zustände werden sicher normalisiert beziehungsweise ignoriert; sie verändern niemals `BV_REGIONAL`.
 
 Unterstützte Authoring-Werkzeuge:
 
-- normalisierte Rechtecke,
+- normalisierte Rechtecke und Ellipsen als Add/Subtract-Operationen,
+- normalisierte Klickpolygone als Add/Subtract-Operationen,
 - additive Pinselstriche,
 - subtraktive Pinselstriche,
 - beliebig viele unabhängige Regionen,
@@ -71,7 +72,16 @@ Die zweite Interaktionsiteration ergänzt:
 - kontextuelles Brush-Einstellungsflyout anstelle einer dauerhaft breiten oberen Toolleiste,
 - vorgesehener, zunächst deaktivierter Ebenenbefehl `Getrennte Flächen aufteilen…`.
 
-Geometrieebenen besitzen dafür rückwärtskompatible optionale Felder `enabled` und `authoring`. Brush-Strokes können zusätzlich `shape` und `pressure_mode` speichern. Fehlen diese Felder in einem älteren Workflow, ergänzt der Editor stabile Standardwerte.
+Die Geometrieiteration v0.9.0 ergänzt Ellipsen und Klickpolygone im Frontend-,
+Schema- und Python-Renderer-Vertrag. Subtraktive Formen werden auf alle internen
+Maskengruppen der ausgewählten entsperrten Ebene angewendet. Jede abgeschlossene
+Formgeste erzeugt genau einen Undo-Schritt. Eine kontrastreiche, zoomstabile
+Tool-Vorschau zeigt Add/Transform cyan, Subtract rot gestrichelt, Polygonkanten bis
+zum Mauszeiger und die aktuellen Canvas-Pixelabmessungen. Die persistierte binäre
+Maskenvorschau rendert ausschließlich die aufgelöste Sampling-Maske einschließlich
+Feather und sperrt sämtliche Dokumentinteraktionen während der Inspektion.
+
+Geometrieebenen besitzen dafür rückwärtskompatible optionale Felder `enabled` und `authoring`. Brush-Strokes können zusätzlich `shape` und `pressure_mode` speichern. Ellipsen verwenden normalisierte Bounds, Polygone mindestens drei normalisierte Punkte. Fehlen optionale Felder in einem älteren Workflow, ergänzt der Editor stabile Standardwerte; der alte persistierte Werkzeugname `rect` migriert lokal zu `rect-add`.
 
 ## Hintergrundbilder
 

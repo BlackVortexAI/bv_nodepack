@@ -111,6 +111,19 @@ class RegionalDocumentTests(unittest.TestCase):
         with self.assertRaisesRegex(RegionalValidationError, "PNG data"):
             parse_document(document)
 
+    def test_ellipse_and_polygon_contracts_are_validated(self):
+        document = fixture()
+        document["regions"][0]["geometry"] = [
+            {"id": "20000000-0000-4000-8000-000000000081", "type": "ellipse", "operation": "add", "x": 0.1, "y": 0.2, "width": 0.4, "height": 0.3},
+            {"id": "20000000-0000-4000-8000-000000000082", "type": "polygon", "operation": "subtract", "points": [
+                {"x": 0.2, "y": 0.2, "pressure": 1.0}, {"x": 0.4, "y": 0.2, "pressure": 1.0}, {"x": 0.3, "y": 0.4, "pressure": 1.0},
+            ]},
+        ]
+        self.assertEqual([shape["type"] for shape in parse_document(document)["regions"][0]["geometry"]], ["ellipse", "polygon"])
+        document["regions"][0]["geometry"][1]["points"] = document["regions"][0]["geometry"][1]["points"][:2]
+        with self.assertRaisesRegex(RegionalValidationError, "at least three vertices"):
+            parse_document(document)
+
 
 if __name__ == "__main__":
     unittest.main()

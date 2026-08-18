@@ -37,6 +37,13 @@ test("background display opacity survives save and reload per document", () => {
     assert.equal(loadEditorState("other-doc", storage, viewport).backgroundOpacity, 1);
 });
 
+test("binary mask preview and legacy rectangle tool state are normalized locally", () => {
+    const normalized = normalizeEditorState({ tool: "rect", binaryMaskPreview: true }, viewport);
+    assert.equal(normalized.tool, "rect-add");
+    assert.equal(normalized.binaryMaskPreview, true);
+    assert.equal(defaultEditorState(viewport).binaryMaskPreview, false);
+});
+
 test("floating windows remain recoverable after viewport changes", () => {
     const value = clampWindowGeometry({ x: 5000, y: -300, width: 1200, height: 700 }, { width: 1000, height: 700 }, "floating");
     assert.ok(value.x <= 920);

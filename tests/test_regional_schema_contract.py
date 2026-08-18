@@ -129,6 +129,17 @@ class RegionalSchemaContractTests(unittest.TestCase):
         }]
         jsonschema.Draft202012Validator(schema).validate(document)
 
+    def test_ellipse_and_polygon_geometry_validate(self):
+        schema = load_json(SCHEMA_PATH)
+        document = load_json(FIXTURE_ROOT / "v1_hybrid_joint.json")
+        document["regions"][0]["geometry"] = [
+            {"id": "20000000-0000-4000-8000-000000000081", "type": "ellipse", "operation": "add", "x": 0.1, "y": 0.2, "width": 0.4, "height": 0.3},
+            {"id": "20000000-0000-4000-8000-000000000082", "type": "polygon", "operation": "subtract", "points": [
+                {"x": 0.2, "y": 0.2, "pressure": 1.0}, {"x": 0.4, "y": 0.2, "pressure": 1.0}, {"x": 0.3, "y": 0.4, "pressure": 1.0},
+            ]},
+        ]
+        jsonschema.Draft202012Validator(schema).validate(document)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,6 +144,23 @@ class RegionalMaskTests(unittest.TestCase):
         self.assertEqual(float(mask[2, 3]), 1.0)
         self.assertEqual(float(mask[:, :2].sum()), 0.0)
 
+    def test_ellipse_and_polygon_render_and_subtract_deterministically(self):
+        document = fixture()
+        region = document["regions"][1]
+        region["mask"]["feather"] = 0
+        layer_id = "30000000-0000-4000-8000-000000000081"
+        region["geometry"] = [
+            {"id": "20000000-0000-4000-8000-000000000081", "layer_id": layer_id, "type": "ellipse", "operation": "add", "x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8},
+            {"id": "20000000-0000-4000-8000-000000000082", "layer_id": layer_id, "type": "polygon", "operation": "subtract", "points": [
+                {"x": 0.4, "y": 0.4, "pressure": 1.0}, {"x": 0.6, "y": 0.4, "pressure": 1.0}, {"x": 0.5, "y": 0.6, "pressure": 1.0},
+            ]},
+        ]
+        mask = render_selection(select_scope(document, "region", region["id"]), 100, 100)
+        self.assertEqual(tuple(mask.shape), (1, 100, 100))
+        self.assertEqual(float(mask[0, 50, 50]), 0.0)
+        self.assertEqual(float(mask[0, 50, 20]), 1.0)
+        self.assertEqual(float(mask[0, 5, 5]), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

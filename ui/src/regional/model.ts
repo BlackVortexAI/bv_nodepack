@@ -2,6 +2,8 @@ export type PromptPair = { positive_source: string; negative_source: string };
 export type Point = { x: number; y: number; pressure: number };
 export type Geometry =
     | { id: string; layer_id?: string; mask_group_id?: string; type: "rect"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number }
+    | { id: string; layer_id?: string; mask_group_id?: string; type: "ellipse"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number }
+    | { id: string; layer_id?: string; mask_group_id?: string; type: "polygon"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; points: Point[] }
     | { id: string; layer_id?: string; mask_group_id?: string; type: "brush_stroke"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; shape?: "round" | "square"; pressure_mode?: "constant" | "stylus"; size: number; hardness: number; opacity: number; points: Point[] }
     | { id: string; layer_id?: string; mask_group_id?: string; type: "raster_mask"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number; pixel_width: number; pixel_height: number; data_url: string };
 export type GeometryAuthoring = { name: string; visible: boolean; locked: boolean };
@@ -38,7 +40,7 @@ export const clone = <T,>(value: T): T => structuredClone(value);
 export function preserveDocumentIdentity<T extends { document_id: string }>(imported: T, documentId: string): T {
     return { ...imported, document_id: documentId };
 }
-export const geometryAuthoring = (geometry: Geometry, index = 0): GeometryAuthoring => geometry.authoring ?? { name: `${geometry.type === "rect" ? "Rectangle" : geometry.type === "raster_mask" ? "Raster" : "Brush"} ${index + 1}`, visible: true, locked: false };
+export const geometryAuthoring = (geometry: Geometry, index = 0): GeometryAuthoring => geometry.authoring ?? { name: `${geometry.type === "rect" ? "Rectangle" : geometry.type === "ellipse" ? "Ellipse" : geometry.type === "polygon" ? "Polygon" : geometry.type === "raster_mask" ? "Raster" : "Brush"} ${index + 1}`, visible: true, locked: false };
 export const geometryLayerId = (geometry: Geometry) => geometry.layer_id ?? geometry.id;
 export const geometryMaskGroupId = (geometry: Geometry) => geometry.mask_group_id ?? geometryLayerId(geometry);
 export function geometryGroups(geometries: Geometry[], idFor: (geometry: Geometry) => string): GeometryLayer[] {

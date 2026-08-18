@@ -176,12 +176,20 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
             ):
                 issues.append(f"{shape_path}.authoring is invalid")
             shape_type = shape.get("type")
-            if shape_type == "rect":
+            if shape_type in {"rect", "ellipse"}:
                 values = [shape.get(key) for key in ("x", "y", "width", "height")]
                 if not all(_finite_number(value) for value in values):
-                    issues.append(f"{shape_path} rectangle values must be finite numbers")
+                    issues.append(f"{shape_path} {shape_type} values must be finite numbers")
                 elif not (0 <= values[0] <= 1 and 0 <= values[1] <= 1 and values[2] > 0 and values[3] > 0 and values[0] + values[2] <= 1 + 1e-9 and values[1] + values[3] <= 1 + 1e-9):
-                    issues.append(f"{shape_path} rectangle must stay inside normalized canvas")
+                    issues.append(f"{shape_path} {shape_type} must stay inside normalized canvas")
+            elif shape_type == "polygon":
+                points = shape.get("points")
+                if not isinstance(points, list) or len(points) < 3:
+                    issues.append(f"{shape_path}.points must contain at least three vertices")
+                else:
+                    for point_index, point in enumerate(points):
+                        if not isinstance(point, dict) or any(not _finite_number(point.get(k)) or not 0 <= point.get(k) <= 1 for k in ("x", "y", "pressure")):
+                            issues.append(f"{shape_path}.points[{point_index}] must contain normalized x, y, pressure")
             elif shape_type == "brush_stroke":
                 if shape.get("shape", "round") not in {"round", "square"}:
                     issues.append(f"{shape_path}.shape must be round or square")

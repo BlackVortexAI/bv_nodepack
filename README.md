@@ -24,7 +24,7 @@ Subgraph behavior and graceful failure as first-class features.
 
 | Feature | What it solves |
 | --- | --- |
-| [Regional Editor](#regional-prompting) | Author named, overlapping rectangle and brush regions with editable display colors, compound-layer merge/split and disconnected-area splitting |
+| [Regional Editor](#regional-prompting) | Author named rectangle, ellipse, polygon and brush regions with additive/subtractive geometry, binary mask inspection and live tool previews |
 | [Prompt Autocomplete](#prompt-autocomplete) | Local, optional CSV/TSV completion in BV editors and ordinary ComfyUI multiline fields |
 | [Prompt AST](#structured-prompt-ast) | Filter and reuse semantic prompt blocks without fragile string replacement |
 | [Smart Pipe](#smart-pipes) | Grow typed workflow state through wired or wireless branches while retaining stable slot identity |
@@ -107,8 +107,11 @@ the spatial guidance.
 5. Connect `patched_model`/`positive`/`negative` to a standard KSampler.
 6. Optionally return the latest image through **Preview Send** or **Save Send**.
 
-The editor supports overlap, priority ordering, undo/redo, multi-selection, lossless compound-layer merging and resolution-aware disconnected-area splitting, layer controls, zoom,
-pan, WYSIWYG aspect ratios, document import/export and persistent per-document UI state.
+The editor supports additive and subtractive rectangles, ellipses, polygons and brushes,
+live tool outlines with pixel dimensions, a resolved binary-mask inspection mode,
+overlap, priority ordering, undo/redo, multi-selection, lossless compound-layer merging,
+resolution-aware disconnected-area splitting, layer controls, zoom, pan, WYSIWYG aspect
+ratios, document import/export and persistent per-document UI state.
 
 Read the illustrated **[Regional Editor Guide](docs/regional-editor-guide.md)** for
 tools, prompts, model behavior, image feedback, document utilities and current limits.
@@ -687,6 +690,18 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-18 — v0.9.0
+
+- Add additive and subtractive rectangle, ellipse and click-to-place polygon tools.
+- Extend the `BV_REGIONAL` v1 schema, validation, transforms and backend mask renderer
+  with ellipse and polygon geometry while preserving existing documents.
+- Add a persistent, inspection-only binary mask preview that resolves enabled mask
+  operations and region feather without authoring overlays or background images.
+- Show zoom-stable cyan Add/transform and dashed red Subtract previews, live polygon
+  edges and canvas-pixel dimensions while drawing, moving or resizing geometry.
+- Cover geometry contracts, hit testing, transforms, mask composition, persistence and
+  schema validation with frontend and Python regression tests.
 
 ### 2026-08-18 — v0.8.0
 

@@ -180,6 +180,12 @@
                 "$ref": "#/$defs/rectangle"
               },
               {
+                "$ref": "#/$defs/ellipse"
+              },
+              {
+                "$ref": "#/$defs/polygon"
+              },
+              {
                 "$ref": "#/$defs/brushStroke"
               },
               {
@@ -351,6 +357,26 @@
         }
       ]
     },
+    "ellipse": {
+      "allOf": [
+        { "$ref": "#/$defs/geometryBase" },
+        { "type": "object", "additionalProperties": false, "required": ["id", "type", "operation", "x", "y", "width", "height"], "properties": {
+          "id": { "$ref": "#/$defs/id" }, "type": { "const": "ellipse" }, "operation": { "enum": ["add", "subtract"] },
+          "layer_id": { "$ref": "#/$defs/id" }, "mask_group_id": { "$ref": "#/$defs/id" }, "enabled": { "type": "boolean" }, "authoring": { "$ref": "#/$defs/geometryAuthoring" },
+          "x": { "$ref": "#/$defs/unitInterval" }, "y": { "$ref": "#/$defs/unitInterval" }, "width": { "$ref": "#/$defs/positiveUnitInterval" }, "height": { "$ref": "#/$defs/positiveUnitInterval" }
+        } }
+      ]
+    },
+    "polygon": {
+      "allOf": [
+        { "$ref": "#/$defs/geometryBase" },
+        { "type": "object", "additionalProperties": false, "required": ["id", "type", "operation", "points"], "properties": {
+          "id": { "$ref": "#/$defs/id" }, "type": { "const": "polygon" }, "operation": { "enum": ["add", "subtract"] },
+          "layer_id": { "$ref": "#/$defs/id" }, "mask_group_id": { "$ref": "#/$defs/id" }, "enabled": { "type": "boolean" }, "authoring": { "$ref": "#/$defs/geometryAuthoring" },
+          "points": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/geometryPoint" } }
+        } }
+      ]
+    },
     "rasterMask": {
       "allOf": [
         { "$ref": "#/$defs/geometryBase" },
@@ -402,6 +428,10 @@
           "$ref": "#/$defs/unitInterval"
         }
       }
+    },
+    "geometryPoint": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "pressure"],
+      "properties": { "x": { "$ref": "#/$defs/unitInterval" }, "y": { "$ref": "#/$defs/unitInterval" }, "pressure": { "$ref": "#/$defs/unitInterval" } }
     }
   }
 }
