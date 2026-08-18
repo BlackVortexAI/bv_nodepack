@@ -641,6 +641,32 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-18 — v0.7.0
+
+- Add an exact-architecture FLUX.2 Klein 9B joint-attention backend for
+  `BV_REGIONAL` documents with standard ComfyUI sampling paths.
+- Route Global, Background and regional Qwen3-8B contexts through all double-
+  and single-stream attention blocks while preserving `joint` overlap semantics.
+- Emit zero negative conditioning for the distilled 9B profile and reject Klein
+  4B, full FLUX.2 and unrelated architectures explicitly.
+- Add dense-mask memory guards, regression coverage, an importable separation-test
+  document and verified workflow/editor/result screenshots.
+- Document that sampler, scheduler, guidance and model-sampling configuration remain
+  caller-owned and must be validated independently from regional routing.
+
+### 2026-08-18 — v0.6.0
+
+- Add a Z-Image Turbo joint-attention backend for `BV_REGIONAL` documents with
+  standard-KSampler positive and zero negative conditioning.
+- Route Global, Background and regional text contexts through Z-Image Turbo's
+  model-internal attention while preserving overlapping region behavior.
+- Validate regional attribute separation against untuned Native Conditioning with
+  matching prompts, geometry, seed and sampling settings.
+- Reject incompatible model architectures explicitly and cover compilation,
+  attention routing, strength, timing and failure behavior with regression tests.
+- Add an importable Z-Image Turbo separation-test document and illustrated attention
+  and Native workflow evidence.
+
 ### 2026-08-18 — v0.5.0
 
 - Add a generic SDXL cross-attention routing backend for `BV_REGIONAL` documents
