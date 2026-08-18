@@ -321,6 +321,10 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
         self.assertEqual(mode[1]["default"], "multipass_legacy")
 
+        inputs = self.module.BVRegionalAnimaConditioningNode.INPUT_TYPES()["required"]
+        self.assertEqual(inputs["base_mode"][1]["default"], "disabled")
+        self.assertEqual(inputs["self_mask_strength"][1]["default"], 0.0)
+
     def test_anima_singlepass_skips_legacy_model_hook_passes(self):
         node = self.module.BVRegionalAnimaConditioningNode()
 
@@ -386,7 +390,6 @@ class RegionalNodeTests(unittest.TestCase):
         legacy.assert_called_once()
         singlepass.assert_not_called()
         self.assertEqual(result, ("attention-model", ["legacy-positive"], ["legacy-negative"]))
-
     def test_color_control_node_is_registered_and_returns_image_with_legend(self):
         node = self.module.BVRegionalColorControlImageNode()
         image, legend_json = node.compile(fixture())

@@ -1,6 +1,6 @@
 {
   "schema": "bv.regional",
-  "version": 1,
+  "version": 2,
   "document_id": "7ac9e7d4-1c38-48e7-8ba6-f2ea41388f7a",
   "title": "Krea 2 - Two Explorers in a Space Observatory",
   "canvas": {
@@ -29,6 +29,7 @@
       "enabled": true,
       "strength": 0.85,
       "priority": 1,
+      "usage": "generation",
       "prompts": {
         "positive_source": "The woman on the left has a short silver-white bob haircut and pale skin. She wears a clean matte-white armored spacesuit with cyan luminous seams, cyan gloves and cyan boots, with no orange parts.",
         "negative_source": "Orange armor, orange glow, black spacesuit, long dark hair."
@@ -67,6 +68,7 @@
       "enabled": true,
       "strength": 0.85,
       "priority": 0,
+      "usage": "generation",
       "prompts": {
         "positive_source": "The woman on the right has long dark-brown wavy hair and warm olive skin. She wears a glossy black armored spacesuit with vivid orange panels, orange gloves and orange boots, with no cyan parts.",
         "negative_source": "Cyan armor, cyan glow, white spacesuit, short silver hair."

@@ -11,6 +11,11 @@ try:
 except Exception as error:
     print(f"BV Node Pack: completion API unavailable: {error}")
 
+try:
+    from .py.util.debug_bridge import routes as _debug_bridge_routes  # noqa: F401
+except Exception as error:
+    print(f"BV Node Pack: debug bridge API unavailable: {error}")
+
 
 def get_ext_dir(subpath=None, mkdir=False):
     root = Path(__file__).parent

@@ -1,0 +1,143 @@
+{
+  "canvas": {
+    "height": 1024,
+    "width": 1536
+  },
+  "document_id": "cf8371ba-c69e-4525-92e8-36cd11a05b76",
+  "negative_mode": "prompt",
+  "overlap": {
+    "mode": "joint"
+  },
+  "prompts": {
+    "background": {
+      "negative_source": "outdoor scene, empty room",
+      "positive_source": "industrial workshop interior, shelves and concrete wall"
+    },
+    "global": {
+      "negative_source": "extra person, missing tools, mixed objects",
+      "positive_source": "mechanic workshop, one person, organized work area, detailed"
+    }
+  },
+  "regions": [
+    {
+      "authoring": {
+        "color": "#E45756",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Ellipse 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.42,
+          "id": "22ee3975-55cf-47c3-8f7e-34b768cd5a4a",
+          "layer_id": "22ee3975-55cf-47c3-8f7e-34b768cd5a4a",
+          "operation": "add",
+          "type": "ellipse",
+          "width": 0.36,
+          "x": 0.1,
+          "y": 0.4
+        }
+      ],
+      "id": "20ffaf36-14da-4687-a4cb-eaaa31f1cc0e",
+      "mask": {
+        "feather": 0.015
+      },
+      "name": "Toolbox child",
+      "parent_region_id": "59098992-f8ed-4587-a18d-0439249fc741",
+      "priority": 0,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "blue toolbox, closed lid, wrench outside",
+        "positive_source": "red toolbox, open lid, brass wrench inside"
+      },
+      "strength": 1
+    },
+    {
+      "authoring": {
+        "color": "#54A24B",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Ellipse 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.72,
+          "id": "6041f3f2-032f-4303-8a48-e7bedc3d640e",
+          "layer_id": "6041f3f2-032f-4303-8a48-e7bedc3d640e",
+          "operation": "add",
+          "type": "ellipse",
+          "width": 0.4,
+          "x": 0.54,
+          "y": 0.14
+        }
+      ],
+      "id": "3d123ceb-a22f-4df0-9be7-a1f52915554a",
+      "mask": {
+        "feather": 0.015
+      },
+      "name": "Mechanic",
+      "parent_region_id": null,
+      "priority": 1,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "red overalls, facing away, standing in front of workbench",
+        "positive_source": "mechanic, green overalls, reaching toward toolbox, standing behind workbench"
+      },
+      "strength": 1
+    },
+    {
+      "authoring": {
+        "color": "#4C78A8",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Rectangle 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.38,
+          "id": "66331aa0-7c42-44e6-8a54-21de0f79e852",
+          "layer_id": "66331aa0-7c42-44e6-8a54-21de0f79e852",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.64,
+          "x": 0.18,
+          "y": 0.48
+        }
+      ],
+      "id": "59098992-f8ed-4587-a18d-0439249fc741",
+      "mask": {
+        "feather": 0.01
+      },
+      "name": "Workbench parent",
+      "parent_region_id": null,
+      "priority": 2,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "glass table, missing vise",
+        "positive_source": "wood workbench, scattered hand tools, metal vise attached"
+      },
+      "strength": 0.8
+    }
+  ],
+  "schema": "bv.regional",
+  "title": "Prompt Enhancer Parent Child Overlap Stress",
+  "version": 2
+}

@@ -1,4 +1,6 @@
 {
+  "BV Apply Regional Enhancement": "Apply a verified prompt-only enhancement to its matching BV Regional source document.",
+  "BV Comfy CLIP LLM Provider": "Expose a compatible generative ComfyUI CLIP through the BV-owned local LLM provider contract.",
   "BV Control Center": "Apply reusable controls to workflow groups, including Subgraph-aware activate, mute and bypass states.",
   "BV Dynamic Combo": "Create a validated user-defined selection control with explicit options and output values.",
   "BV Empty Latent Random Ratio": "Create an empty latent at a randomly selected configured aspect ratio.",
@@ -28,6 +30,7 @@
   "BV Regional FLUX.2 Klein 9B Attention": "Route BV Regional prompts through the exact FLUX.2 Klein 9B joint-attention architecture with a standard KSampler.",
   "BV Regional Krea 2 Attention": "Experimentally route BV Regional prompts through Krea 2's 28 main joint-attention blocks with a standard KSampler.",
   "BV Regional Prompt": "Author named rectangle and brush regions with prompts in the visual Regional Editor.",
+  "BV Regional Prompt Enhancer": "Generate and strictly verify regional-aware prompt improvements without mutating the source document.",
   "BV Regional Prompt Extract": "Extract the selected regional prompt payload for downstream processing.",
   "BV Regional Select": "Select a region by its stable identity from a BV Regional document.",
   "BV Seed": "Resolve fixed or per-queue random seeds while reporting the effective value.",
@@ -35,5 +38,6 @@
   "BV Smart Pipe Merge": "Merge Smart Pipe branches with explicit source order and deterministic conflict handling.",
   "BV Subgraph Divider": "Add a persistent visual divider to a Subgraph interface.",
   "BV Subgraph Heading": "Add a persistent heading to a Subgraph interface.",
-  "BV Subgraph Spacer": "Add persistent spacing to a Subgraph interface."
+  "BV Subgraph Spacer": "Add persistent spacing to a Subgraph interface.",
+  "BV Text Log Writer": "Preview and optionally write a text value to a safely named UTF-8 log file under the ComfyUI output directory."
 }
