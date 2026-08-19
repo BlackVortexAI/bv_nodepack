@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -64,6 +65,19 @@ class RegionalAnimaAdapterTests(unittest.TestCase):
             region["enabled"] = False
         with self.assertRaisesRegex(ValueError, "at least one enabled region"):
             compile_anima_adapter(document, FakeClip())
+
+    @patch("util.regional.anima_adapter.clip_with_hooks", side_effect=lambda clip, hooks: clip)
+    def test_encodes_each_scope_with_its_hook_group(self, clip_with_hooks):
+        document = fixture()
+        hooks = {"global": "global", "background": "background"}
+        hooks.update({region["id"]: region["id"] for region in document["regions"]})
+
+        compile_anima_adapter(document, FakeClip(), hooks)
+
+        used_hooks = [call.args[1] for call in clip_with_hooks.call_args_list]
+        self.assertEqual(used_hooks[:2], ["global", "background"])
+        self.assertEqual(used_hooks[2:5], [region["id"] for region in document["regions"]])
+        self.assertEqual(used_hooks[5], "global")
 
 
 if __name__ == "__main__":

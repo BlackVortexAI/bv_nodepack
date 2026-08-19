@@ -5,24 +5,9 @@ from typing import Any
 
 import torch
 
+from .clip_hooks import clip_with_hooks
 from .document import parse_document, selection_prompts
 from .mask_renderer import render_selection
-
-
-def _clip_with_hooks(clip: Any, hooks: Any) -> Any:
-    if hooks is None:
-        return clip
-    import comfy.hooks
-
-    hooked = clip.clone(disable_dynamic=True)
-    hooked.apply_hooks_to_conds = hooks
-    hooked.patcher.forced_hooks = hooks.clone()
-    hooked.use_clip_schedule = False
-    hooked.patcher.forced_hooks.set_keyframes_on_hooks(None)
-    hooked.patcher.register_all_hook_patches(
-        hooks, comfy.hooks.create_target_dict(comfy.hooks.EnumWeightTarget.Clip)
-    )
-    return hooked
 
 
 def _is_anima_clip(clip: Any) -> bool:
@@ -37,7 +22,7 @@ def _is_anima_clip(clip: Any) -> bool:
 def _encode(clip: Any, text: str, hooks: Any = None) -> list:
     if clip is None:
         raise ValueError("clip is required")
-    encoder = _clip_with_hooks(clip, hooks)
+    encoder = clip_with_hooks(clip, hooks)
     conditioning = encoder.encode_from_tokens_scheduled(encoder.tokenize(text))
     if hooks is None or getattr(encoder, "apply_hooks_to_conds", None) is hooks:
         return conditioning

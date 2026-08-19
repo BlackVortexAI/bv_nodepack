@@ -21,6 +21,7 @@ from ..util.regional.lora_hooks import (
     BINDINGS,
     REGISTRY,
     add_named_stack,
+    apply_attention_hook_passes,
     create_hook_groups,
     default_bindings,
     reconcile_bindings,
@@ -472,14 +473,21 @@ class BVRegionalAnimaConditioningNode:
                 "base_ratio": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "cross_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
                 "self_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
-            }
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
     CATEGORY = CATEGORY
-    DESCRIPTION = "Compiles BV Regional and applies the built-in Anima attention patch for a standard KSampler."
+    DESCRIPTION = (
+        "Compiles BV Regional and applies the built-in Anima attention patch for a standard KSampler. "
+        "Regional LoRA hook passes are experimental and add one model pass per distinct effective stack."
+    )
 
     def apply(
         self,
@@ -495,6 +503,8 @@ class BVRegionalAnimaConditioningNode:
         base_ratio,
         cross_inject_every_n_blocks,
         self_inject_every_n_blocks,
+        lora_registry=None,
+        lora_bindings=None,
     ):
         try:
             from ..util.regional.anima_patcher import ApplyAnimaRegionalConditioningPatch
@@ -504,7 +514,13 @@ class BVRegionalAnimaConditioningNode:
                 "Update ComfyUI and verify the dependencies reported by the original import error."
             ) from error
 
-        positive, negative, regions, background = compile_anima_adapter(regional, clip)
+        document = parse_document(regional)
+        scope_stacks = resolve_scope_stacks(lora_registry, lora_bindings, document)
+        hook_groups = create_hook_groups(scope_stacks)
+        positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
+        positive, negative = apply_attention_hook_passes(
+            positive, negative, document, scope_stacks, hook_groups
+        )
         patched_model = ApplyAnimaRegionalConditioningPatch().apply(
             model=model,
             regions=regions,

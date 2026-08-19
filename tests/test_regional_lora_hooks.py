@@ -1,7 +1,30 @@
 import json
 import unittest
+from unittest.mock import patch
 
-from py.util.regional.lora_hooks import add_named_stack, default_bindings, parse_bindings, parse_registry, reconcile_bindings, resolve_scope_stacks
+import torch
+
+from py.util.regional.lora_hooks import add_named_stack, apply_attention_hook_passes, default_bindings, parse_bindings, parse_registry, reconcile_bindings, resolve_scope_stacks
+
+
+def pass_document(*regions):
+    return {
+        "canvas": {"width": 4, "height": 2},
+        "regions": [{"id": region_id, "enabled": enabled} for region_id, enabled in regions],
+    }
+
+
+def conditioning():
+    return [[torch.ones((1, 1, 1)), {"source": "test"}]]
+
+
+def selection_mask(selection, _width, _height):
+    masks = {
+        "left": torch.tensor([[[1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 0.0, 0.0]]]),
+        "right": torch.tensor([[[0.0, 0.0, 1.0, 1.0], [0.0, 0.0, 1.0, 1.0]]]),
+        "overlap": torch.tensor([[[0.0, 0.5, 1.0, 0.0], [0.0, 0.5, 1.0, 0.0]]]),
+    }
+    return masks[selection["region_id"]]
 
 
 class RegionalLoraHookContractTests(unittest.TestCase):
@@ -73,6 +96,15 @@ class RegionalLoraHookContractTests(unittest.TestCase):
 
         self.assertEqual(resolve_scope_stacks(registry, bindings, document), {})
 
+    def test_fully_disabled_stack_is_a_valid_noop(self):
+        document = {"document_id": "doc-a", "regions": [{"id": "region-a"}]}
+        registry = add_named_stack(None, "disabled", "Disabled", [("missing.safetensors", 0, 0)])
+        bindings = default_bindings("doc-a")
+        bindings["global_stack_id"] = "disabled"
+        bindings["regions"] = {"region-a": "disabled"}
+
+        self.assertEqual(resolve_scope_stacks(registry, bindings, document), {})
+
     def test_orphaned_region_binding_does_not_require_its_old_stack_at_runtime(self):
         document = {"document_id": "doc-a", "regions": [{"id": "current-region"}]}
         registry = add_named_stack(None, "current", "Current", [("current.safetensors", 1, 0)])
@@ -96,6 +128,76 @@ class RegionalLoraHookContractTests(unittest.TestCase):
 
         self.assertEqual(reconciled["global_stack_id"], "global")
         self.assertEqual(reconciled["regions"], {"current-region": "current"})
+
+    def test_no_lora_preserves_existing_conditioning(self):
+        positive, negative = conditioning(), conditioning()
+        result = apply_attention_hook_passes(positive, negative, pass_document(("left", True)), {}, {})
+        self.assertIs(result[0], positive)
+        self.assertIs(result[1], negative)
+
+    def test_global_lora_uses_one_unmasked_pass(self):
+        positive, negative = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True)),
+            {"global": [("base.safetensors", 1.0, 0.5)], "left": [("base.safetensors", 1.0, 0.5)]},
+            {"global": "global-hooks"},
+        )
+        self.assertEqual((len(positive), len(negative)), (1, 1))
+        self.assertEqual(positive[0][1]["hooks"], "global-hooks")
+        self.assertNotIn("mask", positive[0][1])
+
+    @patch("py.util.regional.mask_renderer.render_selection", side_effect=selection_mask)
+    def test_one_regional_lora_adds_baseline_and_override_passes(self, _render):
+        positive, negative = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True)),
+            {"left": [("local.safetensors", 0.8, 0.6)]}, {"left": "local-hooks"},
+        )
+        self.assertEqual((len(positive), len(negative)), (2, 2))
+        self.assertNotIn("hooks", positive[0][1])
+        self.assertEqual(positive[1][1]["hooks"], "local-hooks")
+
+    @patch("py.util.regional.mask_renderer.render_selection", side_effect=selection_mask)
+    def test_identical_regional_model_stacks_share_one_override_pass(self, _render):
+        stack = [("local.safetensors", 0.8, 0.6)]
+        positive, _ = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True), ("overlap", True)),
+            {"left": stack, "overlap": list(stack)}, {"left": "left-hooks", "overlap": "overlap-hooks"},
+        )
+        expected = torch.maximum(selection_mask({"region_id": "left"}, 4, 2), selection_mask({"region_id": "overlap"}, 4, 2))
+        self.assertEqual(len(positive), 2)
+        self.assertTrue(torch.equal(positive[1][1]["mask"], expected))
+
+    @patch("py.util.regional.mask_renderer.render_selection", side_effect=selection_mask)
+    def test_different_regional_model_stacks_use_separate_passes(self, _render):
+        positive, _ = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True), ("right", True)),
+            {"left": [("left.safetensors", 0.8, 0.6)], "right": [("right.safetensors", 0.8, 0.6)]},
+            {"left": "left-hooks", "right": "right-hooks"},
+        )
+        self.assertEqual(len(positive), 2)
+        self.assertEqual({item[1]["hooks"] for item in positive}, {"left-hooks", "right-hooks"})
+
+    @patch("py.util.regional.mask_renderer.render_selection", side_effect=selection_mask)
+    def test_clip_only_differences_do_not_add_model_passes(self, render):
+        positive, _ = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True)),
+            {"global": [("style.safetensors", 1.0, 0.4)], "left": [("style.safetensors", 1.0, 0.9)]},
+            {"global": "global-hooks", "left": "left-hooks"},
+        )
+        self.assertEqual(len(positive), 1)
+        self.assertEqual(positive[0][1]["hooks"], "global-hooks")
+        render.assert_not_called()
+
+    @patch("py.util.regional.mask_renderer.render_selection", side_effect=selection_mask)
+    def test_overlapping_different_stacks_keep_both_override_masks(self, _render):
+        positive, _ = apply_attention_hook_passes(
+            conditioning(), conditioning(), pass_document(("left", True), ("overlap", True)),
+            {"left": [("left.safetensors", 0.8, 0.6)], "overlap": [("overlap.safetensors", 0.8, 0.6)]},
+            {"left": "left-hooks", "overlap": "overlap-hooks"},
+        )
+        by_hook = {item[1].get("hooks"): item[1]["mask"] for item in positive}
+        self.assertEqual(by_hook["left-hooks"][0, 0, 1].item(), 1.0)
+        self.assertEqual(by_hook["overlap-hooks"][0, 0, 1].item(), 0.5)
+        self.assertEqual(by_hook[None][0, 0, 3].item(), 1.0)
 
 
 if __name__ == "__main__":

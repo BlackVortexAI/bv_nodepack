@@ -141,6 +141,7 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
     result: dict[str, Any] = {}
     global_id = parsed["global_stack_id"]
     global_entries = stacks[global_id]["stack"] if global_id else []
+    global_entries = [entry for entry in global_entries if entry[1] != 0.0 or entry[2] != 0.0]
     if global_entries:
         result["global"] = global_entries
         result["background"] = global_entries
@@ -151,6 +152,7 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
         combined.extend(global_entries)
         if local_id:
             combined.extend(stacks[local_id]["stack"])
+        combined = [entry for entry in combined if entry[1] != 0.0 or entry[2] != 0.0]
         if combined:
             result[region_id] = combined
     return result
@@ -188,3 +190,91 @@ def create_hook_groups(scope_stacks: dict[str, Any]) -> dict[str, Any]:
             hooks.append(hook_group)
         groups[scope] = comfy.hooks.HookGroup.combine_all_hooks(hooks)
     return groups
+
+
+def _model_stack_fingerprint(entries: Any) -> tuple[tuple[str, float], ...]:
+    return tuple(
+        (str(path), float(model_strength))
+        for path, model_strength, _clip_strength in (entries or [])
+        if float(model_strength) != 0.0
+    )
+
+
+def _clip_stack_fingerprint(entries: Any) -> tuple[tuple[str, float], ...]:
+    return tuple(
+        (str(path), float(clip_strength))
+        for path, _model_strength, clip_strength in (entries or [])
+        if float(clip_strength) != 0.0
+    )
+
+
+def _conditionings_with_pass(conditioning: list, hooks: Any, mask: Any = None) -> list:
+    result = []
+    for embedding, metadata in conditioning:
+        values = metadata.copy()
+        if hooks is None:
+            values.pop("hooks", None)
+        else:
+            values["hooks"] = hooks
+        if mask is None:
+            values.pop("mask", None)
+            values.pop("mask_strength", None)
+            values.pop("set_area_to_bounds", None)
+        else:
+            values.update({"mask": mask, "mask_strength": 1.0, "set_area_to_bounds": False})
+        result.append([embedding, values])
+    return result
+
+
+def apply_attention_hook_passes(
+    positive: list,
+    negative: list,
+    document: dict[str, Any],
+    scope_stacks: dict[str, Any],
+    hook_groups: dict[str, Any],
+) -> tuple[list, list]:
+    """Split full attention conditioning into masked LoRA model passes."""
+    if not scope_stacks:
+        return positive, negative
+
+    import torch
+
+    from .mask_renderer import render_selection
+
+    width, height = document["canvas"]["width"], document["canvas"]["height"]
+    baseline_key = _model_stack_fingerprint(scope_stacks.get("global"))
+    grouped_masks: dict[tuple[tuple[str, float], ...], Any] = {}
+    representative_scope: dict[tuple[tuple[str, float], ...], str] = {}
+
+    for region in document["regions"]:
+        if not region["enabled"]:
+            continue
+        scope = region["id"]
+        key = _model_stack_fingerprint(scope_stacks.get(scope))
+        if key == baseline_key:
+            continue
+        selection = {"document": document, "scope": "region", "region_id": scope}
+        mask = render_selection(selection, width, height).detach().float().clamp(0.0, 1.0)
+        grouped_masks[key] = torch.maximum(grouped_masks[key], mask) if key in grouped_masks else mask
+        representative_scope.setdefault(key, scope)
+
+    if not grouped_masks:
+        hooks = hook_groups.get("global")
+        return _conditionings_with_pass(positive, hooks), _conditionings_with_pass(negative, hooks)
+
+    override_union = torch.zeros((1, height, width), dtype=torch.float32)
+    for mask in grouped_masks.values():
+        override_union = torch.maximum(override_union, mask)
+    baseline_mask = 1.0 - override_union
+
+    positive_passes: list = []
+    negative_passes: list = []
+    if bool(torch.any(baseline_mask > 0)):
+        baseline_hooks = hook_groups.get("global")
+        positive_passes.extend(_conditionings_with_pass(positive, baseline_hooks, baseline_mask))
+        negative_passes.extend(_conditionings_with_pass(negative, baseline_hooks, baseline_mask))
+    for key, mask in grouped_masks.items():
+        hooks = hook_groups.get(representative_scope[key])
+        positive_passes.extend(_conditionings_with_pass(positive, hooks, mask))
+        negative_passes.extend(_conditionings_with_pass(negative, hooks, mask))
+    return positive_passes, negative_passes

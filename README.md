@@ -107,12 +107,21 @@ the spatial guidance.
 5. Connect `patched_model`/`positive`/`negative` to a standard KSampler.
 6. Optionally return the latest image through **Preview Send** or **Save Send**.
 
-Optional regional LoRA hooks are available on the native-conditioning path. Connect
-an external `LORA_STACK` producer to **BV Named LoRA Stack**, chain its registry into
-**BV Regional Native Conditioning**, and connect the prompt node's `lora_bindings`
-sidecar output. The editor can then assign one unchanged live stack globally and one
-additional stack per region. The registry and bindings inputs are optional; workflows
-that do not connect them retain the previous `BV_REGIONAL` v1 behavior.
+Optional regional LoRA hooks are available on the native-conditioning and Anima
+attention paths. Connect an external `LORA_STACK` producer to **BV Named LoRA Stack**,
+chain its registry into the conditioning node, and connect the prompt node's
+`lora_bindings` sidecar output. The editor can then assign one unchanged live stack
+globally and one additional stack per region. The registry and bindings inputs are
+optional; workflows that do not connect them retain the previous `BV_REGIONAL` v1
+behavior. Empty stacks and entries whose model and CLIP strengths are both zero are
+valid no-ops.
+
+Anima attention evaluates one full model pass for the global baseline plus one masked
+pass for every distinct effective regional model stack. Regions with identical model
+stacks share a pass, and CLIP-only strength differences do not add model passes. A
+single regional stack therefore normally doubles sampling work, while two different
+regional stacks normally triple it. Actual runtime and peak VRAM depend on the model,
+resolution, sampler and ComfyUI memory management.
 
 ### Named LoRA stack interoperability
 

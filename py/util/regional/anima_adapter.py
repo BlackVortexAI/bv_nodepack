@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import torch
 
+from .clip_hooks import clip_with_hooks
 from .document import parse_document, selection_prompts
 from .mask_renderer import render_selection
 
@@ -31,10 +32,11 @@ class AnimaRegionChain:
         return regions
 
 
-def _encode(clip: Any, text: str) -> list:
+def _encode(clip: Any, text: str, hooks: Any = None) -> list:
     if clip is None:
         raise ValueError("clip is required")
-    return clip.encode_from_tokens_scheduled(clip.tokenize(text))
+    encoder = clip_with_hooks(clip, hooks)
+    return encoder.encode_from_tokens_scheduled(encoder.tokenize(text))
 
 
 def _zero_out(conditioning: list) -> list:
@@ -57,20 +59,26 @@ def _prompt_text(document: dict[str, Any], scope: str, polarity: str) -> tuple[s
     return prompt["source"], prompt["text"]
 
 
-def compile_anima_adapter(document: Any, clip: Any) -> tuple[list, list, AnimaRegionChain, list]:
+def compile_anima_adapter(
+    document: Any,
+    clip: Any,
+    hooks_by_scope: dict[str, Any] | None = None,
+) -> tuple[list, list, AnimaRegionChain, list]:
     """Compile BV_REGIONAL into the Sen-sou Anima patcher's public node contract."""
 
     clean = parse_document(document)
+    scoped_hooks = hooks_by_scope or {}
     width, height = clean["canvas"]["width"], clean["canvas"]["height"]
 
     global_positive_source, global_positive_text = _prompt_text(clean, "global", "positive")
     background_positive_source, background_positive_text = _prompt_text(clean, "background", "positive")
 
     base_text = global_positive_text if global_positive_source.strip() else background_positive_text
-    positive = _encode(clip, base_text)
+    positive = _encode(clip, base_text, scoped_hooks.get("global"))
     background = _encode(
         clip,
         background_positive_text if background_positive_source.strip() else base_text,
+        scoped_hooks.get("background"),
     )
 
     chain: AnimaRegionChain | None = None
@@ -87,7 +95,7 @@ def compile_anima_adapter(document: Any, clip: Any) -> tuple[list, list, AnimaRe
         chain = AnimaRegionChain(
             previous=chain,
             mask=mask.detach().float().clamp(0.0, 1.0).cpu().contiguous(),
-            conditioning=_encode(clip, prompt["text"]),
+            conditioning=_encode(clip, prompt["text"], scoped_hooks.get(region["id"])),
             weight=float(region["strength"]),
         )
 
@@ -99,6 +107,6 @@ def compile_anima_adapter(document: Any, clip: Any) -> tuple[list, list, AnimaRe
     if mode == "zero_out" or (mode == "auto" and not global_negative_source.strip()):
         negative = _zero_out(positive)
     else:
-        negative = _encode(clip, global_negative_text)
+        negative = _encode(clip, global_negative_text, scoped_hooks.get("global"))
 
     return positive, negative, chain, background
