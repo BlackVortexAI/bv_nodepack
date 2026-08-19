@@ -25,6 +25,7 @@ from ..util.regional.lora_hooks import (
     create_hook_groups,
     default_bindings,
     reconcile_bindings,
+    resolve_stack_paths,
     resolve_scope_stacks,
 )
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
@@ -286,7 +287,9 @@ class BVRegionalNativeConditioningNode:
 
     def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None):
         document = parse_document(regional)
-        scope_stacks = resolve_scope_stacks(lora_registry, lora_bindings, document)
+        scope_stacks = resolve_stack_paths(
+            resolve_scope_stacks(lora_registry, lora_bindings, document)
+        )
         hook_groups = create_hook_groups(scope_stacks)
         return compile_native_conditioning(
             document, clip, region_strength_multiplier, hook_groups,
@@ -515,7 +518,9 @@ class BVRegionalAnimaConditioningNode:
             ) from error
 
         document = parse_document(regional)
-        scope_stacks = resolve_scope_stacks(lora_registry, lora_bindings, document)
+        scope_stacks = resolve_stack_paths(
+            resolve_scope_stacks(lora_registry, lora_bindings, document)
+        )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
         positive, negative = apply_attention_hook_passes(

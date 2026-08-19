@@ -79,6 +79,22 @@ class RegionalAnimaAdapterTests(unittest.TestCase):
         self.assertEqual(used_hooks[2:5], [region["id"] for region in document["regions"]])
         self.assertEqual(used_hooks[5], "global")
 
+    @patch("util.regional.anima_adapter.clip_with_hooks", side_effect=lambda clip, hooks: clip)
+    def test_removes_slot_hook_metadata_after_scoped_encoding(self, _clip_with_hooks):
+        class HookMetadataClip(FakeClip):
+            def encode_from_tokens_scheduled(self, tokens):
+                return [[torch.ones((1, 2, 4)), {"hooks": "slot-hooks", "kept": True}]]
+
+        positive, negative, chain, background = compile_anima_adapter(
+            fixture(), HookMetadataClip(), {"global": "global-hooks"}
+        )
+
+        conditionings = [positive, negative, background]
+        conditionings.extend(region.conditioning for region in chain.flatten())
+        for conditioning_value in conditionings:
+            self.assertNotIn("hooks", conditioning_value[0][1])
+            self.assertTrue(conditioning_value[0][1]["kept"])
+
 
 if __name__ == "__main__":
     unittest.main()

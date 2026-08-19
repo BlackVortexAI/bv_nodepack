@@ -1,10 +1,11 @@
 import json
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 import torch
 
-from py.util.regional.lora_hooks import add_named_stack, apply_attention_hook_passes, default_bindings, parse_bindings, parse_registry, reconcile_bindings, resolve_scope_stacks
+from py.util.regional.lora_hooks import add_named_stack, apply_attention_hook_passes, default_bindings, parse_bindings, parse_registry, reconcile_bindings, resolve_scope_stacks, resolve_stack_paths
 
 
 def pass_document(*regions):
@@ -104,6 +105,17 @@ class RegionalLoraHookContractTests(unittest.TestCase):
         bindings["regions"] = {"region-a": "disabled"}
 
         self.assertEqual(resolve_scope_stacks(registry, bindings, document), {})
+
+    def test_stack_paths_are_canonicalized_before_model_fingerprinting(self):
+        canonical = str(Path(__file__).resolve())
+        stacks = {
+            "left": [("alias.safetensors", 0.8, 0.6)],
+            "right": [(canonical, 0.8, 0.6)],
+        }
+
+        resolved = resolve_stack_paths(stacks, lambda path: canonical if path == "alias.safetensors" else None)
+
+        self.assertEqual(resolved["left"], resolved["right"])
 
     def test_orphaned_region_binding_does_not_require_its_old_stack_at_runtime(self):
         document = {"document_id": "doc-a", "regions": [{"id": "current-region"}]}

@@ -36,7 +36,13 @@ def _encode(clip: Any, text: str, hooks: Any = None) -> list:
     if clip is None:
         raise ValueError("clip is required")
     encoder = clip_with_hooks(clip, hooks)
-    return encoder.encode_from_tokens_scheduled(encoder.tokenize(text))
+    conditioning = encoder.encode_from_tokens_scheduled(encoder.tokenize(text))
+    result = []
+    for embedding, metadata in conditioning:
+        values = metadata.copy()
+        values.pop("hooks", None)
+        result.append([embedding, values])
+    return result
 
 
 def _zero_out(conditioning: list) -> list:

@@ -158,32 +158,57 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
     return result
 
 
+def resolve_stack_paths(
+    scope_stacks: dict[str, Any],
+    find_lora: Any = None,
+) -> dict[str, list[tuple[str, float, float]]]:
+    if not scope_stacks:
+        return {}
+    if find_lora is None:
+        import folder_paths
+
+        find_lora = lambda path: folder_paths.get_full_path("loras", path)
+
+    resolved_stacks: dict[str, list[tuple[str, float, float]]] = {}
+    resolved_paths: dict[str, str] = {}
+    for scope, entries in scope_stacks.items():
+        resolved_entries = []
+        for path, model_strength, clip_strength in entries:
+            source = str(path)
+            canonical = resolved_paths.get(source)
+            if canonical is None:
+                resolved = Path(source)
+                if not resolved.is_file():
+                    found = find_lora(source)
+                    if not found:
+                        raise ValueError(f"LoRA file not found: {source}")
+                    resolved = Path(found)
+                canonical = str(resolved.resolve())
+                resolved_paths[source] = canonical
+            resolved_entries.append((canonical, float(model_strength), float(clip_strength)))
+        resolved_stacks[scope] = resolved_entries
+    return resolved_stacks
+
+
 def create_hook_groups(scope_stacks: dict[str, Any]) -> dict[str, Any]:
     if not scope_stacks:
         return {}
     import comfy.hooks
     import comfy.utils
-    import folder_paths
 
     loaded: dict[str, Any] = {}
     hook_cache: dict[tuple[str, float, float], Any] = {}
     groups: dict[str, Any] = {}
-    for scope, entries in scope_stacks.items():
+    for scope, entries in resolve_stack_paths(scope_stacks).items():
         hooks = []
         for path, model_strength, clip_strength in entries:
-            resolved = Path(path)
-            if not resolved.is_file():
-                found = folder_paths.get_full_path("loras", path)
-                if not found:
-                    raise ValueError(f"LoRA file not found: {path}")
-                resolved = Path(found)
-            key = str(resolved.resolve())
+            key = path
             hook_key = (key, model_strength, clip_strength)
             hook_group = hook_cache.get(hook_key)
             if hook_group is None:
                 lora = loaded.get(key)
                 if lora is None:
-                    lora = comfy.utils.load_torch_file(str(resolved), safe_load=True)
+                    lora = comfy.utils.load_torch_file(key, safe_load=True)
                     loaded[key] = lora
                 hook_group = comfy.hooks.create_hook_lora(lora, model_strength, clip_strength)
                 hook_cache[hook_key] = hook_group
@@ -197,14 +222,6 @@ def _model_stack_fingerprint(entries: Any) -> tuple[tuple[str, float], ...]:
         (str(path), float(model_strength))
         for path, model_strength, _clip_strength in (entries or [])
         if float(model_strength) != 0.0
-    )
-
-
-def _clip_stack_fingerprint(entries: Any) -> tuple[tuple[str, float], ...]:
-    return tuple(
-        (str(path), float(clip_strength))
-        for path, _model_strength, clip_strength in (entries or [])
-        if float(clip_strength) != 0.0
     )
 
 
