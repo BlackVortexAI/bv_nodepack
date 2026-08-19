@@ -802,6 +802,17 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-19 — v0.10.1
+
+- Add optional regional LoRA hooks to `BV Regional Anima Conditioning` while
+  preserving workflows that leave `lora_registry` and `lora_bindings` disconnected.
+- Compose regional LoRA model effects as masked full-model passes without changing
+  the existing Anima attention router; share passes between identical model stacks.
+- Keep empty and fully disabled LoRA stacks as valid no-ops, and avoid additional
+  model passes when regional stacks differ only in CLIP strength.
+- Document the expected baseline-plus-distinct-stacks pass count and its sampling
+  performance impact, with regression coverage for global, regional and overlapping use.
+
 ### 2026-08-19 — v0.10.0
 
 - Add optional regional LoRA hooks to `BV Regional Native Conditioning` while
