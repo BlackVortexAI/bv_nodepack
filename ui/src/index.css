@@ -127,6 +127,9 @@
 .bv-regional-shell details summary { cursor: pointer; }
 .bv-regional-shell details[open] summary { margin-bottom: 8px; }
 .bv-regional-shell footer { justify-content: space-between; border-top: 1px solid #ffffff18; border-bottom: 0; }
+.bv-regional-shell footer.has-warning { color: #ffcc7a; }
+.bv-regional-shell footer span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bv-regional-shell .option-section label > small { color: var(--bv-muted-text-color); }
 
 .bv-quick-prompt-shell { position: fixed; z-index: 2147483647; width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 96px); display: grid; gap: 10px; overflow: auto; padding: 12px; color: var(--bv-text-color); background: var(--comfy-menu-bg, #20242a); border: 1px solid var(--bv-border-color); border-radius: 10px; box-shadow: 0 16px 56px #000c; font: 14px/1.35 'Segoe UI', sans-serif; }
 .bv-quick-prompt-shell * { box-sizing: border-box; }

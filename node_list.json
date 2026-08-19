@@ -5,6 +5,7 @@
   "BV Hex Color To Int": "Convert a validated hexadecimal color value into integer RGB channels.",
   "BV Latent Random Aspect Ratio": "Resize latent dimensions using deterministic or random configured aspect ratios.",
   "BV Latent Random Rotate 90": "Rotate a latent by a deterministic or random multiple of 90 degrees.",
+  "BV Named LoRA Stack": "Name an external LoRA stack and add it to a chainable regional stack registry.",
   "BV Pipe": "Carry configurable named values through a typed workflow pipe.",
   "BV Pipe Config": "Define the configurable slots used by a BV Pipe.",
   "BV Prompt AST Debug": "Inspect a structured BV prompt AST as readable JSON.",

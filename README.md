@@ -107,6 +107,28 @@ the spatial guidance.
 5. Connect `patched_model`/`positive`/`negative` to a standard KSampler.
 6. Optionally return the latest image through **Preview Send** or **Save Send**.
 
+Optional regional LoRA hooks are available on the native-conditioning path. Connect
+an external `LORA_STACK` producer to **BV Named LoRA Stack**, chain its registry into
+**BV Regional Native Conditioning**, and connect the prompt node's `lora_bindings`
+sidecar output. The editor can then assign one unchanged live stack globally and one
+additional stack per region. The registry and bindings inputs are optional; workflows
+that do not connect them retain the previous `BV_REGIONAL` v1 behavior.
+
+### Named LoRA stack interoperability
+
+The incoming community `LORA_STACK` value itself is an unlabelled runtime list:
+
+```json
+[["path/to/lora.safetensors", 0.8, 0.6]]
+```
+
+`BV Named LoRA Stack` wraps one or more of these stacks in the public,
+JSON-compatible `BV_LORA_STACK_REGISTRY` v1 contract. Other node packs may emit
+that type directly, including stable `id`, display `name`, and unchanged stack
+entries, without depending on BV's sender node. See the complete contract and
+example in [BV Regional LoRA Bindings v1](docs/specs/bv-regional-lora-bindings-v1.md)
+and its [JSON Schema](schemas/bv_lora_stack_registry_v1.schema.json).
+
 The editor supports additive and subtractive rectangles, ellipses, polygons and brushes,
 live tool outlines with pixel dimensions, a resolved binary-mask inspection mode,
 overlap, priority ordering, undo/redo, multi-selection, lossless compound-layer merging,
@@ -181,7 +203,8 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | Node | Purpose |
 | --- | --- |
 | BV Regional Prompt | Owns and outputs the serialized `BV_REGIONAL` document |
-| BV Regional Native Conditioning | Compiles Global, Background and region masks into standard conditioning |
+| BV Named LoRA Stack | Gives an external `LORA_STACK` a stable workflow-local identity and builds a chainable registry |
+| BV Regional Native Conditioning | Compiles Global, Background and regions with `blend`, `exclusive`, `hybrid` or `mask_bounds` native composition |
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
 | BV Regional FLUX.2 Klein 9B Attention | Routes Global, Background and regional text contexts through the exact FLUX.2 Klein 9B joint-attention architecture and emits sampler-ready zero negative conditioning |
@@ -197,6 +220,81 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Deconstructor | Exposes AST, text, source and reusable selection data |
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
+
+### Native conditioning composition
+
+**BV Regional Native Conditioning** keeps `blend` as the backward-compatible
+default and offers three experimental comparison modes:
+
+- `blend` emits unmasked Global plus masked Background/Region conditionings;
+  ComfyUI normalizes their overlapping denoiser predictions.
+- `exclusive` combines Global text with each scoped prompt and emits only masked,
+  mutually scoped passes. This avoids Global/Region averaging inside opaque regions.
+- `hybrid` interpolates both execution layouts. `hybrid_blend_ratio=0` is exactly
+  `exclusive`, `1` is exactly `blend`; intermediate values trade additional
+  denoiser/hook groups for shared composition and regional identity.
+- `mask_bounds` retains `blend` semantics but asks ComfyUI to crop masked model
+  evaluations to each mask's bounding area.
+
+All modes accept arbitrary rendered masks and regional LoRA hooks. `exclusive`
+and `mask_bounds` are intended for controlled model-specific evaluation; neither
+is guaranteed to outperform `blend` for every architecture or composition.
+
+### Regional LoRA validation examples
+
+These are controlled examples, not a guarantee that arbitrary LoRAs will combine
+cleanly. Training quality, dataset composition, trigger design, model compatibility,
+LoRA strength, seed and composition mode can all change the result substantially.
+The downloadable example workflows use the external
+[ComfyUI-Lora-Manager](https://github.com/willmiao/ComfyUI-Lora-Manager) as their
+`LORA_STACK` producer. It is required to load those graphs without missing nodes,
+but it is not a runtime dependency of BV Node Pack: any compatible `LORA_STACK`
+producer can feed `BV Named LoRA Stack`.
+
+#### Two character LoRAs from one series and creator
+
+[![Two independently hooked Anima character LoRAs](examples/images/anima-dual-regional-character-loras-hybrid-035.png)](examples/images/anima-dual-regional-character-loras-hybrid-035.png)
+
+This test assigns [Nyamena](https://civitai.com/models/2749213/nyamena-around-40-otoko-no-isekai-tsuuhan-anima?modelVersionId=3092643)
+to the left region and [Myaley](https://civitai.com/models/2749226/myaley-around-40-otoko-no-isekai-tsuuhan-anima?modelVersionId=3092658)
+to the right region. Both character LoRAs come from the same series and creator,
+recommend the same `0.8-1.0` range and were tested at `0.8`. That makes this a
+useful compatibility case, but also a deliberately favorable pairing; it must not
+be generalized to unrelated or poorly trained LoRAs.
+
+The shown Anima run used `hybrid`, `hybrid_blend_ratio=0.35`, region strength `1.0`
+and feather `0.05`. The corresponding prompt document is
+[`anima-nyamena-myaley-dual-lora-test.bv-regional.json`](docs/examples/anima-nyamena-myaley-dual-lora-test.bv-regional.json).
+The complete reproducible ComfyUI graph is available as
+[`anima-dual-regional-character-loras-hybrid-035.json`](examples/workflows/anima-dual-regional-character-loras-hybrid-035.json);
+the example PNG also contains the cleaned embedded workflow metadata. A standalone
+copy of its in-graph explanation is provided in
+[`anima-dual-character-lora-workflow-note.md`](docs/examples/anima-dual-character-lora-workflow-note.md).
+The LoRAs are linked for attribution and installation only and are not distributed
+with BV Node Pack; their own licenses and access conditions apply.
+
+#### Regional skin-tone attribute LoRA
+
+[![Skin-tone LoRA applied only to the left Anima region](examples/images/anima-regional-skin-tone-lora-hybrid-035.png)](examples/images/anima-regional-skin-tone-lora-hybrid-035.png)
+
+This isolation test applies `Skin-tone-Slider-Anima` at `+6` only to the left
+region while both regions request otherwise matching adult characters, hair,
+eyes and clothing. The run used `hybrid`, `hybrid_blend_ratio=0.35`, region strength
+`1.0` and feather `0.05`. The skin-tone change remained local even where the two
+subjects touched, while their shared appearance and clothing stayed coherent.
+The prompt document is
+[`anima-skin-tone-slider-regional-lora-test.bv-regional.json`](docs/examples/anima-skin-tone-slider-regional-lora-test.bv-regional.json).
+The complete reproducible ComfyUI graph is available as
+[`anima-regional-skin-tone-lora-hybrid-035.json`](examples/workflows/anima-regional-skin-tone-lora-hybrid-035.json);
+the example PNG also contains the cleaned embedded workflow metadata. A standalone
+copy of its in-graph explanation is provided in
+[`anima-skin-tone-lora-workflow-note.md`](docs/examples/anima-skin-tone-lora-workflow-note.md).
+
+`Skin-tone-Slider-Anima` is available only through Civitai Red because its original
+preview material did not qualify for the PG-13 Civitai surface. BV Node Pack does
+not bundle or mirror the LoRA. Users must obtain it from its authorized listing and
+follow the creator's license and access requirements. The safe test image above is
+included only to document BV's regional behavior.
 
 ### SDXL attention routing
 
@@ -674,6 +772,7 @@ Technical references:
 - [Renderer-independent Subgraph UI ADR](docs/adr/0002-renderer-independent-subgraph-ui.md)
 - [Wireless Smart Pipe ADR](docs/adr/0003-wireless-smart-pipe-spine.md)
 - [Krea 2 regional-attention research](docs/research/krea2-regional-attention-backend.md)
+- [Native regional LoRA validation](docs/research/native-regional-lora-validation-2026-08.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## Current scope
@@ -690,6 +789,25 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-19 — v0.10.0
+
+- Add optional regional LoRA hooks to `BV Regional Native Conditioning` while
+  preserving previous workflows that use only the original `BV_REGIONAL` output.
+- Add chainable `BV Named LoRA Stack` registry nodes and a documented public v1
+  registry/bindings contract for compatible external `LORA_STACK` producers.
+- Add `exclusive`, `hybrid` and `mask_bounds` native composition modes alongside
+  the backward-compatible `blend` default; reject unsupported Anima mask-bounds
+  execution with an explicit compatibility message.
+- Treat assigned but currently empty or disabled LoRA stacks as valid no-ops.
+- Reconcile region bindings when documents are loaded, imported, edited or queued;
+  preserve document and binding state together across editor undo and redo.
+- Search autocomplete candidates inside tags while retaining prefix matches first,
+  and expose LoRA stack selection in the Quick Prompt Editor.
+- Document controlled Anima dual-character and skin-tone isolation workflows with
+  fixed settings, embedded workflow metadata and explicit model/LoRA limitations.
+- Regional LoRA support in model-specific Attention nodes remains outside this
+  release and is planned as a separate backend extension.
 
 ### 2026-08-18 — v0.9.0
 

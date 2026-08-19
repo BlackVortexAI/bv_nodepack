@@ -1,0 +1,102 @@
+{
+  "canvas": {
+    "height": 1024,
+    "width": 1024
+  },
+  "document_id": "c386f8bb-a128-43cd-804e-176a9401232d",
+  "negative_mode": "auto",
+  "overlap": {
+    "mode": "joint"
+  },
+  "prompts": {
+    "background": {
+      "negative_source": "",
+      "positive_source": "neutral bright studio background, soft even daylight, neutral color balance"
+    },
+    "global": {
+      "negative_source": "worst quality, low quality, blurry, malformed hands, extra fingers, missing fingers, extra arms, fused bodies, conjoined, duplicate person, mismatched clothing, dramatic colored lighting, heavy shadow, cropped, out of frame, text, watermark, signature, nsfw",
+      "positive_source": "masterpiece, best quality, amazing quality, safe, 2girls, two similar adult women, standing close side by side, full body, facing viewer, matching appearance, matching blue outfits, inner arms touching, symmetrical composition"
+    }
+  },
+  "regions": [
+    {
+      "authoring": {
+        "color": "#4C78A8",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Skin Tone LoRA Left Half",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1,
+          "id": "74646e22-381f-492a-b712-a346a0201fa0",
+          "layer_id": "74646e22-381f-492a-b712-a346a0201fa0",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.5,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "id": "8aa70070-bd47-4a6e-bf79-0906504f59da",
+      "mask": {
+        "feather": 0.05
+      },
+      "name": "Left - Skin Tone LoRA +6",
+      "parent_region_id": null,
+      "priority": 0,
+      "prompts": {
+        "negative_source": "",
+        "positive_source": "1girl, solo, standing on the left side, long blonde hair, blue eyes, matching blue sleeveless fitted shirt, high neckline, shirt covering midriff, matching blue shorts, bare arms, bare legs, facing viewer"
+      },
+      "strength": 1
+    },
+    {
+      "authoring": {
+        "color": "#E45756",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Control Right Half",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1,
+          "id": "daf1c1a6-5bcb-46b5-890e-d78b86d34b03",
+          "layer_id": "daf1c1a6-5bcb-46b5-890e-d78b86d34b03",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.5,
+          "x": 0.5,
+          "y": 0
+        }
+      ],
+      "id": "7ee594f4-7b31-47cf-bc98-78a49db688e3",
+      "mask": {
+        "feather": 0.05
+      },
+      "name": "Right - No LoRA Control",
+      "parent_region_id": null,
+      "priority": 1,
+      "prompts": {
+        "negative_source": "",
+        "positive_source": "1girl, solo, standing on the right side, long blonde hair, blue eyes, matching blue sleeveless fitted shirt, high neckline, shirt covering midriff, matching blue shorts, bare arms, bare legs, facing viewer"
+      },
+      "strength": 1
+    }
+  ],
+  "schema": "bv.regional",
+  "title": "Anima Skin Tone Slider Regional LoRA Isolation Test",
+  "version": 1
+}

@@ -17,6 +17,15 @@ from ..util.regional.mask_renderer import mask_bbox, render_selection
 from ..util.regional.anima_adapter import ANIMA_REGIONS, compile_anima_adapter
 from ..util.regional.color_control import compile_color_control
 from ..util.regional.native_conditioning import compile_native_conditioning
+from ..util.regional.lora_hooks import (
+    BINDINGS,
+    REGISTRY,
+    add_named_stack,
+    create_hook_groups,
+    default_bindings,
+    reconcile_bindings,
+    resolve_scope_stacks,
+)
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
 from ..util.regional.flux2_klein_attention import (
@@ -29,6 +38,7 @@ from ..util.regional.krea2_attention import compile_krea2_attention, apply_krea2
 AST = "BV_AST"
 CATEGORY = "🌀 BV Node Pack/regional"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
+DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 
 
 class BVRegionalPromptNode:
@@ -40,16 +50,45 @@ class BVRegionalPromptNode:
                     "STRING",
                     {"default": DEFAULT_JSON, "multiline": True, "dynamicPrompts": False},
                 ),
-            }
+            },
+            "optional": {
+                "lora_bindings_json": (
+                    "STRING",
+                    {"default": DEFAULT_LORA_BINDINGS_JSON, "multiline": True, "dynamicPrompts": False},
+                ),
+            },
         }
 
-    RETURN_TYPES = (REGIONAL,)
-    RETURN_NAMES = ("regional",)
+    RETURN_TYPES = (REGIONAL, BINDINGS)
+    RETURN_NAMES = ("regional", "lora_bindings")
     FUNCTION = "build"
     CATEGORY = CATEGORY
 
-    def build(self, regional_json):
-        return (parse_document(regional_json),)
+    def build(self, regional_json, lora_bindings_json=None):
+        document = parse_document(regional_json)
+        return document, reconcile_bindings(lora_bindings_json, document)
+
+
+class BVNamedLoraStackNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_stack": ("LORA_STACK", {}),
+                "name": ("STRING", {"default": "LoRA Stack", "multiline": False}),
+                "stack_id": ("STRING", {"default": "", "multiline": False}),
+            },
+            "optional": {"registry": (REGISTRY, {})},
+        }
+
+    RETURN_TYPES = (REGISTRY,)
+    RETURN_NAMES = ("registry",)
+    FUNCTION = "register"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Names an external LORA_STACK and adds it to a chainable BV regional registry."
+
+    def register(self, lora_stack, name, stack_id, registry=None):
+        return (add_named_stack(registry, stack_id, name, lora_stack),)
 
 
 class BVRegionalDebugNode:
@@ -211,17 +250,47 @@ class BVRegionalNativeConditioningNode:
                     "FLOAT",
                     {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
                 ),
-            }
+                "native_composition": (
+                    ["blend", "exclusive", "hybrid", "mask_bounds"],
+                    {
+                        "default": "blend",
+                        "tooltip": "mask_bounds requires a 2D image latent and is not supported by Anima; use blend or exclusive for Anima.",
+                    },
+                ),
+                "hybrid_blend_ratio": (
+                    "FLOAT",
+                    {
+                        "default": 0.35,
+                        "min": 0.0,
+                        "max": 1.0,
+                        "step": 0.05,
+                        "tooltip": "Used only by hybrid: 0 is exclusive, 1 is blend.",
+                    },
+                ),
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+            },
         }
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("positive", "negative")
     FUNCTION = "compile"
     CATEGORY = CATEGORY
-    DESCRIPTION = "Compiles BV Regional into native ComfyUI masked conditioning for a standard KSampler."
+    DESCRIPTION = (
+        "Compiles BV Regional into blend, exclusive, hybrid or mask-bounds native ComfyUI conditioning for a standard KSampler. "
+        "mask_bounds requires a 2D image latent and is rejected for Anima with a compatibility error."
+    )
 
-    def compile(self, regional, clip, region_strength_multiplier=1.0):
-        return compile_native_conditioning(regional, clip, region_strength_multiplier)
+    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None):
+        document = parse_document(regional)
+        scope_stacks = resolve_scope_stacks(lora_registry, lora_bindings, document)
+        hook_groups = create_hook_groups(scope_stacks)
+        return compile_native_conditioning(
+            document, clip, region_strength_multiplier, hook_groups,
+            composition_mode=native_composition, hybrid_blend_ratio=hybrid_blend_ratio,
+        )
 
 
 class BVRegionalSDXLAttentionNode:
@@ -588,6 +657,7 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
 
 NODE_CLASS_MAPPINGS = {
     "BV Regional Prompt": BVRegionalPromptNode,
+    "BV Named LoRA Stack": BVNamedLoraStackNode,
     "BV Regional Debug": BVRegionalDebugNode,
     "BV Regional Select": BVRegionalSelectNode,
     "BV Regional Deconstructor": BVRegionalDeconstructorNode,
@@ -608,6 +678,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Prompt": "🌀 BV Regional Prompt",
+    "BV Named LoRA Stack": "🌀 BV Named LoRA Stack",
     "BV Regional Debug": "🌀 BV Regional Debug",
     "BV Regional Select": "🌀 BV Regional Select",
     "BV Regional Deconstructor": "🌀 BV Regional Deconstructor",

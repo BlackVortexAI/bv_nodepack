@@ -27,18 +27,19 @@ class CompletionDataset:
         self.path = Path(path)
         self._lock = RLock()
         self._loaded = False
-        self._prefixes: dict[str, list[dict[str, Any]]] = {}
+        self._bigrams: dict[str, list[dict[str, Any]]] = {}
 
     def search(self, term: str, limit: int = 20) -> list[dict[str, Any]]:
         query = _normalized(term)
         if len(query) < 2 or limit <= 0:
             return []
         self._ensure_loaded()
-        candidates = self._prefixes.get(query[:2], ())
-        matches = [item for item in candidates if item["search_term"].startswith(query)]
+        candidates = self._bigrams.get(query[:2], ())
+        matches = [item for item in candidates if query in item["search_term"]]
         matches.sort(
             key=lambda item: (
                 item["search_term"] != query,
+                not item["search_term"].startswith(query),
                 -int(item.get("score") or 0),
                 item["label"].casefold(),
             )
@@ -53,12 +54,13 @@ class CompletionDataset:
                 return
             if not self.path.is_file():
                 raise FileNotFoundError(f"Completion dataset does not exist: {self.path}")
-            prefixes: dict[str, list[dict[str, Any]]] = {}
+            bigrams: dict[str, list[dict[str, Any]]] = {}
             for candidate in self._read_candidates():
                 search_term = candidate["search_term"]
                 if len(search_term) >= 2:
-                    prefixes.setdefault(search_term[:2], []).append(candidate)
-            self._prefixes = prefixes
+                    for bigram in {search_term[index:index + 2] for index in range(len(search_term) - 1)}:
+                        bigrams.setdefault(bigram, []).append(candidate)
+            self._bigrams = bigrams
             self._loaded = True
 
     def _read_candidates(self):

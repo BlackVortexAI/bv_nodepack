@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackvortex.ai/schemas/bv_lora_stack_registry_v1.schema.json",
+  "title": "BV LoRA Stack Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "stacks"],
+  "properties": {
+    "schema": { "const": "bv.lora_stack_registry" },
+    "version": { "const": 1 },
+    "stacks": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/namedStack" }
+    }
+  },
+  "$defs": {
+    "namedStack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "stack"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "stack": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              { "type": "string", "minLength": 1 },
+              { "type": "number" },
+              { "type": "number" }
+            ],
+            "minItems": 3,
+            "maxItems": 3
+          }
+        }
+      }
+    }
+  }
+}

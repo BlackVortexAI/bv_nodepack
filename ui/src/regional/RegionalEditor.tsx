@@ -10,15 +10,17 @@ import { automaticRegionColor, clone, Geometry, geometryAuthoring, geometryLayer
 import { mergeSelectedLayers, remapMaskGroups, selectLayers, splitCompoundLayer } from "./layerOperations";
 import { activeWindowGeometry, applyObservedWindowSize, clampWindowGeometry, defaultEditorState, EditorViewState, loadEditorState, observedWindowSize, saveEditorState } from "./editorState";
 import { splitDisconnectedLayer } from "./disconnectedAreas";
+import { bindingSummary, bindingWarnings, createRegionalEditorSnapshot, emptyLoraBindings, NamedLoraStack, parseLoraBindings, reconcileLoraBindings, RegionalEditorSnapshot, RegionalLoraBindings } from "./loraBindings";
 
 type NodeRef = { id: number | string; title?: string; widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>; graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } };
-type Props = { open: boolean; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; onClose: () => void };
+type Props = { open: boolean; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; loraStacks: NamedLoraStack[]; onClose: () => void };
 type Gesture =
     | { mode: "draw-box" | "draw-brush" | "draw-polygon"; start: Point; commit: "add" | "subtract" }
     | { mode: "move"; start: Point; startScreen: { x: number; y: number }; original: Geometry[]; started: boolean }
     | { mode: "resize"; start: Point; original: Geometry[]; handle: Handle };
 
 const getWidget = (node: NodeRef | null) => node?.widgets?.find(widget => widget.name === "regional_json");
+const getBindingsWidget = (node: NodeRef | null) => node?.widgets?.find(widget => widget.name === "lora_bindings_json");
 const layerOperations = (region: Region | null, id: string | null) => region && id ? region.geometry.filter(geometry => geometryLayerId(geometry) === id) : [];
 const syncPriorities = synchronizeRegionPriorities<Region>;
 const pointFor = (event: React.PointerEvent<HTMLElement>, pressureMode: BrushSettings["pressureMode"]): Point => {
@@ -43,15 +45,16 @@ function remapImportedRegions(regions: Region[]): Region[] {
     });
 }
 
-export default function RegionalEditor({ open, nodes, initialNode, backgrounds, onClose }: Props) {
+export default function RegionalEditor({ open, nodes, initialNode, backgrounds, loraStacks, onClose }: Props) {
     const [node, setNode] = useState<NodeRef | null>(initialNode), [documentValue, setDocumentValue] = useState<RegionalDocument | null>(null);
     const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null), [selectedLayerId, setSelectedLayerId] = useState<string | null>(null), [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
     const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
     const [tool, setTool] = useState<Tool>("select"), [brush, setBrush] = useState<BrushSettings>({ size: .04, hardness: .75, opacity: 1, shape: "round", pressureMode: "constant" });
     const [displayOpacity, setDisplayOpacity] = useState(.5), [backgroundOpacity, setBackgroundOpacity] = useState(1), [isolate, setIsolate] = useState(false);
-    const [history, setHistory] = useState<RegionalDocument[]>([]), [future, setFuture] = useState<RegionalDocument[]>([]);
+    const [history, setHistory] = useState<RegionalEditorSnapshot<RegionalDocument>[]>([]), [future, setFuture] = useState<RegionalEditorSnapshot<RegionalDocument>[]>([]);
     const [draft, setDraft] = useState<Geometry[] | null>(null), [cursor, setCursor] = useState<Point | null>(null), [error, setError] = useState("");
     const [viewState, setViewState] = useState<EditorViewState>(() => defaultEditorState());
+    const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
     const gesture = useRef<Gesture | null>(null), shell = useRef<HTMLDivElement>(null);
     const updateArtboardView = useCallback((artboard: EditorViewState["artboard"]) => setViewState(current => {
         const previous = current.artboard;
@@ -64,9 +67,17 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         if (!open || !node) return;
         try {
             const next = parseDocument(getWidget(node)?.value); next.regions = regionsInPriorityOrder(next.regions); syncPriorities(next.regions);
+            const parsedBindings = parseLoraBindings(getBindingsWidget(node)?.value, next.document_id);
+            const nextBindings = reconcileLoraBindings(parsedBindings, new Set(next.regions.map(region => region.id)));
+            const bindingsWidget = getBindingsWidget(node);
+            if (bindingsWidget && JSON.stringify(parsedBindings) !== JSON.stringify(nextBindings)) {
+                bindingsWidget.value = JSON.stringify(nextBindings);
+                bindingsWidget.callback?.(bindingsWidget.value);
+                node.graph?.setDirtyCanvas?.(true, true);
+            }
             const stored = loadEditorState(next.document_id), regionId = next.regions.some(region => region.id === stored.selectedRegionId) ? stored.selectedRegionId : next.regions[0]?.id ?? null;
             const region = next.regions.find(item => item.id === regionId), layerId = region && geometryLayers(region).some(layer => layer.id === stored.selectedLayerId) ? stored.selectedLayerId : null;
-            setViewState(stored); setDocumentValue(next); setSelectedRegionId(regionId); setSelectedLayerId(layerId); setSelectedLayerIds(layerId ? [layerId] : []); setSelectionAnchorId(layerId); setTool(stored.tool); setBrush(stored.brush); setDisplayOpacity(stored.displayOpacity); setBackgroundOpacity(stored.backgroundOpacity); setIsolate(stored.isolate && !!layerId); setHistory([]); setFuture([]); setError("");
+            setViewState(stored); setDocumentValue(next); setLoraBindings(nextBindings); setSelectedRegionId(regionId); setSelectedLayerId(layerId); setSelectedLayerIds(layerId ? [layerId] : []); setSelectionAnchorId(layerId); setTool(stored.tool); setBrush(stored.brush); setDisplayOpacity(stored.displayOpacity); setBackgroundOpacity(stored.backgroundOpacity); setIsolate(stored.isolate && !!layerId); setHistory([]); setFuture([]); setError("");
         }
         catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     }, [node, open]);
@@ -118,14 +129,31 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         : selectedOperations;
     const selectionBounds = activeOperations.length && documentValue ? boundsOfLayer(activeOperations, documentValue.canvas) : null;
 
-    const persist = useCallback((next: RegionalDocument, record = true) => {
+    const persist = useCallback((next: RegionalDocument, record = true, bindings = loraBindings) => {
         if (!node) return;
-        if (record && documentValue) { setHistory(items => [...items.slice(-99), clone(documentValue)]); setFuture([]); }
+        if (record && documentValue) { setHistory(items => [...items.slice(-99), createRegionalEditorSnapshot(documentValue, loraBindings)]); setFuture([]); }
+        const nextBindings = reconcileLoraBindings(bindings, new Set(next.regions.map(region => region.id)));
         setDocumentValue(next); const widget = getWidget(node);
         if (widget) { widget.value = JSON.stringify(next); widget.callback?.(widget.value); }
+        setLoraBindings(nextBindings); const bindingsWidget = getBindingsWidget(node);
+        if (bindingsWidget) { bindingsWidget.value = JSON.stringify(nextBindings); bindingsWidget.callback?.(bindingsWidget.value); }
+        node.graph?.setDirtyCanvas?.(true, true);
+    }, [documentValue, loraBindings, node]);
+    const mutate = useCallback((fn: (value: RegionalDocument) => void, record = true) => { if (!documentValue) return; const next = clone(documentValue); fn(next); persist(next, record); }, [documentValue, persist]);
+    const persistLoraBindings = useCallback((next: RegionalLoraBindings) => {
+        if (!node) return;
+        const reconciled = documentValue ? reconcileLoraBindings(next, new Set(documentValue.regions.map(region => region.id))) : next;
+        setLoraBindings(reconciled);
+        const widget = getBindingsWidget(node);
+        if (widget) { widget.value = JSON.stringify(reconciled); widget.callback?.(widget.value); }
         node.graph?.setDirtyCanvas?.(true, true);
     }, [documentValue, node]);
-    const mutate = useCallback((fn: (value: RegionalDocument) => void, record = true) => { if (!documentValue) return; const next = clone(documentValue); fn(next); persist(next, record); }, [documentValue, persist]);
+    const setGlobalLoraStack = (stackId: string | null) => persistLoraBindings({ ...loraBindings, global_stack_id: stackId });
+    const setRegionLoraStack = (regionId: string, stackId: string | null) => {
+        const regions = { ...loraBindings.regions };
+        if (stackId) regions[regionId] = stackId; else delete regions[regionId];
+        persistLoraBindings({ ...loraBindings, regions });
+    };
     const updateRegion = (fn: (region: Region) => void) => mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) fn(region); });
     const updateLayer = (id: string, fn: (geometries: Geometry[], region: Region) => void) => mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) fn(layerOperations(region, id), region); });
     const cancelGesture = useCallback(() => { gesture.current = null; setDraft(null); }, []);
@@ -136,8 +164,8 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
         mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) region.geometry.push(...final); });
         cancelGesture();
     }, [cancelGesture, draft, mutate, selectedRegionId]);
-    const undo = useCallback(() => { if (!documentValue || !history.length) return; const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setFuture([clone(documentValue), ...future]); persist(clone(previous), false); }, [documentValue, future, history, persist]);
-    const redo = useCallback(() => { if (!documentValue || !future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory([...history, clone(documentValue)]); persist(clone(next), false); }, [documentValue, future, history, persist]);
+    const undo = useCallback(() => { if (!documentValue || !history.length) return; const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setFuture([createRegionalEditorSnapshot(documentValue, loraBindings), ...future]); persist(clone(previous.document), false, clone(previous.loraBindings)); }, [documentValue, future, history, loraBindings, persist]);
+    const redo = useCallback(() => { if (!documentValue || !future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory([...history, createRegionalEditorSnapshot(documentValue, loraBindings)]); persist(clone(next.document), false, clone(next.loraBindings)); }, [documentValue, future, history, loraBindings, persist]);
 
     const deleteLayer = (id: string) => { updateLayer(id, (_operations, region) => { region.geometry = region.geometry.filter(item => geometryLayerId(item) !== id); }); if (selectedLayerIds.includes(id)) replaceLayerSelection(null); };
     const mergeLayers = () => {
@@ -262,6 +290,8 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
 
     if (!open) return null;
     const windowGeometry = activeWindowGeometry(viewState, { width: window.innerWidth, height: window.innerHeight });
+    const loraWarnings = documentValue ? bindingWarnings(loraBindings, loraStacks, new Set(documentValue.regions.map(region => region.id))) : [];
+    const loraSummary = documentValue ? bindingSummary(loraBindings, loraStacks, Object.fromEntries(documentValue.regions.map(region => [region.id, region.name]))) : "";
     return <div ref={shell} className={`bv-regional-shell ${viewState.mode}`} role="dialog" aria-modal={viewState.mode === "workspace"} style={{ inset: "auto", left: windowGeometry.x, top: windowGeometry.y, width: windowGeometry.width, height: windowGeometry.height }} onKeyDown={event => event.stopPropagation()}>
         <header onPointerDown={beginWindowDrag}><EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 1, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers} canSplitCompoundLayer={canSplitCompoundLayer} onSplitCompoundLayer={splitLayer} canSplitDisconnectedAreas={canSplitDisconnectedAreas} onSplitDisconnectedAreas={splitDisconnected} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/><div className="window-drag-handle"><span aria-hidden="true">⠿</span><strong>BV Regional Editor</strong></div><select value={node?.id ?? ""} onChange={event => setNode(nodes.find(item => String(item.id) === event.target.value) ?? null)}>{nodes.map(item => <option key={item.id} value={String(item.id)}>{`${item.title || "BV Regional Prompt"} · #${item.id}`}</option>)}</select><button className="window-mode-button" title={viewState.mode === "workspace" ? "Switch to floating window" : "Switch to workspace view"} onClick={() => setViewState(current => ({ ...current, mode: current.mode === "workspace" ? "floating" : "workspace" }))}>{viewState.mode === "workspace" ? "Float" : "Workspace"}</button><button title="Close" onClick={onClose}>×</button></header>
         {error ? <div className="bv-regional-error">{error}</div> : documentValue && <>
@@ -270,9 +300,9 @@ export default function RegionalEditor({ open, nodes, initialNode, backgrounds, 
                 <div className="panel-splitter" onPointerDown={event => beginPanelResize("left", event)} onDoubleClick={() => setViewState(current => ({ ...current, panels: { ...current.panels, left: 290 } }))}/>
                 <Artboard key={documentValue.document_id} document={documentValue} background={backgrounds[documentValue.document_id]} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} draft={draft} selectionBounds={selectionBounds} cursor={cursor} tool={tool} brush={brush} canSubtract={!!selectedLayer && !selectedLayer.authoring.locked} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} initialView={viewState.artboard} onView={updateArtboardView} onTool={next => { setTool(next); cancelGesture(); }} onBrush={setBrush} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onPointerLeave={() => { if (!gesture.current) setCursor(null); }} onDoubleClick={doubleClick}/>
                 <div className="panel-splitter" onPointerDown={event => beginPanelResize("right", event)} onDoubleClick={() => setViewState(current => ({ ...current, panels: { ...current.panels, right: 340 } }))}/>
-                <OptionsPanel region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/>
+                <OptionsPanel region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} loraBindings={loraBindings} loraStacks={loraStacks} onGlobalLoraStack={setGlobalLoraStack} onRegionLoraStack={setRegionLoraStack} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/>
             </main>
-            <footer><span>{documentValue.regions.length} regions · autosaved · Joint overlap</span><button onClick={onClose}>Close</button></footer>
+            <footer className={loraWarnings.length ? "has-warning" : ""}><span>{loraWarnings[0] ? `⚠ ${loraWarnings[0]}` : `✓ ${loraSummary}`}</span><span>{documentValue.regions.length} regions · autosaved · Joint overlap</span><button onClick={onClose}>Close</button></footer>
         </>}
     </div>;
 }

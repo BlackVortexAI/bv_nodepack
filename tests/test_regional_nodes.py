@@ -51,6 +51,40 @@ class RegionalNodeTests(unittest.TestCase):
     def test_main_node_outputs_valid_custom_document(self):
         result = self.module.BVRegionalPromptNode().build(json.dumps(fixture()))
         self.assertEqual(result[0]["schema"], "bv.regional")
+        self.assertEqual(result[1]["schema"], "bv.regional.lora_bindings")
+        self.assertEqual(result[1]["document_id"], result[0]["document_id"])
+
+    def test_main_node_prunes_orphaned_region_lora_bindings(self):
+        document = fixture()
+        current_region = document["regions"][0]["id"]
+        bindings = {
+            "schema": "bv.regional.lora_bindings",
+            "version": 1,
+            "document_id": document["document_id"],
+            "global_stack_id": None,
+            "regions": {current_region: "current", "removed-region": "stale"},
+        }
+
+        _, parsed = self.module.BVRegionalPromptNode().build(
+            json.dumps(document), json.dumps(bindings)
+        )
+
+        self.assertEqual(parsed["regions"], {current_region: "current"})
+
+    def test_old_prompt_call_and_native_compiler_inputs_remain_compatible(self):
+        inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
+        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings"})
+        self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
+
+    def test_named_lora_stack_node_builds_a_chainable_registry(self):
+        output = self.module.BVNamedLoraStackNode().register(
+            [("portrait.safetensors", 0.8, 0.6)], "Portrait", "stack-a"
+        )[0]
+        self.assertEqual(output["stacks"]["stack-a"]["name"], "Portrait")
+        self.assertIs(
+            self.module.NODE_CLASS_MAPPINGS["BV Named LoRA Stack"],
+            self.module.BVNamedLoraStackNode,
+        )
 
     def test_helper_pipeline_selects_extracts_and_renders(self):
         document = fixture()

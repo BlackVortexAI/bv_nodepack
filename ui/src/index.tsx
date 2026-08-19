@@ -12,6 +12,7 @@ import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCo
 import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
 import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdapter";
 import { watchActiveWorkflow } from "./regional/workflowLifecycle";
+import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -99,6 +100,21 @@ const regionalNodes = (): RegionalNode[] => {
     visit(graph);
     return found;
 };
+const namedLoraStacks = (): NamedLoraStack[] => {
+    const graph = (comfyApp as any).graph, found: NamedLoraStack[] = [];
+    const visit = (candidate: any) => {
+        for (const node of candidate?._nodes ?? []) {
+            if (node.type === "BV Named LoRA Stack") {
+                const id = String(node.widgets?.find((widget: any) => widget.name === "stack_id")?.value ?? "").trim();
+                const name = String(node.widgets?.find((widget: any) => widget.name === "name")?.value ?? "").trim();
+                if (id && name) found.push({ id, name, nodeId: String(node.id) });
+            }
+            if (node.subgraph) visit(node.subgraph);
+        }
+    };
+    visit(graph);
+    return found.sort((left, right) => left.name.localeCompare(right.name));
+};
 const availableDocumentTargets = () => documentTargetChoices(regionalNodes().flatMap(node => {
     try {
         const document = parseDocument(node.widgets?.find(widget => widget.name === "regional_json")?.value);
@@ -154,6 +170,14 @@ const ensureUniqueDocument = (node: any, forceNew = false) => {
         });
         if (duplicate) document.document_id = crypto.randomUUID();
         widget.value = JSON.stringify(document);
+        const bindingsWidget = node.widgets?.find((item: any) => item.name === "lora_bindings_json");
+        if (bindingsWidget) {
+            try {
+                const parsed = { ...parseLoraBindings(bindingsWidget.value, forceNew ? "" : document.document_id), document_id: document.document_id };
+                bindingsWidget.value = JSON.stringify(reconcileLoraBindings(parsed, new Set(document.regions.map(region => region.id))));
+            }
+            catch { bindingsWidget.value = JSON.stringify(emptyLoraBindings(document.document_id)); }
+        }
     } catch {
         widget.value = JSON.stringify(emptyDocument());
     }
@@ -166,6 +190,7 @@ function BVRoot() {
     const [regionalNode, setRegionalNode] = useState<RegionalNode | null>(null);
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
+    const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
 
     useEffect(() => {
         if (!regionalOpen && !quickEditOpen) return;
@@ -185,6 +210,7 @@ function BVRoot() {
         const open = (event: Event) => {
             const requested = (event as CustomEvent<{ node?: RegionalNode }>).detail?.node ?? null;
             const available = regionalNodes();
+            setLoraStacks(namedLoraStacks());
             setNodes(available);
             setRegionalNode(requested ?? available[0] ?? null);
             setRegionalOpen(false);
@@ -211,6 +237,7 @@ function BVRoot() {
         const open = (event: Event) => {
             const requested = (event as CustomEvent<{ node?: RegionalNode }>).detail?.node ?? null;
             const available = regionalNodes();
+            setLoraStacks(namedLoraStacks());
             setNodes(available);
             setRegionalNode(requested ?? available[0] ?? null);
             setRegionalOpen(true);
@@ -226,8 +253,8 @@ function BVRoot() {
 >
     Hi
     </BVPortal>
-        <RegionalEditor open={regionalOpen} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} onClose={() => setRegionalOpen(false)} />
-        <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
+        <RegionalEditor open={regionalOpen} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
+        <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
     </>);
 }
 
@@ -308,6 +335,22 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (nodeData.name === "BV Named LoRA Stack") {
+            const prepare = (node: any) => {
+                const idWidget = node.widgets?.find((widget: any) => widget.name === "stack_id");
+                if (!idWidget) return;
+                const currentId = String(idWidget.value ?? "").trim();
+                if (!currentId || needsFreshStackId(String(node.id), currentId, namedLoraStacks())) {
+                    idWidget.value = crypto.randomUUID();
+                    node.setDirtyCanvas?.(true, true);
+                }
+                hideRegionalWidget(idWidget);
+            };
+            const originalCreated = nodeType.prototype.onNodeCreated, originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onNodeCreated = function () { const result = originalCreated?.apply(this, arguments); prepare(this); return result; };
+            nodeType.prototype.onConfigure = function () { const result = originalConfigure?.apply(this, arguments); queueMicrotask(() => prepare(this)); return result; };
+            return;
+        }
         if (nodeData.name === "BV Regional Image Send" || nodeData.name === "BV Regional Image Save") {
             const originalCreated = nodeType.prototype.onNodeCreated;
             const originalConfigure = nodeType.prototype.onConfigure;
@@ -351,6 +394,8 @@ comfyApp.registerExtension({
             const result = original?.apply(this, arguments);
             ensureUniqueDocument(this, true);
             const jsonWidget = this.widgets?.find((widget: any) => widget.name === "regional_json");
+            const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
+            if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (jsonWidget) {
                 hideRegionalWidget(jsonWidget);
                 if (!jsonWidget.__bvRegionalDocumentHooked) {
@@ -380,6 +425,8 @@ comfyApp.registerExtension({
         nodeType.prototype.onConfigure = function () {
             const result = originalConfigure?.apply(this, arguments);
             ensureUniqueDocument(this, false);
+            const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
+            if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };

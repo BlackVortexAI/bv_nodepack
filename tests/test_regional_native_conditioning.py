@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 import sys
+import types
 import unittest
 
 import torch
@@ -30,6 +31,53 @@ class FakeClip:
         self.encoded.append(tokens)
         value = float(len(self.encoded))
         return [[torch.full((1, 2, 3), value), {"pooled_output": torch.full((1, 3), value)}]]
+
+
+class AnimaTEModel:
+    pass
+
+
+AnimaTEModel.__module__ = "comfy.text_encoders.anima"
+
+
+class FakeAnimaClip(FakeClip):
+    def __init__(self):
+        super().__init__()
+        self.cond_stage_model = AnimaTEModel()
+
+
+class FakeHookPatcher:
+    def __init__(self):
+        self.forced_hooks = None
+
+    def register_all_hook_patches(self, *_args):
+        return None
+
+
+class FakeHookClip(FakeClip):
+    def __init__(self, encoded=None):
+        super().__init__()
+        self.encoded = encoded if encoded is not None else []
+        self.patcher = FakeHookPatcher()
+        self.apply_hooks_to_conds = None
+        self.use_clip_schedule = False
+
+    def clone(self, disable_dynamic=True):
+        return FakeHookClip(self.encoded)
+
+    def encode_from_tokens_scheduled(self, tokens):
+        result = super().encode_from_tokens_scheduled(tokens)
+        if self.apply_hooks_to_conds is not None:
+            result[0][1]["hooks"] = self.apply_hooks_to_conds
+        return result
+
+
+class FakeHookGroup:
+    def clone(self):
+        return self
+
+    def set_keyframes_on_hooks(self, _keyframes):
+        return None
 
 
 class RegionalNativeConditioningTests(unittest.TestCase):
@@ -96,6 +144,120 @@ class RegionalNativeConditioningTests(unittest.TestCase):
         for value in (-0.1, float("nan"), float("inf")):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 compile_native_conditioning(fixture(), FakeClip(), value)
+
+    def test_mask_bounds_uses_comfy_mask_bounding_areas(self):
+        positive, negative = compile_native_conditioning(
+            fixture(), FakeClip(), composition_mode="mask_bounds"
+        )
+        self.assertNotIn("set_area_to_bounds", positive[0][1])
+        self.assertTrue(all(item[1]["set_area_to_bounds"] for item in positive[1:]))
+        self.assertTrue(all(item[1]["set_area_to_bounds"] for item in negative[1:]))
+
+    def test_mask_bounds_rejects_anima_before_ksampler_mask_processing(self):
+        with self.assertRaisesRegex(ValueError, "mask_bounds is not supported with Anima"):
+            compile_native_conditioning(
+                fixture(), FakeAnimaClip(), composition_mode="mask_bounds"
+            )
+
+    def test_exclusive_combines_global_text_per_scope_without_unmasked_conditioning(self):
+        document = copy.deepcopy(fixture())
+        document["prompts"]["global"]["positive_source"] = "global style"
+        document["prompts"]["background"]["positive_source"] = "forest"
+        enabled = [region for region in document["regions"] if region["enabled"]]
+        for index, region in enumerate(enabled):
+            region["prompts"]["positive_source"] = f"subject {index}"
+        clip = FakeClip()
+
+        positive, _ = compile_native_conditioning(
+            document, clip, composition_mode="exclusive"
+        )
+
+        self.assertEqual(len(positive), 1 + len(enabled))
+        self.assertTrue(all("mask" in metadata for _, metadata in positive))
+        self.assertIn("global style, forest", clip.encoded)
+        for index in range(len(enabled)):
+            self.assertIn(f"global style, subject {index}", clip.encoded)
+
+    def test_hybrid_endpoints_match_exclusive_and_blend_layouts(self):
+        document = fixture()
+        exclusive, _ = compile_native_conditioning(document, FakeClip(), composition_mode="exclusive")
+        hybrid_exclusive, _ = compile_native_conditioning(
+            document, FakeClip(), composition_mode="hybrid", hybrid_blend_ratio=0
+        )
+        blend, _ = compile_native_conditioning(document, FakeClip(), composition_mode="blend")
+        hybrid_blend, _ = compile_native_conditioning(
+            document, FakeClip(), composition_mode="hybrid", hybrid_blend_ratio=1
+        )
+        for expected, actual in ((exclusive, hybrid_exclusive), (blend, hybrid_blend)):
+            self.assertEqual(len(actual), len(expected))
+            for (expected_embedding, expected_metadata), (actual_embedding, actual_metadata) in zip(expected, actual):
+                self.assertTrue(torch.equal(actual_embedding, expected_embedding))
+                self.assertEqual(set(actual_metadata), set(expected_metadata))
+                for key in actual_metadata:
+                    if isinstance(actual_metadata[key], torch.Tensor):
+                        self.assertTrue(torch.equal(actual_metadata[key], expected_metadata[key]))
+                    else:
+                        self.assertEqual(actual_metadata[key], expected_metadata[key])
+
+    def test_hybrid_weights_blend_and_exclusive_groups(self):
+        document = fixture()
+        positive, _ = compile_native_conditioning(
+            document, FakeClip(), composition_mode="hybrid", hybrid_blend_ratio=0.25
+        )
+        blend_count = 1 + 1 + len([region for region in document["regions"] if region["enabled"]])
+        self.assertEqual(positive[0][1]["strength"], 0.25)
+        self.assertTrue(all(item[1]["mask_strength"] <= 0.25 for item in positive[1:blend_count]))
+        self.assertEqual(positive[blend_count][1]["mask_strength"], 0.75)
+
+    def test_hybrid_rejects_invalid_blend_ratio(self):
+        for ratio in (-0.1, 1.1, float("nan"), float("inf")):
+            with self.subTest(ratio=ratio), self.assertRaisesRegex(ValueError, "hybrid_blend_ratio"):
+                compile_native_conditioning(
+                    fixture(), FakeClip(), composition_mode="hybrid", hybrid_blend_ratio=ratio
+                )
+
+    def test_exclusive_keeps_scope_specific_lora_hooks(self):
+        document = fixture()
+        global_hooks, region_hooks = FakeHookGroup(), FakeHookGroup()
+        hook_module = types.ModuleType("comfy.hooks")
+        hook_module.EnumWeightTarget = types.SimpleNamespace(Clip="clip")
+        hook_module.create_target_dict = lambda target: {"target": target}
+        comfy_module = types.ModuleType("comfy")
+        comfy_module.hooks = hook_module
+        region_id = next(region["id"] for region in document["regions"] if region["enabled"])
+        with unittest.mock.patch.dict(sys.modules, {"comfy": comfy_module, "comfy.hooks": hook_module}):
+            positive, _ = compile_native_conditioning(
+                document,
+                FakeHookClip(),
+                hooks_by_scope={"background": global_hooks, region_id: region_hooks},
+                composition_mode="exclusive",
+            )
+        self.assertIs(positive[0][1]["hooks"], global_hooks)
+        matching = [item for item in positive[1:] if item[1].get("hooks") is region_hooks]
+        self.assertEqual(len(matching), 1)
+
+    def test_rejects_unknown_composition_mode(self):
+        with self.assertRaisesRegex(ValueError, "composition_mode"):
+            compile_native_conditioning(fixture(), FakeClip(), composition_mode="unknown")
+
+    def test_scope_hooks_are_encoded_and_attached_to_matching_conditioning(self):
+        document = fixture()
+        global_hooks, region_hooks = FakeHookGroup(), FakeHookGroup()
+        hook_module = types.ModuleType("comfy.hooks")
+        hook_module.EnumWeightTarget = types.SimpleNamespace(Clip="clip")
+        hook_module.create_target_dict = lambda target: {"target": target}
+        comfy_module = types.ModuleType("comfy")
+        comfy_module.hooks = hook_module
+        with unittest.mock.patch.dict(sys.modules, {"comfy": comfy_module, "comfy.hooks": hook_module}):
+            positive, negative = compile_native_conditioning(
+                document,
+                FakeHookClip(),
+                hooks_by_scope={"global": global_hooks, "background": global_hooks, document["regions"][0]["id"]: region_hooks},
+            )
+        self.assertIs(positive[0][1]["hooks"], global_hooks)
+        self.assertIs(positive[1][1]["hooks"], global_hooks)
+        self.assertIs(positive[2][1]["hooks"], region_hooks)
+        self.assertIs(negative[0][1]["hooks"], global_hooks)
 
 
 if __name__ == "__main__":

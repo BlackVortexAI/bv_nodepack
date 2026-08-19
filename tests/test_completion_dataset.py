@@ -55,6 +55,23 @@ class CompletionDatasetTests(unittest.TestCase):
 
             self.assertEqual([item["insert_text"] for item in results], ["blue", "blue eyes"])
 
+    def test_search_matches_inside_tags_but_keeps_prefixes_first(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "tags.csv"
+            path.write_text(
+                "with,0,10,\n"
+                "woman_with_woman,0,999,\n"
+                "without_hat,0,500,\n",
+                encoding="utf-8",
+            )
+
+            results = CompletionDataset(path).search("with", limit=10)
+
+            self.assertEqual(
+                [item["insert_text"] for item in results],
+                ["with", "without hat", "woman with woman"],
+            )
+
     def test_reads_extended_tsv(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "tags.tsv"
