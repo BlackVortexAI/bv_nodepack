@@ -1,0 +1,102 @@
+{
+  "canvas": {
+    "height": 1024,
+    "width": 1024
+  },
+  "document_id": "acd94bc4-4d15-4b4c-909f-cac2a705c9a7",
+  "negative_mode": "auto",
+  "overlap": {
+    "mode": "joint"
+  },
+  "prompts": {
+    "background": {
+      "negative_source": "busy background, furniture blocking the subjects, reflective floor",
+      "positive_source": "clean neutral photography studio, soft diffused daylight, light gray backdrop"
+    },
+    "global": {
+      "negative_source": "low quality, low resolution, blurry, malformed face, asymmetrical eyes, malformed hands, extra fingers, missing fingers, extra arms, fused bodies, conjoined bodies, duplicate person, cropped, out of frame, text, watermark, signature, illustration, painting, cartoon, anime",
+      "positive_source": "photorealistic full-body fashion photograph of two distinct adult women standing side by side, one woman on the left and one woman on the right, both facing the camera, both completely visible from head to toe, balanced composition, natural skin texture, realistic proportions, matching neutral outfits, soft studio lighting"
+    }
+  },
+  "regions": [
+    {
+      "authoring": {
+        "color": "#4C78A8",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Malu Left Half",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1.0,
+          "id": "2634c327-247e-41cc-9229-b61838736221",
+          "layer_id": "2634c327-247e-41cc-9229-b61838736221",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.5,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "id": "a963366d-3fd7-4817-b394-636a131fc2b8",
+      "mask": {
+        "feather": 0.05
+      },
+      "name": "Left - Malu LoRA",
+      "parent_region_id": null,
+      "priority": 0,
+      "prompts": {
+        "negative_source": "dark brown or black hair, braided hair, traditional red dress",
+        "positive_source": "MaluX, one adult woman standing on the left side, long dark blonde to light brown hair with lighter highlights, soft loose waves, relaxed middle part, white long-sleeved blouse, dark blue jeans, neutral standing pose"
+      },
+      "strength": 1.0
+    },
+    {
+      "authoring": {
+        "color": "#E45756",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Airi Right Half",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1.0,
+          "id": "4802684d-4d0c-42d1-a9d0-36234afbbf7a",
+          "layer_id": "4802684d-4d0c-42d1-a9d0-36234afbbf7a",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.5,
+          "x": 0.5,
+          "y": 0.0
+        }
+      ],
+      "id": "e3baf911-88a1-4854-9d23-0c3db82b4742",
+      "mask": {
+        "feather": 0.05
+      },
+      "name": "Right - Airi LoRA",
+      "parent_region_id": null,
+      "priority": 1,
+      "prompts": {
+        "negative_source": "blonde hair, light brown hair, middle part, black business suit",
+        "positive_source": "airix, one adult woman standing on the right side, long dark brown hair styled half-up with braided side sections and loose wavy lengths, white long-sleeved blouse, dark blue jeans, neutral standing pose"
+      },
+      "strength": 1.0
+    }
+  ],
+  "schema": "bv.regional",
+  "title": "Krea 2 Malu and Airi Dual Regional LoRA Test",
+  "version": 1
+}

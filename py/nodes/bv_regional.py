@@ -417,7 +417,11 @@ class BVRegionalKrea2AttentionNode:
                 "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
-            }
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -428,11 +432,32 @@ class BVRegionalKrea2AttentionNode:
     DESCRIPTION = (
         "Experimental joint-attention regional routing for Krea 2 Raw and Turbo. "
         "Routes the 28 main DiT blocks with a standard KSampler; Krea's four upstream "
-        "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch."
+        "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch. "
+        "Regional LoRA hooks add one model pass per distinct effective model stack."
     )
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
-        positive, negative, slots, aspect_ratio = compile_krea2_attention(regional, clip)
+    def apply(
+        self,
+        model,
+        clip,
+        regional,
+        attention_strength,
+        start_percent,
+        end_percent,
+        lora_registry=None,
+        lora_bindings=None,
+    ):
+        document = parse_document(regional)
+        scope_stacks = resolve_stack_paths(
+            resolve_scope_stacks(lora_registry, lora_bindings, document)
+        )
+        hook_groups = create_hook_groups(scope_stacks)
+        positive, negative, slots, aspect_ratio = compile_krea2_attention(
+            document, clip, hook_groups
+        )
+        positive, negative = apply_attention_hook_passes(
+            positive, negative, document, scope_stacks, hook_groups
+        )
         patched_model = apply_krea2_attention_patch(
             model, slots, aspect_ratio, attention_strength, start_percent, end_percent
         )

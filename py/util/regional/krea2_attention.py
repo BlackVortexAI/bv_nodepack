@@ -7,6 +7,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
+from .clip_hooks import clip_with_hooks
 from .document import parse_document, selection_prompts
 from .mask_renderer import render_selection
 
@@ -32,8 +33,14 @@ def _prompts(document: dict[str, Any], scope: str, region_id: str | None = None)
     return selection_prompts(_selection(document, scope, region_id))
 
 
-def _encode_trimmed(clip: Any, text: str, label: str) -> tuple[torch.Tensor, dict[str, Any]]:
-    conditioning = clip.encode_from_tokens_scheduled(clip.tokenize(text))
+def _encode_trimmed(
+    clip: Any,
+    text: str,
+    label: str,
+    hooks: Any = None,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    encoder = clip_with_hooks(clip, hooks)
+    conditioning = encoder.encode_from_tokens_scheduled(encoder.tokenize(text))
     if len(conditioning) != 1:
         raise ValueError(
             f"Krea 2 attention routing requires one conditioning segment for {label}; "
@@ -49,6 +56,7 @@ def _encode_trimmed(clip: Any, text: str, label: str) -> tuple[torch.Tensor, dic
         )
 
     result = metadata.copy()
+    result.pop("hooks", None)
     attention = result.get("attention_mask")
     if attention is None:
         # ComfyUI intentionally omits Krea 2's mask when every encoded token is
@@ -86,9 +94,12 @@ def _pad_tokens(value: torch.Tensor, token_count: int) -> torch.Tensor:
 
 
 def compile_krea2_attention(
-    document: Any, clip: Any
+    document: Any,
+    clip: Any,
+    hooks_by_scope: dict[str, Any] | None = None,
 ) -> tuple[list, list, list[Krea2RegionalSlot], float]:
     clean = parse_document(document)
+    scoped_hooks = hooks_by_scope or {}
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])
 
@@ -104,19 +115,19 @@ def compile_krea2_attention(
 
     global_positive, global_negative = _prompts(clean, "global")
     specifications = [
-        ("global", None, 1.0, global_positive, global_negative)
+        ("global", "global", None, 1.0, global_positive, global_negative)
     ]
     background_positive, background_negative = _prompts(clean, "background")
     if background_positive["source"].strip() or background_negative["source"].strip():
         specifications.append(
-            ("background", (1.0 - occupied).clamp(0.0, 1.0), 1.0,
+            ("background", "background", (1.0 - occupied).clamp(0.0, 1.0), 1.0,
              background_positive, background_negative)
         )
     for region, mask in regions:
         positive_prompt, negative_prompt = _prompts(clean, "region", region["id"])
         if positive_prompt["source"].strip() or negative_prompt["source"].strip():
             specifications.append(
-                (region["name"], mask, max(0.0, float(region["strength"])),
+                (region["name"], region["id"], mask, max(0.0, float(region["strength"])),
                  positive_prompt, negative_prompt)
             )
     if len(specifications) == 1:
@@ -129,9 +140,14 @@ def compile_krea2_attention(
     slots: list[Krea2RegionalSlot] = []
     positive_metadata = None
     negative_metadata = None
-    for name, mask, strength, positive_prompt, negative_prompt in specifications:
-        pos, pos_meta = _encode_trimmed(clip, positive_prompt["text"], f"{name} positive")
-        neg, neg_meta = _encode_trimmed(clip, negative_prompt["text"], f"{name} negative")
+    for name, scope, mask, strength, positive_prompt, negative_prompt in specifications:
+        hooks = scoped_hooks.get(scope)
+        pos, pos_meta = _encode_trimmed(
+            clip, positive_prompt["text"], f"{name} positive", hooks
+        )
+        neg, neg_meta = _encode_trimmed(
+            clip, negative_prompt["text"], f"{name} negative", hooks
+        )
         count = max(int(pos.shape[1]), int(neg.shape[1]))
         positive_values.append(_pad_tokens(pos, count))
         negative_values.append(_pad_tokens(neg, count))

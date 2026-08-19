@@ -107,8 +107,9 @@ the spatial guidance.
 5. Connect `patched_model`/`positive`/`negative` to a standard KSampler.
 6. Optionally return the latest image through **Preview Send** or **Save Send**.
 
-Optional regional LoRA hooks are available on the native-conditioning and Anima
-attention paths. Connect an external `LORA_STACK` producer to **BV Named LoRA Stack**,
+Optional regional LoRA hooks are available on the native-conditioning, Anima
+attention and experimental Krea 2 attention paths. Connect an external `LORA_STACK`
+producer to **BV Named LoRA Stack**,
 chain its registry into the conditioning node, and connect the prompt node's
 `lora_bindings` sidecar output. The editor can then assign one unchanged live stack
 globally and one additional stack per region. The registry and bindings inputs are
@@ -217,7 +218,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
 | BV Regional FLUX.2 Klein 9B Attention | Routes Global, Background and regional text contexts through the exact FLUX.2 Klein 9B joint-attention architecture and emits sampler-ready zero negative conditioning |
-| BV Regional Krea 2 Attention (Experimental) | Routes Global, Background and regional text contexts through Krea 2's 28 main single-stream attention blocks; four upstream text-fusion blocks remain global |
+| BV Regional Krea 2 Attention (Experimental) | Routes Global, Background and regional text contexts through Krea 2's 28 main single-stream attention blocks and accepts optional regional LoRA bindings; four upstream text-fusion blocks remain global |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -474,6 +475,13 @@ normally used near CFG 1, where a separate negative branch has little or no prac
 effect. Attention Strength, Start and End control routing; per-region strength remains
 independent.
 
+The node also accepts the optional `lora_registry` and `lora_bindings` outputs from
+the named-stack workflow. Assigned stacks are applied to the matching Global,
+Background or region scope while the existing Krea attention router remains active.
+Every distinct effective model-side LoRA stack requires another full denoiser pass;
+Krea 2 is a large model, so dual regional stacks can substantially increase sampling
+time, VRAM pressure and system-memory use.
+
 The verified tests showed stable character and outfit separation, region reassignment,
 and a wide empty center when prompts and masks supported that composition. This is
 evidence of useful routing, not a guarantee: prompt engineering, region geometry and
@@ -492,6 +500,41 @@ settings still work together.
 </details>
 
 [Download the Krea 2 separation-test regional document](examples/krea2-two-explorers-space-observatory.bv-regional.json)
+
+<details>
+<summary><strong>Krea 2 — two regional character LoRAs with overlap</strong></summary>
+
+The verified Turbo test assigned **MaluX** only to the left region and **AiriX** only
+to the right region. The regions overlapped by 20 percent so the subjects could
+interact around the center. In the observed result, hair color, appearance and skin
+tone remained locally distinct even across the shared hand area. Both LoRAs were
+trained by the same creator and used at strength `1.0`; this is a favorable validation
+case, not a guarantee for unrelated, incompatible or overtrained LoRAs.
+
+| Regional LoRAs assigned | Unbound reference |
+| --- | --- |
+| ![Krea 2 dual regional LoRA result](docs/assets/regional/krea2-dual-lora-overlap.png) | ![Krea 2 result without regional LoRA assignments](docs/assets/regional/krea2-dual-lora-unbound-reference.png) |
+
+The reference was generated without regional LoRA assignments. It is included to
+show the model's unbound interpretation, not as a strict same-seed A/B comparison.
+
+| Regional geometry | Workflow connections |
+| --- | --- |
+| ![Krea 2 dual regional LoRA overlap geometry](docs/assets/regional/krea2-dual-lora-overlap-editor.png) | ![Krea 2 dual regional LoRA workflow](docs/assets/regional/krea2-dual-lora-workflow.png) |
+
+[Download the complete Krea 2 dual-LoRA workflow](docs/examples/krea2-dual-regional-lora-workflow.json)
+
+[Import the 20-percent-overlap regional document](docs/examples/krea2-malu-airi-dual-lora-overlap-20-test.bv-regional.json) ·
+[Import the adjacent-regions variant](docs/examples/krea2-malu-airi-dual-lora-test.bv-regional.json) ·
+[Read the workflow test note](docs/examples/krea2-dual-regional-lora-workflow-note.md)
+
+[MaluX LoRA](https://civitai.com/models/2853443/bemyhero-malux) ·
+[AiriX LoRA](https://civitai.com/models/2851019/bemyhero-airix)
+
+External LoRAs and Krea 2 weights are not bundled by BV Node Pack. Their respective
+licenses, access requirements and usage conditions apply.
+
+</details>
 
 ### Experimental Anima LLLite layout control
 
@@ -801,6 +844,18 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-19 — v0.11.0
+
+- Add optional regional LoRA hooks to `BV Regional Krea 2 Attention (Experimental)`
+  without changing workflows that leave the new inputs disconnected.
+- Encode every Krea text slot with its assigned scoped CLIP hooks, then compose
+  distinct model-side LoRA stacks as mask-weighted full-model passes.
+- Preserve the existing 28-block Krea attention router and remove slot-local hook
+  metadata before the combined conditioning reaches the sampler.
+- Validate two independently assigned character LoRAs with 20-percent overlapping
+  regions, including a shared interaction area, and document the substantial
+  multipass memory and runtime cost.
 
 ### 2026-08-19 — v0.10.1
 

@@ -3,6 +3,7 @@ import json
 import math
 import sys
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -46,6 +47,7 @@ class FakeClip:
         attention[:, :active] = 1
         return [[embedding, {
             "attention_mask": attention,
+            "hooks": "slot-hooks",
             "pooled_output": torch.full((1, 4), value),
         }]]
 
@@ -56,7 +58,7 @@ class FakeClipWithoutAttentionMask(FakeClip):
         value = float(len(self.encoded))
         return [[
             torch.full((1, 5, 30_720), value),
-            {"pooled_output": torch.full((1, 4), value)},
+            {"hooks": "slot-hooks", "pooled_output": torch.full((1, 4), value)},
         ]]
 
 
@@ -74,6 +76,8 @@ class RegionalKrea2AttentionTests(unittest.TestCase):
         self.assertEqual(tuple(negative[0][0].shape), (1, 25, 30_720))
         self.assertEqual(int(positive[0][1]["attention_mask"].sum()), 25)
         self.assertEqual(int(negative[0][1]["attention_mask"].sum()), 25)
+        self.assertNotIn("hooks", positive[0][1])
+        self.assertNotIn("hooks", negative[0][1])
 
     def test_compiler_preserves_raw_negative_conditioning_and_pair_pads_slots(self):
         positive, negative, slots, aspect = compile_krea2_attention(fixture(), FakeClip())
@@ -88,6 +92,20 @@ class RegionalKrea2AttentionTests(unittest.TestCase):
         self.assertLess(float(negative[0][0].min()), 0.0)
         self.assertEqual(positive[0][1]["bv_krea2_text_fusion_routing"], False)
         self.assertEqual(aspect, 1.0)
+
+    @patch("util.regional.krea2_attention.clip_with_hooks", side_effect=lambda clip, hooks: clip)
+    def test_compiler_encodes_each_slot_with_its_scope_hooks(self, clip_with_hooks):
+        document = fixture()
+        hooks = {"global": "global", "background": "background"}
+        hooks.update({region["id"]: region["id"] for region in document["regions"]})
+
+        compile_krea2_attention(document, FakeClip(), hooks)
+
+        used_hooks = [call.args[1] for call in clip_with_hooks.call_args_list]
+        expected = ["global", "global", "background", "background"]
+        for region in document["regions"]:
+            expected.extend([region["id"], region["id"]])
+        self.assertEqual(used_hooks, expected)
 
     def test_grid_factorization_tracks_canvas_aspect(self):
         self.assertEqual(_grid_for_tokens(4096, 1.0), (64, 64))

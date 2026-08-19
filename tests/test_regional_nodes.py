@@ -160,6 +160,10 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalKrea2AttentionNode.RETURN_TYPES,
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
+        self.assertEqual(
+            set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
+            {"lora_registry", "lora_bindings"},
+        )
 
     def test_anima_adapter_is_registered_with_external_region_type(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Anima Adapter"], self.module.BVRegionalAnimaAdapterNode)
