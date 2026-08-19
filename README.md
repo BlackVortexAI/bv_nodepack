@@ -277,11 +277,14 @@ with BV Node Pack; their own licenses and access conditions apply.
 
 [![Skin-tone LoRA applied only to the left Anima region](examples/images/anima-regional-skin-tone-lora-hybrid-035.png)](examples/images/anima-regional-skin-tone-lora-hybrid-035.png)
 
+[![Regional Editor assignment for the skin-tone isolation test](examples/images/anima-regional-skin-tone-lora-editor.png)](examples/images/anima-regional-skin-tone-lora-editor.png)
+
 This isolation test applies `Skin-tone-Slider-Anima` at `+6` only to the left
 region while both regions request otherwise matching adult characters, hair,
 eyes and clothing. The run used `hybrid`, `hybrid_blend_ratio=0.35`, region strength
-`1.0` and feather `0.05`. The skin-tone change remained local even where the two
-subjects touched, while their shared appearance and clothing stayed coherent.
+`1.0` and feather `0.05`. The skin-tone change remained local at the central hand
+contact, while the subjects' shared appearance and matching blue outfits stayed
+coherent. The second image shows the exact left/right assignment in the editor.
 The prompt document is
 [`anima-skin-tone-slider-regional-lora-test.bv-regional.json`](docs/examples/anima-skin-tone-slider-regional-lora-test.bv-regional.json).
 The complete reproducible ComfyUI graph is available as

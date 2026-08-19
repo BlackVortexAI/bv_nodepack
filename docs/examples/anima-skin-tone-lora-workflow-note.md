@@ -9,7 +9,7 @@ This workflow tests whether an attribute LoRA remains isolated to one Anima regi
 - Region strength: `1.0`
 - Mask feather: `0.05`
 
-Both regions request similar adult characters with matching blue sleeveless tops, denim shorts, hair and eye color. Their close central contact and the visible skin on the face, arms, midriff and legs make regional skin-tone bleeding easy to detect.
+Both regions request similar adult characters with matching blue outfits, hair and eye color. Their central hand contact and visible skin make regional skin-tone bleeding easy to detect while retaining one coherent shared composition.
 
 The LoRA stack is registered with **BV Named LoRA Stack** and assigned only to the left region in **BV Regional Prompt**. The `lora_bindings` output must be connected to **BV Regional Native Conditioning** together with the `regional` document.
 
