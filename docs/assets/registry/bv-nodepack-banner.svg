@@ -34,8 +34,8 @@
 
   <g font-family="Inter,Segoe UI,Arial,sans-serif">
     <g transform="translate(92 110)">
-      <circle cx="46" cy="46" r="46" fill="url(#brand)"/>
-      <path d="M25 48c10-25 36-27 45-9 9 20-17 39-35 24-13-11-4-33 16-29 13 3 13 19 2 23" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+      <path d="M24 12C5 31 9 61 29 74C49 88 78 78 86 56C94 34 79 17 61 18C43 19 31 35 34 50C37 66 55 72 67 63C79 54 75 38 64 34C53 30 45 38 46 47C47 55 56 57 60 51"
+            transform="scale(.92)" fill="none" stroke="url(#brand)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
       <text x="120" y="47" fill="#fff" font-size="58" font-weight="760">BV Node Pack</text>
       <text x="122" y="88" fill="#aab9ca" font-size="24" letter-spacing=".3">Advanced workflow tools for ComfyUI</text>
     </g>
