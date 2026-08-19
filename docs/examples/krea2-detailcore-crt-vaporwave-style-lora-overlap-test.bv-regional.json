@@ -1,0 +1,102 @@
+{
+  "canvas": {
+    "height": 1024,
+    "width": 1024
+  },
+  "document_id": "b42d579d-2cab-4a66-8c7a-6f36cb24a198",
+  "negative_mode": "auto",
+  "overlap": {
+    "mode": "joint"
+  },
+  "prompts": {
+    "background": {
+      "negative_source": "empty background, plain studio, white backdrop",
+      "positive_source": "one continuous futuristic city street at dusk extending across the entire image, coherent ground plane, distant skyline, cinematic atmosphere"
+    },
+    "global": {
+      "negative_source": "worst quality, low quality, low resolution, blurry, malformed anatomy, extra limbs, duplicate subject, disconnected scene, diptych, triptych, comic panels, split screen, hard vertical divider, collage, text, logo, watermark, signature, cropped, out of frame, nsfw",
+      "positive_source": "masterpiece, best quality, one continuous cinematic science-fiction scene, wide establishing shot, a single futuristic street crossing from the left side to the right side, coherent perspective, unified lighting direction, two distinct visual styles meeting naturally near the center, detailed environment"
+    }
+  },
+  "regions": [
+    {
+      "authoring": {
+        "color": "#4C78A8",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Detailcore Left 55 Percent",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1.0,
+          "id": "d8a42c58-862b-486f-a4cd-8d82e69bd8bc",
+          "layer_id": "d8a42c58-862b-486f-a4cd-8d82e69bd8bc",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.55,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "id": "13cd850b-b52e-48b6-aaec-8bd81550efbf",
+      "mask": {
+        "feather": 0.04
+      },
+      "name": "Left - Detailcore",
+      "parent_region_id": null,
+      "priority": 0,
+      "prompts": {
+        "negative_source": "vaporwave, CRT screen, VHS noise, scanlines, retro television frame, pastel neon haze",
+        "positive_source": "dtl4ev_stx, left side of the same continuous futuristic street, enormous highly detailed mechanical guardian beside the road, intricate armor plates, exposed machinery, cables, industrial metal, sharp mechanical linework, dramatic red and amber illumination, the road continuing toward the center"
+      },
+      "strength": 1.0
+    },
+    {
+      "authoring": {
+        "color": "#E45756",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "CRT Vaporwave Right 55 Percent",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 1.0,
+          "id": "33f4f5d3-7686-47cd-8a68-b4f115f6bf9c",
+          "layer_id": "33f4f5d3-7686-47cd-8a68-b4f115f6bf9c",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.55,
+          "x": 0.45,
+          "y": 0.0
+        }
+      ],
+      "id": "eb5f44f3-f29d-434e-ab71-fe77d97c68e2",
+      "mask": {
+        "feather": 0.04
+      },
+      "name": "Right - CRT Vaporwave",
+      "parent_region_id": null,
+      "priority": 1,
+      "prompts": {
+        "negative_source": "dense exposed machinery, gray industrial armor, mechanical cutaway, monochrome metal",
+        "positive_source": "crtvaporwave, right side of the same continuous futuristic street, retro-futuristic neon city skyline, satellite dishes and glowing towers, cyan magenta and violet evening light, analog CRT scanlines, subtle VHS texture, chromatic aberration, the road continuing through the center"
+      },
+      "strength": 1.0
+    }
+  ],
+  "schema": "bv.regional",
+  "title": "Krea 2 Detailcore and CRT Vaporwave Regional Style LoRA Overlap Test",
+  "version": 1
+}

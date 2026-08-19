@@ -536,6 +536,44 @@ licenses, access requirements and usage conditions apply.
 
 </details>
 
+<details>
+<summary><strong>Krea 2 — incompatible regional style LoRAs in one continuous scene</strong></summary>
+
+This boundary test deliberately combines two strongly different style LoRAs:
+[Detailcore Forever](https://civitai.com/models/2747452/detailcore-forever-by-stx?modelVersionId=3221683)
+on the left and [CRT Vaporwave](https://civitai.com/models/2856432/crt-vaporwave?modelVersionId=3226199)
+on the right. Two 55-percent-wide masks create a 10-percent `joint` overlap. Both
+LoRAs use model and CLIP strength `1.0`; mask feather is `0.04`, attention strength
+is `1.0`, and routing is active from `0.0` to `0.5`.
+
+| Regional style LoRAs active | Regional LoRA inputs disconnected |
+| --- | --- |
+| ![Krea 2 with Detailcore and CRT Vaporwave assigned regionally](docs/assets/regional/krea2-dual-style-lora-active.png) | ![Krea 2 control without regional LoRA inputs](docs/assets/regional/krea2-dual-style-lora-disabled.png) |
+
+The two outputs use the same seed, prompts, regions and sampler settings. In the
+control, the LoRA source nodes still contain their entries, but `lora_registry` and
+`lora_bindings` are disconnected from the Krea node; no regional LoRA model passes
+are therefore executed. The subject matter remains because it is requested by the
+regional prompts, while the two trained image languages are substantially reduced.
+
+The enabled result keeps Detailcore's dense mechanical construction concentrated on
+the left and CRT Vaporwave's cyan-magenta retro-futuristic atmosphere concentrated on
+the right. The road, perspective and lighting remain one continuous composition
+through the overlap rather than becoming two independent panels.
+
+| Regional geometry | Workflow connections |
+| --- | --- |
+| ![Krea 2 dual-style overlap geometry](docs/assets/regional/krea2-dual-style-lora-editor.png) | ![Krea 2 dual-style regional LoRA workflow](docs/assets/regional/krea2-dual-style-lora-workflow.png) |
+
+[Download the complete dual-style workflow](docs/examples/krea2-dual-style-regional-lora-workflow.json) ·
+[Import the regional document](docs/examples/krea2-detailcore-crt-vaporwave-style-lora-overlap-test.bv-regional.json)
+
+This is an intentionally favorable observed result, not a universal promise. Style
+LoRAs are content- and training-dependent rather than neutral image filters. Different
+pairings can conflict, bleed across composition, or dominate the base model.
+
+</details>
+
 ### Experimental Anima LLLite layout control
 
 **BV Regional Anima LLLite** adds learned layout guidance to the prompt-to-region
