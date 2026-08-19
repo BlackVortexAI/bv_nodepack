@@ -8,6 +8,12 @@ test("completion extracts the active comma-separated prompt segment", () => {
     assert.equal(request.start, 13);
 });
 
+test("completion keeps multi-word tags open but closes on a prompt separator", () => {
+    const context = { scope: "region", polarity: "positive" };
+    assert.equal(completionRequest("woman with ", 11, context)?.term, "woman with ");
+    assert.equal(completionRequest("blue hair, red eyes", 10, context), null);
+});
+
 test("completion insertion replaces only the active term and leaves one separator", () => {
     const request = completionRequest("masterpiece, blue_h", 19, { scope: "region", polarity: "positive" });
     const result = insertSuggestion("masterpiece, blue_h", request, { id: "blue-hair", insertText: "blue_hair", label: "blue hair", source: "fake" });

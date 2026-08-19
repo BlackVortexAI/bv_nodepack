@@ -69,6 +69,7 @@ function attach(textarea: HTMLTextAreaElement) {
     };
     const search = () => {
         if (!completionEnabled()) return close();
+        if (textarea.selectionStart !== textarea.selectionEnd) return close();
         if (timer != null) window.clearTimeout(timer);
         abort?.abort();
         request = completionRequest(textarea.value, textarea.selectionStart ?? textarea.value.length, { scope: "generic", polarity: "positive" });
@@ -98,6 +99,7 @@ function attach(textarea: HTMLTextAreaElement) {
     };
     const blur = () => window.setTimeout(() => { if (!popup?.contains(document.activeElement)) close(); }, 120);
     textarea.addEventListener("input", search);
+    textarea.addEventListener("select", search);
     textarea.addEventListener("keydown", keydown, true);
     textarea.addEventListener("blur", blur);
     window.addEventListener("resize", position);
@@ -105,6 +107,7 @@ function attach(textarea: HTMLTextAreaElement) {
     attached.set(textarea, { close, destroy: () => {
         close();
         textarea.removeEventListener("input", search);
+        textarea.removeEventListener("select", search);
         textarea.removeEventListener("keydown", keydown, true);
         textarea.removeEventListener("blur", blur);
         window.removeEventListener("resize", position);

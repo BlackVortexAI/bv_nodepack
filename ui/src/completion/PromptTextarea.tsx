@@ -6,7 +6,7 @@ import { completionPopupPosition } from "./position";
 
 type Props = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; onValue: (value: string) => void; completionContext: CompletionContext };
 
-export default function PromptTextarea({ value, onValue, completionContext, onKeyDown, onBlur, ...props }: Props) {
+export default function PromptTextarea({ value, onValue, completionContext, onKeyDown, onBlur, onSelect, ...props }: Props) {
     const enabled = useCompletionEnabled();
     const placement = useCompletionPlacement();
     const textarea = useRef<HTMLTextAreaElement>(null);
@@ -18,8 +18,9 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     const timerRef = useRef<number | null>(null);
 
     const close = () => { abortRef.current?.abort(); setSuggestions([]); setPopup(null); };
-    const search = (text: string, caret: number) => {
+    const search = (text: string, caret: number, selectionEnd = caret) => {
         if (!enabled) return close();
+        if (caret !== selectionEnd) return close();
         if (timerRef.current != null) window.clearTimeout(timerRef.current);
         abortRef.current?.abort();
         const request = completionRequest(text, caret, completionContext);
@@ -46,7 +47,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     useEffect(() => { if (popup && textarea.current) setPopup(completionPopupPosition(textarea.current, placement)); }, [placement]);
     useEffect(() => () => { abortRef.current?.abort(); if (timerRef.current != null) window.clearTimeout(timerRef.current); }, []);
     return <>
-        <textarea {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart); }} onKeyDown={event => {
+        <textarea {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart, event.target.selectionEnd); }} onSelect={event => { search(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); onSelect?.(event); }} onKeyDown={event => {
             if (suggestions.length) {
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); event.stopPropagation(); setSelected(current => (current + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length); return; }
                 if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); accept(); return; }
