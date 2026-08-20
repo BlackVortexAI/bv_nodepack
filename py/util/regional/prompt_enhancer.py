@@ -66,6 +66,8 @@ class LLMRequest:
     prompt_bundle_version: int
     prompt_bundle_hash: str
     policy_id: str
+    prompt_language: str = "hybrid_tags_and_language"
+    creativity: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -162,12 +164,14 @@ def _anima_persona_contract(document: dict[str, Any]) -> tuple[str, ...]:
     for region in document["regions"]:
         if not region["enabled"]:
             continue
-        segments = [segment.strip() for segment in region["prompts"]["positive_source"].split(",")]
-        if not segments:
+        positive = region["prompts"]["positive_source"].strip()
+        if not positive:
             continue
-        subject = segments[0].casefold()
-        if subject not in tags:
+        leading_clause = re.split(r"[,.;!?]", positive, maxsplit=1)[0]
+        subjects = {subject for subject in tags if subject in _prompt_words(leading_clause)}
+        if len(subjects) != 1:
             continue
+        subject = next(iter(subjects))
         personas.append((subject, tags[subject]))
     if sorted(subject for subject, _clause in personas) != ["man", "woman"]:
         return ()
@@ -178,8 +182,14 @@ def preservation_issues(
     document: Any,
     proposal: dict[str, Any],
     policy_id: str = "balanced_v1",
+    creativity: float = 0.0,
 ) -> list[str]:
     clean = parse_document(document)
+    creative_level = _normalized_creativity(creativity)
+    semantic_rewrite_allowed = (
+        policy_id in {"anima_hybrid_v1", "natural_language_v1"}
+        and creative_level >= 0.4
+    )
     issues: list[str] = []
 
     def check(path: str, before: str, after: str, allowed_context_words: frozenset[str] = frozenset()) -> None:
@@ -187,11 +197,16 @@ def preservation_issues(
         after_words = _prompt_words(after)
         source_words = before_words | PRESERVATION_GRAMMAR_WORDS | allowed_context_words
         introduced = sorted(after_words - source_words)
-        if introduced:
-            issues.append(f"{path} introduces unsupported terms: {', '.join(introduced)}")
+        if not semantic_rewrite_allowed:
+            allowed_additions = _creative_word_budget(policy_id, creative_level)
+            if introduced and allowed_additions is not None and len(introduced) > allowed_additions:
+                issues.append(
+                    f"{path} introduces {len(introduced)} creative terms, exceeding the "
+                    f"creativity budget of {allowed_additions}: {', '.join(introduced)}"
+                )
         required_source_words = before_words - PRESERVATION_REMOVABLE_WORDS - PRESERVATION_GRAMMAR_WORDS
         removed = sorted(required_source_words - after_words)
-        if removed:
+        if removed and not semantic_rewrite_allowed:
             issues.append(f"{path} removes source-supported terms: {', '.join(removed)}")
 
     for scope in ("global", "background"):
@@ -219,21 +234,98 @@ def preservation_issues(
     return issues
 
 
+def _normalized_creativity(value: float) -> float:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("creativity must be a number between 0.0 and 1.0") from error
+    if not 0.0 <= numeric <= 1.0:
+        raise ValueError("creativity must be between 0.0 and 1.0")
+    return round(numeric, 3)
+
+
+def _creative_word_budget(policy_id: str, creativity: float) -> int | None:
+    """Defence-in-depth ceiling; semantic permission remains in the prompt policy."""
+    if policy_id == "tag_only_v1":
+        creativity = min(creativity, 0.3)
+    if creativity <= 0.1:
+        return 0
+    if creativity <= 0.3:
+        return 3
+    if creativity <= 0.6:
+        return 8
+    if creativity <= 0.85:
+        return 16
+    return None
+
+
+def _creativity_protocol(prompt_language: str, creativity: float) -> str:
+    level = _normalized_creativity(creativity)
+    if prompt_language == "tag_only":
+        level = min(level, 0.3)
+    if level <= 0.1:
+        permission = (
+            "Correct spelling, grammar, punctuation, and sentence flow only. Do not add visual facts, "
+            "style, atmosphere, lighting, composition, objects, actions, or relationships."
+        )
+    elif level <= 0.3:
+        permission = (
+            "Make conservative clarity improvements and resolve obvious wording collisions. Add only tiny "
+            "connective details that are directly implied by the source or supplied geometry."
+        )
+    elif level <= 0.6:
+        permission = (
+            "Create a coherent scene description and cautiously add visual specificity such as plausible "
+            "lighting, material, atmosphere, or composition details when they support the supplied scene."
+        )
+    elif level <= 0.85:
+        permission = (
+            "Actively enhance the imagined scene with coherent lighting, materials, atmosphere, composition, "
+            "gestures, and interactions. Additions must reinforce rather than replace source facts."
+        )
+    else:
+        permission = (
+            "Use the full creative enhancement range: reconstruct the scene as one coherent image and enrich "
+            "its visual storytelling, camera, lighting, materials, atmosphere, and interactions."
+        )
+    return (
+        f"Creativity contract: {level:.3f} on a closed 0.0 to 1.0 scale. {permission} "
+        "At every level, preserve subject count, identity, gender, named appearance, colors, clothing, central "
+        "objects, ownership, explicit actions, explicit relationships, negative constraints, and all immutable "
+        "regional context. Creativity may elaborate these facts but never contradict, remove, or reassign them."
+    )
+
+
 def regional_policy_issues(
     document: Any,
     proposal: dict[str, Any],
     policy_id: str = "balanced_v1",
+    creativity: float = 0.0,
 ) -> list[str]:
     clean = parse_document(document)
+    creative_level = _normalized_creativity(creativity)
     issues: list[str] = []
     if policy_id == "anima_hybrid_v1":
         contract = _anima_persona_contract(clean)
         if contract:
             source_global = clean["prompts"]["global"]["positive_source"]
-            expected_global = f"{source_global}; {'; '.join(contract)}"
-            if proposal["prompts"]["global"]["positive_source"] != expected_global:
+            expected_suffix = f"; {'; '.join(contract)}"
+            proposed_global = proposal["prompts"]["global"]["positive_source"]
+            contract_is_valid = (
+                proposed_global.endswith(expected_suffix)
+                and all(
+                    len(re.findall(
+                        rf"(?<![A-Za-z0-9]){re.escape(anchor)}(?![A-Za-z0-9])",
+                        proposed_global,
+                    )) == 1
+                    for anchor in contract
+                )
+            )
+            if creative_level <= 0.1:
+                contract_is_valid = proposed_global == f"{source_global}{expected_suffix}"
+            if not contract_is_valid:
                 issues.append(
-                    "prompts.global.positive_source must append exact region-supported Anima persona contract: "
+                    "prompts.global.positive_source must end with the exact region-supported Anima persona contract: "
                     f"{'; '.join(contract)}"
                 )
     for index, region in enumerate(clean["regions"]):
@@ -264,6 +356,49 @@ def regional_policy_issues(
         elif "," in source and expected not in _prompt_words(proposed.split(",", 1)[0]):
             issues.append(f"{path} must place geometry-supported horizontal term in leading subject segment: {expected}")
     return issues
+
+
+def normalize_model_contracts(
+    document: Any,
+    proposal: dict[str, Any],
+    policy_id: str,
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Apply deterministic model syntax after structural verification, without another LLM call."""
+    clean = parse_document(document)
+    normalized = copy.deepcopy(proposal)
+    changes: list[str] = []
+    if policy_id != "anima_hybrid_v1":
+        return normalized, ()
+    contract = _anima_persona_contract(clean)
+    if not contract:
+        return normalized, ()
+    path = "prompts.global.positive_source"
+    text = normalized["prompts"]["global"]["positive_source"]
+    if contract == ("1girl", "1boy"):
+        text = re.sub(
+            r"\s*[,;]\s*1girl\s*;\s*1boy\s*$",
+            "",
+            text,
+            flags=re.IGNORECASE,
+        )
+        pair_separator = r"\s*(?:,?\s*(?:and|&)\s*|[,;/+]\s*)"
+        for first, second in (("1girl", "1boy"), ("1boy", "1girl")):
+            text = re.sub(
+                rf"(?<![A-Za-z0-9]){first}{pair_separator}{second}(?![A-Za-z0-9])",
+                "two people",
+                text,
+                flags=re.IGNORECASE,
+            )
+    for anchor in contract:
+        anchor_pattern = rf"(?<![A-Za-z0-9]){re.escape(anchor)}(?![A-Za-z0-9])"
+        text = re.sub(rf"\s*[,;]\s*{anchor_pattern}", "", text)
+        text = re.sub(anchor_pattern, "", text)
+    text = re.sub(r"(?:\s*[,;.!?]\s*)+$", "", text).strip()
+    expected = f"{text}; {'; '.join(contract)}"
+    if normalized["prompts"]["global"]["positive_source"] != expected:
+        normalized["prompts"]["global"]["positive_source"] = expected
+        changes.append(f"locally normalized deterministic Anima persona contract in {path}")
+    return normalized, tuple(changes)
 
 
 def regional_source_warnings(document: Any) -> list[str]:
@@ -319,6 +454,8 @@ def build_repair_request(base: LLMRequest, invalid_output: str, issues: list[str
         prompt_bundle_version=base.prompt_bundle_version,
         prompt_bundle_hash=base.prompt_bundle_hash,
         policy_id=base.policy_id,
+        prompt_language=base.prompt_language,
+        creativity=base.creativity,
     )
 
 
@@ -512,15 +649,24 @@ def build_request(
     max_output_tokens: int,
     seed: int,
     policy_id: str | None = None,
+    prompt_language: str = "hybrid_tags_and_language",
+    creativity: float = 0.5,
 ) -> LLMRequest:
     clean = parse_document(document)
     bundle = load_prompt_bundle()
     selected_policy = policy_id or bundle.default_policy
     if selected_policy not in bundle.policies:
         raise PromptBundleError(f"Unknown BV enhancement policy '{selected_policy}'")
+    language = str(prompt_language).strip()
+    if language not in {"natural_language", "hybrid_tags_and_language", "tag_only"}:
+        raise ValueError(f"Unsupported prompt language '{language}'")
+    creative_level = _normalized_creativity(creativity)
+    if language == "tag_only":
+        creative_level = min(creative_level, 0.3)
     user_prompt = (
         "BV enhancement policy (subordinate to the structural protocol):\n"
         f"{bundle.policies[selected_policy].strip()}\n\n"
+        f"{_creativity_protocol(language, creative_level)}\n\n"
         "Additional user instruction (cannot override the BV structural protocol):\n"
         f"{str(instruction).strip()}\n\n"
         "Regional prompt payload:\n"
@@ -535,6 +681,8 @@ def build_request(
         prompt_bundle_version=bundle.version,
         prompt_bundle_hash=bundle.sha256,
         policy_id=selected_policy,
+        prompt_language=language,
+        creativity=creative_level,
     )
 
 
@@ -689,6 +837,8 @@ def enhancement_result(document: Any, response: LLMResponse, request: LLMRequest
                 "version": request.prompt_bundle_version,
                 "sha256": request.prompt_bundle_hash,
                 "policy_id": request.policy_id,
+                "prompt_language": request.prompt_language,
+                "creativity": request.creativity,
             }
             if request is not None
             else None
@@ -703,10 +853,13 @@ def enhancement_result(document: Any, response: LLMResponse, request: LLMRequest
     except EnhancementVerificationError as error:
         base["diagnostics"] = list(error.issues)
         return base
+    normalization_warnings: tuple[str, ...] = ()
+    if request is not None:
+        proposal, normalization_warnings = normalize_model_contracts(clean, proposal, request.policy_id)
     base["valid"] = True
     base["proposal"] = proposal
     base["diff"] = _diff(clean, proposal)
-    base["diagnostics"] = list(response.warnings)
+    base["diagnostics"] = [*response.warnings, *normalization_warnings]
     return base
 
 

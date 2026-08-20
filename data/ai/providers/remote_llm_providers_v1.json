@@ -1,0 +1,116 @@
+{
+  "schema": "bv.remote_llm.providers",
+  "version": 1,
+  "profiles": [
+    {
+      "id": "openai-compatible",
+      "label": "OpenAI Compatible",
+      "adapter": "openai_chat",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "allow_custom_endpoint": true,
+      "default_model": "gpt-5-mini",
+      "request_profile": "standard",
+      "auth_mode": "bearer",
+      "local_execution": false
+    },
+    {
+      "id": "openai",
+      "label": "OpenAI",
+      "adapter": "openai_chat",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "gpt-5-mini",
+      "request_profile": "standard",
+      "auth_mode": "bearer",
+      "local_execution": false
+    },
+    {
+      "id": "venice",
+      "label": "Venice",
+      "adapter": "openai_chat",
+      "endpoint": "https://api.venice.ai/api/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "zai-org-glm-5-1",
+      "request_profile": "venice",
+      "auth_mode": "bearer",
+      "local_execution": false
+    },
+    {
+      "id": "abacus",
+      "label": "Abacus.AI",
+      "adapter": "openai_chat",
+      "endpoint": "https://routellm.abacus.ai/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "route-llm",
+      "request_profile": "standard",
+      "auth_mode": "bearer",
+      "local_execution": false
+    },
+    {
+      "id": "ollama",
+      "label": "Ollama (Local)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:11434/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "qwen3:4b",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    },
+    {
+      "id": "lm-studio",
+      "label": "LM Studio (Local)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "local-model",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    },
+    {
+      "id": "llama-cpp",
+      "label": "llama.cpp Server (Local)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "local-model",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    },
+    {
+      "id": "vllm",
+      "label": "vLLM (Local)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:8000/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "local-model",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    },
+    {
+      "id": "localai",
+      "label": "LocalAI (Local)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:8080/v1/chat/completions",
+      "allow_custom_endpoint": false,
+      "default_model": "gpt-4",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    },
+    {
+      "id": "local-openai-compatible",
+      "label": "Local OpenAI Compatible (Custom)",
+      "adapter": "openai_chat",
+      "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+      "allow_custom_endpoint": true,
+      "default_model": "local-model",
+      "request_profile": "standard",
+      "auth_mode": "none",
+      "local_execution": true
+    }
+  ]
+}

@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).parents[1]
@@ -64,11 +65,27 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
 
     def test_nodes_are_registered_with_bv_owned_socket_types(self):
         self.assertIn("BV Comfy CLIP LLM Provider", self.module.NODE_CLASS_MAPPINGS)
+        self.assertIn("BV Remote LLM Provider", self.module.NODE_CLASS_MAPPINGS)
         self.assertIn("BV Regional Prompt Enhancer", self.module.NODE_CLASS_MAPPINGS)
         self.assertIn("BV Apply Regional Enhancement", self.module.NODE_CLASS_MAPPINGS)
         self.assertEqual(self.module.BVComfyClipLLMProviderNode.RETURN_TYPES, ("BV_LLM_PROVIDER",))
+        self.assertEqual(self.module.BVRemoteLLMProviderNode.RETURN_TYPES, ("BV_LLM_PROVIDER",))
         self.assertEqual(self.module.BVRegionalPromptEnhancerNode.RETURN_TYPES[0], "BV_ENHANCEMENT_RESULT")
         self.assertEqual(self.module.BVRegionalPromptEnhancerNode.IS_CHANGED(), self.utility.prompt_bundle_fingerprint())
+        inputs = self.module.BVRegionalPromptEnhancerNode.INPUT_TYPES()["required"]
+        self.assertEqual(inputs["prompt_language"][1]["default"], "Anima / hybrid")
+        self.assertEqual(inputs["creativity"][1]["default"], 0.5)
+
+    def test_remote_provider_node_selects_venice_profile_and_catalog_endpoint(self):
+        remote_llm = __import__(f"{PACKAGE}.py.util.remote_llm", fromlist=["get_remote_api_key"])
+        with patch.object(remote_llm, "get_remote_api_key", return_value="test-key"):
+            provider = self.module.BVRemoteLLMProviderNode().build(
+                "Venice", "https://ignored.invalid", "zai-org-glm-5-1", "none", 60
+            )[0]
+
+        self.assertEqual(provider.provider_id, "venice_chat_completions")
+        self.assertEqual(provider.model, "zai-org-glm-5-1")
+        self.assertFalse(provider.capabilities.local_execution)
 
     def test_invalid_model_output_flows_to_unchanged_apply_result(self):
         document = fixture()
@@ -129,13 +146,13 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
 
         provider = Provider()
         result, diff_json, diagnostics = self.module.BVRegionalPromptEnhancerNode().enhance(
-            document, provider, "Improve", 512, 0
+            document, provider, "Improve", 512, 0, creativity=0.0
         )
         self.assertEqual(provider.calls, 2)
         self.assertTrue(result["valid"])
         self.assertIn("repaired", diagnostics)
         self.assertIn("Initial rejection", diagnostics)
-        self.assertIn("introduces unsupported terms", diagnostics)
+        self.assertIn("creativity budget", diagnostics)
         self.assertEqual(result["diagnostics"][0], "repaired after initial rejection")
         self.assertIn("on the left", diff_json)
         self.assertIn("on the right", diff_json)
@@ -156,7 +173,7 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
 
         provider = Provider()
         result, diff_json, diagnostics = self.module.BVRegionalPromptEnhancerNode().enhance(
-            document, provider, "Improve", 512, 0
+            document, provider, "Improve", 512, 0, creativity=0.0
         )
         self.assertEqual(provider.calls, 2)
         self.assertFalse(result["valid"])
@@ -164,20 +181,18 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
         self.assertIn("repair attempt failed", diagnostics)
         self.assertEqual(self.module.BVApplyRegionalEnhancementNode().apply(document, result)[0], document)
 
-    def test_enhancer_repairs_missing_anima_persona_contract_exactly_once(self):
+    def test_enhancer_adds_missing_anima_persona_contract_locally(self):
         document = fixture()
         document["prompts"]["global"]["positive_source"] = "a picture, two people, cafe"
         document["regions"][0]["prompts"]["positive_source"] = "woman, red jacket, black short hair"
         document["regions"][1]["prompts"]["positive_source"] = "man, green sweater, brown curly hair"
         document["regions"][2]["prompts"]["positive_source"] = "wood table"
         missing_contract = proposal(document)
-        repaired = proposal(document)
-        repaired["prompts"]["global"]["positive_source"] += "; 1girl; 1boy"
         utility = self.utility
 
         class Provider:
             def __init__(self):
-                self.outputs = [missing_contract, repaired]
+                self.outputs = [missing_contract]
                 self.requests = []
 
             def generate(self, request):
@@ -190,13 +205,39 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
             document, provider, "Improve", 512, 0
         )
 
-        self.assertEqual(len(provider.requests), 2)
+        self.assertEqual(len(provider.requests), 1)
         self.assertTrue(result["valid"])
-        self.assertIn("must append exact region-supported Anima persona contract", provider.requests[1].user_prompt)
         self.assertIn("1girl", diff_json)
         self.assertIn("1boy", diff_json)
         self.assertNotIn("1girl: red jacket", diff_json)
-        self.assertIn("repaired", diagnostics)
+        self.assertIn("locally normalized deterministic Anima persona contract", diagnostics)
+
+    def test_enhancer_normalizes_comma_persona_suffix_without_paid_repair(self):
+        document = fixture()
+        document["prompts"]["global"]["positive_source"] = "a picture, two people, cafe"
+        document["regions"][0]["prompts"]["positive_source"] = "woman, red jacket"
+        document["regions"][1]["prompts"]["positive_source"] = "man, green sweater"
+        candidate = proposal(document)
+        candidate["prompts"]["global"]["positive_source"] = (
+            "a cinematic picture of two people in a cafe, 1girl; 1boy"
+        )
+        utility = self.utility
+
+        class Provider:
+            calls = 0
+
+            def generate(self, _request):
+                self.calls += 1
+                return utility.LLMResponse(json.dumps(candidate, separators=(",", ":")), "fake", "fake-model")
+
+        provider = Provider()
+        result, diff_json, diagnostics = self.module.BVRegionalPromptEnhancerNode().enhance(
+            document, provider, "Improve", 512, 0, creativity=1.0
+        )
+        self.assertEqual(provider.calls, 1)
+        self.assertTrue(result["valid"])
+        self.assertIn("; 1girl; 1boy", diff_json)
+        self.assertIn("locally normalized deterministic Anima persona contract", diagnostics)
 
     def test_enhancer_reports_source_geometry_conflict_without_rewriting_source(self):
         document = fixture()

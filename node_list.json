@@ -1,6 +1,7 @@
 {
   "BV Apply Regional Enhancement": "Apply a verified prompt-only enhancement to its matching BV Regional source document.",
   "BV Comfy CLIP LLM Provider": "Expose a compatible generative ComfyUI CLIP through the BV-owned local LLM provider contract.",
+  "BV Remote LLM Provider": "Select an OpenAI-compatible provider and model through strict structured output without storing the API key in the workflow.",
   "BV Control Center": "Apply reusable controls to workflow groups, including Subgraph-aware activate, mute and bypass states.",
   "BV Dynamic Combo": "Create a validated user-defined selection control with explicit options and output values.",
   "BV Empty Latent Random Ratio": "Create an empty latent at a randomly selected configured aspect ratio.",

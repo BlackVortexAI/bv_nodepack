@@ -14,6 +14,7 @@ import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdap
 import { watchActiveWorkflow } from "./regional/workflowLifecycle";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
+import { upgradeRemoteLLMProvider } from "./remoteLLM";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -503,6 +504,26 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (nodeData.name === "BV Remote LLM Provider") {
+            const originalCreated = nodeType.prototype.onNodeCreated;
+            const originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onNodeCreated = function () {
+                const result = originalCreated?.apply(this, arguments);
+                queueMicrotask(() => upgradeRemoteLLMProvider(this, comfyApi));
+                return result;
+            };
+            nodeType.prototype.onConfigure = function (data: any) {
+                // Prototype workflows stored the environment-variable name between model and reasoning.
+                if (Array.isArray(data?.widgets_values) && data.widgets_values.length >= 6
+                    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(data.widgets_values[3] ?? ""))) {
+                    data = { ...data, widgets_values: [...data.widgets_values.slice(0, 3), ...data.widgets_values.slice(4)] };
+                }
+                const result = originalConfigure?.call(this, data);
+                queueMicrotask(() => upgradeRemoteLLMProvider(this, comfyApi));
+                return result;
+            };
+            return;
+        }
         if (nodeData.name === "BV Named LoRA Stack") {
             const prepare = (node: any) => {
                 const idWidget = node.widgets?.find((widget: any) => widget.name === "stack_id");

@@ -16,6 +16,7 @@ from py.util.regional.prompt_enhancer import (
     build_request,
     enhancement_result,
     load_prompt_bundle,
+    normalize_model_contracts,
     prompt_bundle_fingerprint,
     preservation_issues,
     regional_policy_issues,
@@ -65,7 +66,9 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         self.assertEqual(bundle.default_policy, "anima_hybrid_v1")
         self.assertIn("source-faithful improvement", bundle.policies["balanced_v1"])
         self.assertIn("anima_hybrid_v1", bundle.policies)
-        self.assertIn("copy its corresponding source prompt exactly", bundle.repair_protocol)
+        self.assertIn("retaining every valid enhancement", bundle.repair_protocol)
+        self.assertIn("natural_language_v1", bundle.policies)
+        self.assertIn("tag_only_v1", bundle.policies)
         self.assertEqual(len(bundle.sha256), 64)
 
     def test_anima_subject_aliases_are_source_bound(self):
@@ -79,13 +82,14 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         candidate = proposal(original)
         candidate["regions"][0]["positive_source"] = "1girl, green sweater"
         issues = "\n".join(preservation_issues(original, candidate))
-        self.assertIn("introduces unsupported terms: woman", issues)
+        self.assertIn("creativity budget", issues)
+        self.assertIn("woman", issues)
         self.assertIn("removes source-supported terms: man", issues)
 
     def test_request_can_select_anima_hybrid_policy(self):
         request = build_request(fixture(), "", 1024, 42, policy_id="anima_hybrid_v1")
         self.assertEqual(request.policy_id, "anima_hybrid_v1")
-        self.assertIn("exact model tag '1boy'", request.user_prompt)
+        self.assertIn("exactly 'man' may become '1boy'", request.user_prompt)
 
     def test_prompt_bundle_hot_reload_changes_fingerprint_without_module_reload(self):
         source = PROMPT_BUNDLE_PATH.read_text(encoding="utf-8")
@@ -249,12 +253,98 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         self.assertEqual(request.seed, 42)
         self.assertEqual(request.policy_id, "anima_hybrid_v1")
 
-    def test_repair_request_requires_verbatim_source_fallback(self):
+    def test_creativity_contract_expands_semantic_permission(self):
+        low = build_request(fixture(), "", 1024, 42, creativity=0.1)
+        high = build_request(fixture(), "", 1024, 42, creativity=1.0)
+        self.assertIn("Correct spelling, grammar, punctuation", low.user_prompt)
+        self.assertIn("full creative enhancement range", high.user_prompt)
+        self.assertEqual(high.creativity, 1.0)
+
+    def test_creativity_budget_allows_richer_terms_only_at_higher_levels(self):
+        original = fixture()
+        candidate = proposal(original)
+        candidate["prompts"]["global"]["positive_source"] += ", natural daylight, cinematic atmosphere"
+        self.assertTrue(preservation_issues(original, candidate, creativity=0.1))
+        self.assertEqual(preservation_issues(original, candidate, creativity=1.0), [])
+
+    def test_semantic_anima_rewrite_is_allowed_from_medium_creativity(self):
+        original = fixture()
+        original["regions"][0]["prompts"]["positive_source"] = "woman, looks calm"
+        candidate = proposal(original)
+        candidate["regions"][0]["positive_source"] = "1girl with a relaxed expression"
+        self.assertTrue(
+            preservation_issues(original, candidate, "anima_hybrid_v1", creativity=0.3)
+        )
+        self.assertEqual(
+            preservation_issues(original, candidate, "anima_hybrid_v1", creativity=0.5),
+            [],
+        )
+
+    def test_tag_only_never_bypasses_lexical_preservation(self):
+        original = fixture()
+        candidate = proposal(original)
+        candidate["prompts"]["global"]["positive_source"] = "cinematic reinterpretation"
+        self.assertTrue(preservation_issues(original, candidate, "tag_only_v1", creativity=1.0))
+
+    def test_tag_only_policy_caps_creative_additions(self):
+        request = build_request(
+            fixture(), "", 1024, 42,
+            policy_id="tag_only_v1", prompt_language="tag_only", creativity=1.0,
+        )
+        self.assertIn("Creativity contract: 0.300", request.user_prompt)
+        self.assertEqual(request.creativity, 0.3)
+
+    def test_creative_anima_global_still_requires_exact_persona_suffix(self):
+        original = fixture()
+        original["prompts"]["global"]["positive_source"] = "a picture, two people, cafe"
+        original["regions"][0]["prompts"]["positive_source"] = "woman, red jacket"
+        original["regions"][1]["prompts"]["positive_source"] = "man, green sweater"
+        candidate = proposal(original)
+        candidate["prompts"]["global"]["positive_source"] = (
+            "a cinematic picture of two people in a cafe with warm daylight; 1girl; 1boy"
+        )
+        self.assertEqual(
+            regional_policy_issues(original, candidate, "anima_hybrid_v1", creativity=1.0),
+            [],
+        )
+
+    def test_anima_persona_contract_is_normalized_locally_from_comma_suffix(self):
+        original = fixture()
+        original["prompts"]["global"]["positive_source"] = "a picture, two people, cafe"
+        original["regions"][0]["prompts"]["positive_source"] = "woman, red jacket"
+        original["regions"][1]["prompts"]["positive_source"] = "man, green sweater"
+        candidate = proposal(original)
+        candidate["prompts"]["global"]["positive_source"] = (
+            "a cinematic picture of two people in a cafe, 1girl; 1boy"
+        )
+        normalized, warnings = normalize_model_contracts(original, candidate, "anima_hybrid_v1")
+        self.assertEqual(
+            normalized["prompts"]["global"]["positive_source"],
+            "a cinematic picture of two people in a cafe; 1girl; 1boy",
+        )
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(regional_policy_issues(original, normalized, "anima_hybrid_v1", creativity=1.0), [])
+
+    def test_anima_persona_normalization_preserves_inline_sentence_grammar(self):
+        original = fixture()
+        original["prompts"]["global"]["positive_source"] = "Two people share a cafe scene."
+        original["regions"][0]["prompts"]["positive_source"] = "A woman wears a red jacket."
+        original["regions"][1]["prompts"]["positive_source"] = "A man wears a green sweater."
+        candidate = proposal(original)
+        candidate["prompts"]["global"]["positive_source"] = (
+            "A cafe scene featuring 1girl and 1boy sitting together in soft light."
+        )
+        normalized, _warnings = normalize_model_contracts(original, candidate, "anima_hybrid_v1")
+        self.assertEqual(
+            normalized["prompts"]["global"]["positive_source"],
+            "A cafe scene featuring two people sitting together in soft light; 1girl; 1boy",
+        )
+
+    def test_repair_request_preserves_valid_enhancements_and_has_source_fallback(self):
         request = build_request(fixture(), "", 1024, 42)
         repair = build_repair_request(request, "{}", ["regions[0] removes source-supported terms: calm"])
-        self.assertIn("copy its corresponding source prompt exactly, word for word", repair.user_prompt)
-        self.assertIn("Do not reorder, delete, replace, normalize, or paraphrase", repair.user_prompt)
-        self.assertIn("return the source prompt unchanged when uncertain", repair.user_prompt)
+        self.assertIn("retaining every valid enhancement", repair.user_prompt)
+        self.assertIn("copy that source field unchanged", repair.user_prompt)
         self.assertEqual(repair.repair_protocol, request.repair_protocol)
 
     def test_request_includes_deterministic_read_only_regional_context(self):
@@ -282,7 +372,7 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         candidate = proposal(original)
         candidate["regions"][0]["positive_source"] += ", on the right"
         issues = preservation_issues(original, candidate)
-        self.assertTrue(any("unsupported terms: right" in issue for issue in issues))
+        self.assertTrue(any("creativity budget" in issue and "right" in issue for issue in issues))
 
     def test_regional_policy_requires_missing_supported_horizontal_position(self):
         original = fixture()
@@ -358,6 +448,22 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         request = build_request(original, "", 1024, 42, policy_id="anima_hybrid_v1")
         payload = json.loads(request.user_prompt.split("Regional prompt payload:\n", 1)[1])
         self.assertEqual(payload["immutable_regional_context"]["anima_persona_contract"], [])
+
+    def test_anima_persona_contract_understands_sentence_leading_subjects(self):
+        original = fixture()
+        original["prompts"]["global"]["positive_source"] = "Two people share a quiet cafe scene."
+        original["regions"][0]["prompts"]["positive_source"] = (
+            "A woman with short black hair wears a red jacket. She holds a cup."
+        )
+        original["regions"][1]["prompts"]["positive_source"] = (
+            "A man with curly brown hair wears a green sweater. He sits opposite the woman."
+        )
+        request = build_request(original, "", 1024, 42, policy_id="anima_hybrid_v1")
+        payload = json.loads(request.user_prompt.split("Regional prompt payload:\n", 1)[1])
+        self.assertEqual(
+            payload["immutable_regional_context"]["anima_persona_contract"],
+            ["1girl", "1boy"],
+        )
 
     def test_regional_policy_requires_disabled_region_prompts_to_remain_unchanged(self):
         original = fixture()

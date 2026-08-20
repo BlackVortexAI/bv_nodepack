@@ -1,6 +1,6 @@
 # Hand-off: BV Regional Prompt Enhancer with local LLMs
 
-Status: planning and research complete; implementation not started.
+Status: provider, verifier, immutable apply stage, prompt-language profiles, and creativity contract implemented as a working prototype.
 
 Primary research:
 
@@ -9,6 +9,14 @@ Primary research:
 ## Objective
 
 Build a BV-owned prompt enhancer that understands `BV_REGIONAL` documents and can improve sentence-based prompts without destroying region identity, geometry, masks, priorities, or other authoring data.
+
+The implemented contract exposes prompt language (`hybrid_tags_and_language`,
+`natural_language`, or `tag_only`) independently from creativity (`0.0` to `1.0`).
+Creativity changes the semantic permission in the model instruction and a
+defence-in-depth addition budget in validation; it is not merely provider
+temperature. Anima hybrid and natural-language modes may form coherent sentences
+and add scene-supporting visual specificity at higher levels. Tag-only mode remains
+collision-oriented and caps its effective creativity at `0.3`.
 
 The first priority is local LLM inference inside ComfyUI. OpenAI-compatible APIs may be added later, but must not be required for the initial implementation.
 
@@ -56,6 +64,22 @@ Possible later providers:
 
 - `BV Local LLM Loader` for text-only Qwen Instruct models through a controlled Transformers/GGUF backend
 - `BV OpenAI-Compatible LLM Provider` for Ollama, LM Studio, llama.cpp server, vLLM, and similar endpoints
+
+Implemented external provider module:
+
+- one public `BV Remote LLM Provider` node with catalog-driven `OpenAI Compatible`, `OpenAI`, `Venice` and `Abacus.AI` profiles
+- versioned package catalog contains endpoints and safe suggested defaults, never user settings or keys
+- user-owned defaults live under `user/default/bv_nodepack/remote_llm_settings.json` and are never overwritten by package updates
+- provider keys are entered through the node UI and stored separately under `user/default/bv_nodepack/remote_llm_secrets.json`
+- the settings route exposes only configured/not-configured state, never stored key values
+- fixed OpenAI, Venice and Abacus Chat Completions endpoints; custom endpoint only for the generic profile
+- node UI synchronizes the catalog endpoint on provider changes and locks fixed endpoints
+- selectable model ID and reasoning effort
+- strict JSON-schema response format
+- persistent exact-request response cache prevents repeat billing across unrelated workflow edits and ComfyUI restarts
+- cache identity includes provider, endpoint, model and effective payload; API keys are neither keyed nor stored
+- API key resolved server-side from the user secret store, never from workflow data
+- Venice's additional system prompt disabled for deterministic BV policy ownership
 
 Provider workflow state may contain safe configuration and capability metadata. It must not serialize live model identities, weights, API keys, or opaque Python object references.
 

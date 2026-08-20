@@ -16,6 +16,11 @@ try:
 except Exception as error:
     print(f"BV Node Pack: debug bridge API unavailable: {error}")
 
+try:
+    from .py.util import remote_llm_routes as _remote_llm_routes  # noqa: F401
+except Exception as error:
+    print(f"BV Node Pack: remote LLM settings API unavailable: {error}")
+
 
 def get_ext_dir(subpath=None, mkdir=False):
     root = Path(__file__).parent
