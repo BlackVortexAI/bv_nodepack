@@ -14,6 +14,8 @@ from ..prompt.category import ast_to_plain_text, parse_prompt_to_ast
 REGIONAL = "BV_REGIONAL"
 SELECTION = "BV_REGIONAL_SELECTION"
 SUPPORTED_OVERLAP_MODES = frozenset({"joint"})
+LATEST_VERSION = 2
+REGION_USAGES = frozenset({"generation", "detailer", "both"})
 
 
 class RegionalValidationError(ValueError):
@@ -25,7 +27,7 @@ class RegionalValidationError(ValueError):
 def default_document(width: int = 1024, height: int = 1024) -> dict[str, Any]:
     return {
         "schema": "bv.regional",
-        "version": 1,
+        "version": LATEST_VERSION,
         "document_id": str(uuid.uuid4()),
         "title": "Regional Prompt",
         "canvas": {"width": int(width), "height": int(height)},
@@ -64,8 +66,8 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
         return ["document must be an object"]
     if document.get("schema") != "bv.regional":
         issues.append("schema must be 'bv.regional'")
-    if document.get("version") != 1:
-        issues.append("version must be 1")
+    if document.get("version") != LATEST_VERSION:
+        issues.append(f"version must be {LATEST_VERSION}")
     try:
         uuid.UUID(str(document.get("document_id")))
     except (ValueError, TypeError, AttributeError):
@@ -124,6 +126,8 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
         for key in ("enabled",):
             if not isinstance(region.get(key), bool):
                 issues.append(f"{path}.{key} must be boolean")
+        if region.get("usage") not in REGION_USAGES:
+            issues.append(f"{path}.usage must be generation, detailer, or both")
         strength = region.get("strength")
         if not _finite_number(strength) or not 0 <= strength <= 10:
             issues.append(f"{path}.strength must be a finite number between 0 and 10")
@@ -245,11 +249,32 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
     return list(dict.fromkeys(issues))
 
 
+def migrate_document(document: Any) -> dict[str, Any]:
+    migrated = copy.deepcopy(document)
+    if not isinstance(migrated, dict) or migrated.get("schema") != "bv.regional":
+        return migrated
+    version = migrated.get("version")
+    if version == 1:
+        for region in migrated.get("regions", []):
+            if isinstance(region, dict):
+                region["usage"] = "generation"
+        migrated["version"] = LATEST_VERSION
+    return migrated
+
+
+def region_used_for(region: dict[str, Any], consumer: str) -> bool:
+    if not region.get("enabled", False):
+        return False
+    usage = region.get("usage", "generation")
+    return usage == consumer or usage == "both"
+
+
 def parse_document(value: Any, *, executable: bool = True) -> dict[str, Any]:
     try:
         document = json.loads(value) if isinstance(value, str) else copy.deepcopy(value)
     except json.JSONDecodeError as exc:
         raise RegionalValidationError([f"invalid JSON: {exc}"]) from exc
+    document = migrate_document(document)
     issues = validate_document(document, executable=executable)
     if issues:
         raise RegionalValidationError(issues)

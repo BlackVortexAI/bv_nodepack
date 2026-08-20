@@ -7,7 +7,7 @@ from typing import Any
 
 import torch
 
-from .document import parse_document
+from .document import parse_document, region_used_for
 from .mask_renderer import render_region
 
 
@@ -58,7 +58,7 @@ def compile_color_control(regional: Any) -> tuple[torch.Tensor, dict[str, Any]]:
     document = parse_document(regional)
     width = int(document["canvas"]["width"])
     height = int(document["canvas"]["height"])
-    regions = [region for region in document["regions"] if region["enabled"]]
+    regions = [region for region in document["regions"] if region_used_for(region, "generation")]
     colors = _stable_region_colors(regions)
     image = torch.ones((height, width, 3), dtype=torch.float32)
 

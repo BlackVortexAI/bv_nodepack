@@ -63,3 +63,13 @@ _Avoid_: Settings popup
 **Base Node State**:
 The individual node mode that exists independently of restrictions applied by the Control Center.
 _Avoid_: Previous index, default mode
+
+## Regional prompting language
+
+**Region Usage**:
+The declared execution purpose of an active region: generation, detailer, or both.
+_Avoid_: Region type, output toggle
+
+**Detailer-only Region**:
+An active region whose geometry is exported for downstream detail workflows but does not participate in initial generation conditioning.
+_Avoid_: Disabled region, hidden region

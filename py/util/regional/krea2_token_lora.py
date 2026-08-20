@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from .krea2_attention import Krea2RegionalSlot, _grid_for_tokens
+from .document import region_used_for
 from .mask_renderer import render_selection
 
 
@@ -487,7 +488,7 @@ def apply_krea2_token_lora_patch(
             height,
         ).detach().float().cpu().clamp(0.0, 1.0)
         for region in document["regions"]
-        if region["enabled"]
+        if region_used_for(region, "generation")
     }
     patch = Krea2TokenLoRAPatch(specs, slots, float(aspect_ratio), scope_masks, report)
     result.remove_wrappers_with_key(comfy.patcher_extension.WrappersMP.DIFFUSION_MODEL, WRAPPER_KEY)

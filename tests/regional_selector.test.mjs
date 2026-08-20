@@ -18,3 +18,13 @@ test("removed selection falls back to the first region", () => {
     assert.equal(normalizeRegionId("removed", choices), "aaaaaaaa-0000");
     assert.equal(normalizeRegionId("removed", []), "");
 });
+
+test("detailer dropdown includes only enabled detailer consumers", () => {
+    const choices = regionChoices([
+        { id: "generation", name: "Main", enabled: true, usage: "generation" },
+        { id: "detailer", name: "Face", enabled: true, usage: "detailer" },
+        { id: "both", name: "Hands", enabled: true, usage: "both" },
+        { id: "disabled", name: "Off", enabled: false, usage: "detailer" },
+    ], "detailer");
+    assert.deepEqual(choices.map(choice => choice.id), ["detailer", "both"]);
+});

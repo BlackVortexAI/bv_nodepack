@@ -6,7 +6,7 @@ from typing import Any
 import torch
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, selection_prompts
+from .document import parse_document, region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -88,7 +88,7 @@ def _compile_prompt_branch(
         result.extend(_with_mask(_encode(clip, background_prompt["text"], hooks_by_scope.get("background")), mask, branch_weight, bounds=mask_bounds))
 
     for region in document["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         region_selection = _selection(document, "region", region["id"])
         prompt = selection_prompts(region_selection)[0 if polarity == "positive" else 1]
@@ -119,7 +119,7 @@ def _compile_exclusive_branch(
         branch_weight,
     )
     for region in document["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         region_selection = _selection(document, "region", region["id"])
         region_prompt = selection_prompts(region_selection)[prompt_index]
@@ -153,7 +153,83 @@ def _compile_hybrid_branch(
 def _has_negative_sources(document: dict[str, Any]) -> bool:
     if document["prompts"]["global"]["negative_source"].strip() or document["prompts"]["background"]["negative_source"].strip():
         return True
-    return any(region["enabled"] and region["prompts"]["negative_source"].strip() for region in document["regions"])
+    return any(region_used_for(region, "generation") and region["prompts"]["negative_source"].strip() for region in document["regions"])
+
+
+def compile_detailer_conditioning(
+    document: Any, clip: Any, region_id: str, global_influence: float = 1.0,
+    background_influence: float = 0.35, primary_region_influence: float = 1.0,
+    context_regions: list[dict[str, Any]] | None = None,
+) -> tuple[list, list, str, str, str, str]:
+    """Compile independently weighted, unmasked conditioning for a detailer crop."""
+    def weight(value: Any, name: str) -> float:
+        result = float(value)
+        if not math.isfinite(result) or not 0.0 <= result <= 2.0:
+            raise ValueError(f"{name} must be a finite value between zero and two")
+        return result
+
+    global_weight = weight(global_influence, "global_influence")
+    background_weight = weight(background_influence, "background_influence")
+    primary_weight = weight(primary_region_influence, "primary_region_influence")
+    clean = parse_document(document)
+    region = next((item for item in clean["regions"] if item["id"] == region_id), None)
+    if region is None:
+        raise ValueError(f"unknown detailer region: {region_id}")
+    if not region_used_for(region, "detailer"):
+        raise ValueError(
+            f"Region '{region['name']}' is not enabled for detailer output; "
+            "set its usage to detailer or both"
+        )
+
+    context_scopes: list[tuple[tuple[dict[str, Any], dict[str, Any]], float]] = []
+    seen = {region_id}
+    for index, item in enumerate(context_regions or []):
+        context_id = str(item.get("region_id", ""))
+        if not context_id or context_id in seen:
+            continue
+        context = next((candidate for candidate in clean["regions"] if candidate["id"] == context_id), None)
+        if context is None or not context.get("enabled", False):
+            continue
+        seen.add(context_id)
+        context_scopes.append((
+            selection_prompts(_selection(clean, "region", context_id)),
+            weight(item.get("influence", 1.0), f"context_regions[{index}].influence"),
+        ))
+    scopes: list[tuple[tuple[dict[str, Any], dict[str, Any]], float]] = [
+        (selection_prompts(_selection(clean, "region", region_id)), primary_weight),
+        *context_scopes,
+        (selection_prompts(_selection(clean, "global")), global_weight),
+        (selection_prompts(_selection(clean, "background")), background_weight),
+    ]
+
+    def compile_polarity(prompt_index: int) -> list:
+        result = []
+        for prompts, influence in scopes:
+            prompt = prompts[prompt_index]
+            if influence > 0 and prompt["source"].strip():
+                result.extend(_with_strength(_encode(clip, prompt["text"]), influence))
+        return result
+
+    positive = compile_polarity(0) or _encode(clip, "")
+    mode = clean["negative_mode"]
+    has_negative = any(influence > 0 and prompts[1]["source"].strip() for prompts, influence in scopes)
+    if mode == "zero_out" or (mode == "auto" and not has_negative):
+        negative = _zero_out(positive)
+    else:
+        negative = compile_polarity(1) or _encode(clip, "")
+    resolved_positive = _combined_scope_text(*(prompts[0] for prompts, influence in scopes if influence > 0))
+    resolved_negative = _combined_scope_text(*(prompts[1] for prompts, influence in scopes if influence > 0))
+    def weighted_text(prompt_index: int) -> str:
+        return ", ".join(
+            f"({prompts[prompt_index]['text']}:{influence:g})"
+            for prompts, influence in scopes
+            if influence > 0 and prompts[prompt_index]["source"].strip()
+        )
+
+    return (
+        positive, negative, resolved_positive, resolved_negative,
+        weighted_text(0), weighted_text(1),
+    )
 
 
 def compile_native_conditioning(

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blackvortex.ai/schemas/bv_regional_v2.schema.json",
+  "title": "BV Regional Document v2",
+  "description": "BV Regional authoring contract with per-region consumer usage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "document_id", "title", "canvas", "prompts", "negative_mode", "overlap", "regions"],
+  "properties": {
+    "schema": { "const": "bv.regional" },
+    "version": { "const": 2 },
+    "document_id": { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "canvas": { "$ref": "bv_regional_v1.schema.json#/$defs/canvas" },
+    "prompts": { "$ref": "bv_regional_v1.schema.json#/$defs/documentPrompts" },
+    "negative_mode": { "enum": ["auto", "prompt", "zero_out"] },
+    "overlap": { "$ref": "bv_regional_v1.schema.json#/$defs/overlap" },
+    "regions": { "type": "array", "items": { "$ref": "#/$defs/region" } }
+  },
+  "$defs": {
+    "region": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "parent_region_id", "enabled", "usage", "strength", "priority", "prompts", "mask", "geometry", "authoring"],
+      "properties": {
+        "id": { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "parent_region_id": {
+          "oneOf": [
+            { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
+            { "type": "null" }
+          ]
+        },
+        "enabled": { "type": "boolean" },
+        "usage": { "enum": ["generation", "detailer", "both"] },
+        "strength": { "type": "number", "minimum": 0, "maximum": 10 },
+        "priority": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "prompts": { "$ref": "bv_regional_v1.schema.json#/$defs/promptPair" },
+        "mask": { "$ref": "bv_regional_v1.schema.json#/$defs/regionMask" },
+        "geometry": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "bv_regional_v1.schema.json#/$defs/rectangle" },
+              { "$ref": "bv_regional_v1.schema.json#/$defs/ellipse" },
+              { "$ref": "bv_regional_v1.schema.json#/$defs/polygon" },
+              { "$ref": "bv_regional_v1.schema.json#/$defs/brushStroke" },
+              { "$ref": "bv_regional_v1.schema.json#/$defs/rasterMask" }
+            ]
+          }
+        },
+        "authoring": { "$ref": "bv_regional_v1.schema.json#/$defs/regionAuthoring" }
+      }
+    }
+  }
+}

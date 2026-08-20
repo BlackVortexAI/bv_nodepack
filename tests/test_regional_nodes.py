@@ -5,6 +5,8 @@ import sys
 import types
 import unittest
 
+import torch
+
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT.parents[1]))
@@ -43,6 +45,18 @@ def fixture():
         return json.load(handle)
 
 
+class DetailerClip:
+    def __init__(self):
+        self.encoded = []
+
+    def tokenize(self, text):
+        return text
+
+    def encode_from_tokens_scheduled(self, tokens):
+        self.encoded.append(tokens)
+        return [[torch.ones((1, 2, 3)), {"pooled_output": torch.ones((1, 3))}]]
+
+
 class RegionalNodeTests(unittest.TestCase):
     def test_nodes_are_grouped_by_role_and_model_in_the_menu(self):
         expected_categories = {
@@ -53,6 +67,7 @@ class RegionalNodeTests(unittest.TestCase):
             "BV Regional Deconstructor": "🌀 BV Node Pack/regional/core",
             "BV Regional Prompt Extract": "🌀 BV Node Pack/regional/core",
             "BV Regional Mask Render": "🌀 BV Node Pack/regional/core",
+            "BV Regional Detailer Mask": "🌀 BV Node Pack/regional/integrations/Impact Pack",
             "BV Regional Native Conditioning": "🌀 BV Node Pack/regional/models/Generic",
             "BV Regional SDXL Attention": "🌀 BV Node Pack/regional/models/SDXL",
             "BV Regional Z-Image Attention": "🌀 BV Node Pack/regional/models/Z-Image",
@@ -125,6 +140,43 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(tuple(rendered[0].shape), (1, 100, 100))
         self.assertGreater(rendered[3], 0)
 
+    def test_detailer_mask_renders_selected_region_at_image_size(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        document["regions"][1]["usage"] = "detailer"
+        image = torch.zeros((1, 120, 200, 3))
+        model, clip, vae = object(), DetailerClip(), object()
+
+        result = self.module.BVRegionalDetailerMaskNode().render(
+            document, image, model, clip, vae, "Face left"
+        )
+
+        self.assertIs(result[0], image)
+        self.assertEqual(tuple(result[1].shape), (1, 120, 200))
+        self.assertEqual(result[2], (model, clip, vae, result[3], result[4]))
+        self.assertIn("symmetrical face, green eyes, detailed irises", result[5])
+        self.assertIn("asymmetrical eyes", result[6])
+        self.assertIn("(symmetrical face, green eyes, detailed irises:1)", result[7])
+        self.assertIn("(asymmetrical eyes:1)", result[8])
+        self.assertGreater(result[11], 0)
+        self.assertGreater(result[12], 0)
+        self.assertEqual(result[13], document["regions"][1]["id"])
+        self.assertEqual(result[14], "Face left")
+
+    def test_detailer_mask_rejects_generation_only_region(self):
+        with self.assertRaisesRegex(ValueError, "not enabled for detailer"):
+            self.module.BVRegionalDetailerMaskNode().render(
+                fixture(), torch.zeros((1, 120, 200, 3)), object(), DetailerClip(), object(), "Face left"
+            )
+
+    def test_detailer_mask_rejects_image_batches_for_impact_compatibility(self):
+        with self.assertRaisesRegex(ValueError, "single IMAGE"):
+            self.module.BVRegionalDetailerMaskNode().render(
+                fixture(), torch.zeros((2, 120, 200, 3)), object(), DetailerClip(), object(), "Face left"
+            )
+
     def test_deconstructor_exposes_selection_ast_text_source_and_identity(self):
         document = fixture()
         result = self.module.BVRegionalDeconstructorNode().deconstruct(document, "region", "Face left")
@@ -143,7 +195,7 @@ class RegionalNodeTests(unittest.TestCase):
     def test_debug_returns_summary_and_json(self):
         output = self.module.BVRegionalDebugNode().run(fixture())
         self.assertIn("3 regions", output["result"][1])
-        self.assertEqual(json.loads(output["result"][0])["version"], 1)
+        self.assertEqual(json.loads(output["result"][0])["version"], 2)
 
     def test_native_conditioning_node_is_registered_with_standard_outputs(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Native Conditioning"], self.module.BVRegionalNativeConditioningNode)

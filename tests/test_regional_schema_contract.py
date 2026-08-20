@@ -11,6 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "bv_regional_v1.schema.json"
+SCHEMA_V2_PATH = ROOT / "schemas" / "bv_regional_v2.schema.json"
 FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "regional"
 PROMPT_MODULE_PATH = ROOT / "py" / "util" / "prompt" / "category.py"
 
@@ -38,6 +39,27 @@ def collect_categories(node):
 
 
 class RegionalSchemaContractTests(unittest.TestCase):
+    def test_v2_schema_requires_explicit_region_usage(self):
+        schema = load_json(SCHEMA_V2_PATH)
+        self.assertEqual(schema["properties"]["version"]["const"], 2)
+        self.assertEqual(
+            schema["$defs"]["region"]["properties"]["usage"]["enum"],
+            ["generation", "detailer", "both"],
+        )
+        self.assertIn("usage", schema["$defs"]["region"]["required"])
+
+        document = load_json(FIXTURE_ROOT / "v1_hybrid_joint.json")
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        legacy_schema = load_json(SCHEMA_PATH)
+        resolver = jsonschema.RefResolver(
+            base_uri=schema["$id"],
+            referrer=schema,
+            store={legacy_schema["$id"]: legacy_schema},
+        )
+        jsonschema.Draft202012Validator(schema, resolver=resolver).validate(document)
+
     def test_schema_identity_and_reserved_overlap_modes_are_explicit(self):
         schema = load_json(SCHEMA_PATH)
 

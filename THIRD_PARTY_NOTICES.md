@@ -89,6 +89,9 @@ implementation is claimed unless another section of this file says otherwise.
   prompt-builder editor and detached authoring workflow.
 - [`ComfyUI_LC123_nodes`](https://github.com/lonecatone23/ComfyUI_LC123_nodes):
   painted regional authoring plus Krea 2 and Anima workflow references.
+- [`ComfyUI-Impact-Pack`](https://github.com/ltdrdata/ComfyUI-Impact-Pack): public
+  `MASK`, `SEGS` and detailer contracts used by the optional BV detailer-mask bridge.
+  BV does not vendor or import Impact Pack code.
 - [`RES4LYF`](https://github.com/ClownsharkBatwing/RES4LYF): clean-room research
   reference for regional attention, overlap semantics and backend boundaries.
 - [`comfy-ex-tagcomplete`](https://github.com/jupo-ai/comfy-ex-tagcomplete):

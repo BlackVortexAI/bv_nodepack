@@ -6,13 +6,14 @@ import styles from "./index.css?inline";
 import RegionalEditor from "./regional/RegionalEditor";
 import QuickPromptEditor from "./regional/QuickPromptEditor";
 import { emptyDocument, parseDocument } from "./regional/model";
-import { normalizeRegionId, regionChoices } from "./regional/regionSelector";
+import { regionChoices } from "./regional/regionSelector";
 import { documentTargetChoices, resolveDocumentTarget } from "./regional/documentTargets";
 import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionPlacementPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_PLACEMENT_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled, setCompletionPlacement } from "./completion/settings";
 import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
 import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdapter";
 import { watchActiveWorkflow } from "./regional/workflowLifecycle";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
+import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -33,6 +34,28 @@ const hideRegionalWidget = (widget: any) => {
     if (widget.element) widget.element.style.display = "none";
 };
 
+const moveWidgetBefore = (node: any, widget: any, anchor: any) => {
+    if (!widget || !anchor || widget === anchor) return;
+    const currentIndex = node.widgets?.indexOf(widget) ?? -1;
+    if (currentIndex < 0) return;
+    node.widgets.splice(currentIndex, 1);
+    const anchorIndex = node.widgets.indexOf(anchor);
+    node.widgets.splice(anchorIndex < 0 ? node.widgets.length : anchorIndex, 0, widget);
+};
+
+const removeDetailerProjectionWidgets = (node: any) => {
+    const projections = [
+        node.widgets?.find((widget: any) => widget.name === "region_selector"),
+        ...(node.__bvDetailerContextWidgets ?? []),
+    ].filter(Boolean);
+    for (const widget of projections) {
+        const index = node.widgets?.indexOf(widget) ?? -1;
+        if (index >= 0) node.widgets.splice(index, 1);
+        widget.onRemove?.();
+    }
+    node.__bvDetailerContextWidgets = [];
+};
+
 const sourceRegionalDocument = (node: any) => {
     const input = node.inputs?.find((item: any) => item.name === "regional");
     const graph = node.graph ?? (comfyApp as any).graph;
@@ -43,19 +66,99 @@ const sourceRegionalDocument = (node: any) => {
     try { return parseDocument(value); } catch { return null; }
 };
 
+type DetailerContextEntry = { region_id: string; influence: number };
+const parseDetailerContexts = (value: unknown): DetailerContextEntry[] => {
+    try {
+        const parsed = JSON.parse(String(value ?? "[]"));
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(item => item && typeof item.region_id === "string").map(item => ({
+            region_id: item.region_id,
+            influence: Math.max(0, Math.min(2, Number.isFinite(+item.influence) ? +item.influence : 1)),
+        }));
+    } catch { return []; }
+};
+
+const refreshDetailerContextSelectors = (node: any) => {
+    if (node.comfyClass !== "BV Regional Detailer Mask" && node.type !== "BV Regional Detailer Mask") return;
+    const hidden = node.widgets?.find((widget: any) => widget.name === "context_regions_json");
+    if (!hidden) return;
+    hideRegionalWidget(hidden);
+    const document = sourceRegionalDocument(node);
+    if (!document) return;
+    for (const widget of node.__bvDetailerContextWidgets ?? []) {
+        const widgetIndex = node.widgets?.indexOf(widget) ?? -1;
+        if (widgetIndex >= 0) node.widgets.splice(widgetIndex, 1);
+        widget.onRemove?.();
+    }
+    const primaryId = String(node.widgets?.find((widget: any) => widget.name === "region")?.value ?? "");
+    const available = (document?.regions ?? []).filter((region: any) => region.enabled !== false && region.id !== primaryId);
+    const seen = new Set<string>();
+    const entries = parseDetailerContexts(hidden.value).filter(entry => entry.region_id !== primaryId && !seen.has(entry.region_id) && !!seen.add(entry.region_id));
+    hidden.value = JSON.stringify(entries);
+    const widgets: any[] = [];
+    const rebuild = (next: DetailerContextEntry[]) => { hidden.value = JSON.stringify(next); queueMicrotask(() => refreshDetailerContextSelectors(node)); };
+    for (let index = 0; index <= entries.length; index++) {
+        const current = entries[index];
+        const selectedElsewhere = new Set(entries.filter((_, itemIndex) => itemIndex !== index).map(entry => entry.region_id));
+        const choices = regionChoices(available.filter((region: any) => !selectedElsewhere.has(region.id)));
+        const missingLabel = current && !choices.some(choice => choice.id === current.region_id) ? `Missing region · ${current.region_id.slice(0, 8)}` : null;
+        const combo = node.addWidget("combo", `context_region_${index + 1}`, current ? choices.find(choice => choice.id === current.region_id)?.label ?? missingLabel ?? "None" : "None", (label: string) => {
+            if (label === "None") return rebuild(entries.slice(0, index));
+            const choice = choices.find(item => item.label === label);
+            if (!choice) return;
+            const next = entries.slice();
+            next[index] = { region_id: choice.id, influence: current?.influence ?? 1 };
+            rebuild(next);
+        }, { values: ["None", ...(missingLabel ? [missingLabel] : []), ...choices.map(choice => choice.label)], serialize: false });
+        combo.label = `context region ${index + 1}`;
+        combo.serialize = false;
+        widgets.push(combo);
+        if (current) {
+            const influence = node.addWidget("number", `context_influence_${index + 1}`, current.influence, (value: number) => {
+                const next = parseDetailerContexts(hidden.value);
+                if (next[index]) next[index].influence = Math.max(0, Math.min(2, +value));
+                hidden.value = JSON.stringify(next);
+            }, { min: 0, max: 2, step: 0.05, precision: 2, serialize: false });
+            influence.label = `context influence ${index + 1}`;
+            influence.serialize = false;
+            widgets.push(influence);
+        }
+    }
+    node.__bvDetailerContextWidgets = widgets;
+    const computedSize = node.computeSize?.();
+    if (computedSize && node.setSize) {
+        node.setSize([Math.max(node.size?.[0] ?? 0, computedSize[0]), computedSize[1]]);
+    }
+    node.setDirtyCanvas?.(true, true);
+    node.graph?.setDirtyCanvas?.(true, true);
+};
+
 const refreshRegionSelector = (node: any) => {
     const hidden = node.widgets?.find((widget: any) => widget.name === "region");
     const combo = node.widgets?.find((widget: any) => widget.name === "region_selector");
     if (!hidden || !combo) return;
-    const choices = regionChoices(sourceRegionalDocument(node)?.regions ?? []);
-    const selectedId = normalizeRegionId(hidden.value, choices);
+    const document = sourceRegionalDocument(node);
+    if (!document) {
+        combo.options ??= {};
+        combo.options.values = ["Connect a BV Regional Prompt"];
+        combo.value = combo.options.values[0];
+        combo.disabled = true;
+        node.setDirtyCanvas?.(true, true);
+        return;
+    }
+    const consumer = node.comfyClass === "BV Regional Detailer Mask" || node.type === "BV Regional Detailer Mask" ? "detailer" : undefined;
+    const choices = regionChoices(document.regions, consumer);
+    const storedId = String(hidden.value ?? "");
+    const selectedId = choices.some(choice => choice.id === storedId) ? storedId : storedId || choices[0]?.id || "";
     hidden.value = selectedId;
     node.__bvRegionChoices = choices;
     combo.options ??= {};
-    combo.options.values = choices.length ? choices.map(choice => choice.label) : ["Connect a BV Regional Prompt"];
-    combo.value = choices.find(choice => choice.id === selectedId)?.label ?? combo.options.values[0];
-    const scope = node.widgets?.find((widget: any) => widget.name === "scope")?.value;
-    combo.disabled = scope !== "region" || !choices.length;
+    const missingLabel = selectedId && !choices.some(choice => choice.id === selectedId) ? `Missing region · ${selectedId.slice(0, 8)}` : null;
+    combo.options.values = choices.length || missingLabel ? [...(missingLabel ? [missingLabel] : []), ...choices.map(choice => choice.label)] : ["Connect a BV Regional Prompt"];
+    combo.value = choices.find(choice => choice.id === selectedId)?.label ?? missingLabel ?? combo.options.values[0];
+    const scopeWidget = node.widgets?.find((widget: any) => widget.name === "scope");
+    combo.disabled = (scopeWidget && scopeWidget.value !== "region") || !choices.length;
+    refreshDetailerContextSelectors(node);
     node.setDirtyCanvas?.(true, true);
 };
 
@@ -67,10 +170,13 @@ const upgradeRegionSelector = (node: any) => {
     if (!combo) {
         combo = node.addWidget("combo", "region_selector", "Connect a BV Regional Prompt", (label: string) => {
             const choice = node.__bvRegionChoices?.find((item: any) => item.label === label);
-            if (choice) hidden.value = choice.id;
+            if (choice) { hidden.value = choice.id; refreshDetailerContextSelectors(node); }
         }, { values: ["Connect a BV Regional Prompt"], serialize: false });
         combo.label = "region";
         combo.serialize = false;
+    }
+    if (node.comfyClass === "BV Regional Detailer Mask" || node.type === "BV Regional Detailer Mask") {
+        moveWidgetBefore(node, combo, node.widgets?.find((widget: any) => widget.name === "primary_region_influence"));
     }
     const scope = node.widgets?.find((widget: any) => widget.name === "scope");
     if (scope && !scope.__bvRegionSelectorHooked) {
@@ -366,7 +472,7 @@ comfyApp.registerExtension({
             };
             return;
         }
-        if (nodeData.name === "BV Regional Deconstructor") {
+        if (["BV Regional Select", "BV Regional Deconstructor", "BV Regional Detailer Mask"].includes(nodeData.name)) {
             const originalCreated = nodeType.prototype.onNodeCreated;
             const originalConfigure = nodeType.prototype.onConfigure;
             const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
@@ -375,9 +481,23 @@ comfyApp.registerExtension({
                 upgradeRegionSelector(this);
                 return result;
             };
-            nodeType.prototype.onConfigure = function () {
-                const result = originalConfigure?.apply(this, arguments);
+            const originalSerialize = nodeType.prototype.onSerialize;
+            nodeType.prototype.onConfigure = function (data: any) {
+                if (nodeData.name === "BV Regional Detailer Mask") {
+                    removeDetailerProjectionWidgets(this);
+                    if (data?.widgets_values) {
+                        data = { ...data, widgets_values: normalizeDetailerWidgetValues(data.widgets_values) };
+                    }
+                }
+                const result = originalConfigure?.call(this, data);
                 queueMicrotask(() => upgradeRegionSelector(this));
+                return result;
+            };
+            nodeType.prototype.onSerialize = function (data: any) {
+                const result = originalSerialize?.apply(this, arguments);
+                if (nodeData.name === "BV Regional Detailer Mask") {
+                    data.widgets_values = detailerBackendWidgetValues(this.widgets);
+                }
                 return result;
             };
             nodeType.prototype.onConnectionsChange = function () {

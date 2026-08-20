@@ -10,7 +10,7 @@ import torch
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "py"))
 
-from util.regional.native_conditioning import compile_native_conditioning  # noqa: E402
+from util.regional.native_conditioning import compile_detailer_conditioning, compile_native_conditioning  # noqa: E402
 
 
 def fixture():
@@ -81,6 +81,28 @@ class FakeHookGroup:
 
 
 class RegionalNativeConditioningTests(unittest.TestCase):
+    def test_detailer_conditioning_weights_region_and_background_independently(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        region = document["regions"][1]
+        region["usage"] = "detailer"
+        positive, negative, positive_text, negative_text, positive_weighted, negative_weighted = compile_detailer_conditioning(
+            document, FakeClip(), region["id"], global_influence=1.0,
+            background_influence=0.35, primary_region_influence=0.8,
+            context_regions=[{"region_id": document["regions"][0]["id"], "influence": 0.6}],
+        )
+        self.assertEqual([item[1].get("strength", 1.0) for item in positive], [0.8, 0.6, 1.0, 0.35])
+        self.assertEqual([item[1].get("strength", 1.0) for item in negative], [0.8, 0.6, 1.0, 0.35])
+        self.assertIn("green eyes", positive_text)
+        self.assertIn("wooden tables", positive_text)
+        self.assertIn("blonde hair", positive_text)
+        self.assertIn("asymmetrical eyes", negative_text)
+        self.assertTrue(positive_weighted.startswith("(symmetrical face, green eyes, detailed irises:0.8)"))
+        self.assertIn("(wooden tables, warm interior:0.35)", positive_weighted)
+        self.assertIn("(asymmetrical eyes:0.8)", negative_weighted)
+
     def test_compiles_global_background_and_enabled_regions(self):
         clip = FakeClip()
         positive, negative = compile_native_conditioning(fixture(), clip)
@@ -91,6 +113,17 @@ class RegionalNativeConditioningTests(unittest.TestCase):
         self.assertTrue(all(tuple(item[1]["mask"].shape) == (1, 48, 64) for item in positive[1:]))
         self.assertIn("symmetrical face, green eyes, detailed irises", clip.encoded)
         self.assertFalse(any("@<" in text for text in clip.encoded))
+
+    def test_detailer_only_regions_are_excluded_from_generation(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        document["regions"][0]["usage"] = "detailer"
+        clip = FakeClip()
+        positive, _ = compile_native_conditioning(document, clip)
+        self.assertEqual(len(positive), 4)
+        self.assertNotIn(document["regions"][0]["prompts"]["positive_source"], clip.encoded)
 
     def test_zero_out_mirrors_positive_structure_and_zeroes_embeddings(self):
         document = fixture()

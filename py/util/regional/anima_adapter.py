@@ -6,7 +6,7 @@ from typing import Any, Optional
 import torch
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, selection_prompts
+from .document import parse_document, region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -90,7 +90,7 @@ def compile_anima_adapter(
 
     chain: AnimaRegionChain | None = None
     for region in clean["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         selection = _selection(clean, "region", region["id"])
         prompt = selection_prompts(selection)[0]

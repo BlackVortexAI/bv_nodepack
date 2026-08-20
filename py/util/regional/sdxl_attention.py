@@ -7,7 +7,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from .document import parse_document, selection_prompts
+from .document import parse_document, region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -53,7 +53,7 @@ def _has_negative_sources(document: dict[str, Any]) -> bool:
     if document["prompts"]["background"]["negative_source"].strip():
         return True
     return any(
-        region["enabled"] and region["prompts"]["negative_source"].strip()
+        region_used_for(region, "generation") and region["prompts"]["negative_source"].strip()
         for region in document["regions"]
     )
 
@@ -101,7 +101,7 @@ def compile_sdxl_attention(
 
     region_values: list[tuple[dict[str, Any], torch.Tensor]] = []
     for region in clean["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         mask = _prepare_mask(render_selection(_selection(clean, "region", region["id"]), width, height))
         if not bool(torch.any(mask > 0)):

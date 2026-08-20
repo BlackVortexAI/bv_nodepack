@@ -17,6 +17,7 @@
   "BV Regional Anima LLLite": "Apply an Anima LLLite regional layout model using a deterministic color control image.",
   "BV Regional Color Control Image": "Render deterministic solid region colors and a machine-readable legend for layout control.",
   "BV Regional Debug": "Inspect and summarize a BV Regional document as JSON.",
+  "BV Regional Detailer Mask": "Render a selected BV region and build an Impact-compatible BASIC_PIPE from its Global + Region prompts.",
   "BV Regional Deconstructor": "Extract global, background or selected-region prompts and structured prompt data.",
   "BV Regional Image Save": "Save an image and send the saved result to a selected Regional Editor.",
   "BV Regional Image Send": "Send a preview image to a selected Regional Editor without saving it.",

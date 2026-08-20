@@ -5,6 +5,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from .document import region_used_for
+
 
 REGISTRY = "BV_LORA_STACK_REGISTRY"
 BINDINGS = "BV_REGIONAL_LORA_BINDINGS"
@@ -264,7 +266,7 @@ def apply_attention_hook_passes(
     representative_scope: dict[tuple[tuple[str, float], ...], str] = {}
 
     for region in document["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         scope = region["id"]
         key = _model_stack_fingerprint(scope_stacks.get(scope))

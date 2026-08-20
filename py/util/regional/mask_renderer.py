@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as functional
 from PIL import Image, ImageDraw
 
-from .document import parse_document
+from .document import parse_document, region_used_for
 
 
 def _rect(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
@@ -121,7 +121,7 @@ def render_selection(selection: Any, width: int, height: int) -> torch.Tensor:
     document = parse_document(selection["document"])
     if selection["scope"] == "global":
         return torch.ones((1, height, width), dtype=torch.float32)
-    enabled = [region for region in document["regions"] if region["enabled"]]
+    enabled = [region for region in document["regions"] if region_used_for(region, "generation")]
     if selection["scope"] == "background":
         union = torch.zeros((height, width), dtype=torch.float32)
         for region in enabled:

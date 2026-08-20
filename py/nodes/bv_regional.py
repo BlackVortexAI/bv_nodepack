@@ -9,6 +9,7 @@ from ..util.regional.document import (
     SELECTION,
     default_document,
     parse_document,
+    region_used_for,
     select_scope,
     selection_prompts,
     serialize_document,
@@ -16,7 +17,7 @@ from ..util.regional.document import (
 from ..util.regional.mask_renderer import mask_bbox, render_selection
 from ..util.regional.anima_adapter import ANIMA_REGIONS, compile_anima_adapter
 from ..util.regional.color_control import compile_color_control
-from ..util.regional.native_conditioning import compile_native_conditioning
+from ..util.regional.native_conditioning import compile_detailer_conditioning, compile_native_conditioning
 from ..util.regional.lora_hooks import (
     BINDINGS,
     REGISTRY,
@@ -42,6 +43,8 @@ AST = "BV_AST"
 CATEGORY_ROOT = "🌀 BV Node Pack/regional"
 CATEGORY_CORE = f"{CATEGORY_ROOT}/core"
 CATEGORY_OUTPUT = f"{CATEGORY_ROOT}/output"
+CATEGORY_INTEGRATIONS = f"{CATEGORY_ROOT}/integrations"
+CATEGORY_INTEGRATION_IMPACT = f"{CATEGORY_INTEGRATIONS}/Impact Pack"
 CATEGORY_MODELS = f"{CATEGORY_ROOT}/models"
 CATEGORY_MODEL_GENERIC = f"{CATEGORY_MODELS}/Generic"
 CATEGORY_MODEL_SDXL = f"{CATEGORY_MODELS}/SDXL"
@@ -255,6 +258,86 @@ class BVRegionalMaskRenderNode:
     def render(self, selection, width, height):
         mask = render_selection(selection, int(width), int(height))
         return (mask,) + mask_bbox(mask)
+
+
+class BVRegionalDetailerMaskNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "regional": (REGIONAL, {}),
+                "image": ("IMAGE", {}),
+                "model": ("MODEL", {}),
+                "clip": ("CLIP", {}),
+                "vae": ("VAE", {}),
+                "region": ("STRING", {"default": "", "multiline": False}),
+                "global_influence": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                ),
+                "background_influence": (
+                    "FLOAT",
+                    {"default": 0.35, "min": 0.0, "max": 2.0, "step": 0.05},
+                ),
+                "primary_region_influence": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05},
+                ),
+                "context_regions_json": (
+                    "STRING",
+                    {"default": "[]", "multiline": False},
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK", "BASIC_PIPE", "CONDITIONING", "CONDITIONING", "STRING", "STRING", "STRING", "STRING", "INT", "INT", "INT", "INT", "STRING", "STRING")
+    RETURN_NAMES = ("image", "mask", "basic_pipe", "positive", "negative", "positive_text", "negative_text", "positive_weighted_text", "negative_weighted_text", "x", "y", "width", "height", "region_id", "region_name")
+    FUNCTION = "render"
+    CATEGORY = CATEGORY_INTEGRATION_IMPACT
+    DESCRIPTION = (
+        "Renders one named BV region, compiles Global + Region conditioning and builds "
+        "an Impact-compatible BASIC_PIPE for MaskDetailer workflows."
+    )
+
+    def render(
+        self, regional, image, model, clip, vae, region,
+        global_influence=1.0, background_influence=0.35,
+        primary_region_influence=1.0, context_regions_json="[]",
+    ):
+        shape = getattr(image, "shape", None)
+        if shape is None or len(shape) != 4 or int(shape[-1]) not in (1, 3, 4):
+            raise ValueError("BV Regional Detailer Mask requires an IMAGE shaped B,H,W,C")
+        if int(shape[0]) != 1:
+            raise ValueError(
+                "BV Regional Detailer Mask requires a single IMAGE because Impact detailers "
+                "do not accept image batches"
+            )
+        selection = select_scope(regional, "region", region)
+        selected = next(
+            item for item in selection["document"]["regions"]
+            if item["id"] == selection["region_id"]
+        )
+        if not region_used_for(selected, "detailer"):
+            raise ValueError(
+                f"Region '{selected['name']}' is not enabled for detailer output; "
+                "set its usage to detailer or both"
+            )
+        mask = render_selection(selection, int(shape[2]), int(shape[1]))
+        try:
+            context_regions = json.loads(context_regions_json or "[]")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"context_regions_json contains invalid JSON: {exc}") from exc
+        if not isinstance(context_regions, list):
+            raise ValueError("context_regions_json must contain an array")
+        positive, negative, positive_text, negative_text, positive_weighted_text, negative_weighted_text = compile_detailer_conditioning(
+            selection["document"], clip, selected["id"], global_influence,
+            background_influence, primary_region_influence, context_regions,
+        )
+        basic_pipe = (model, clip, vae, positive, negative)
+        return (
+            image, mask, basic_pipe, positive, negative, positive_text, negative_text,
+            positive_weighted_text, negative_weighted_text,
+        ) + mask_bbox(mask) + (selected["id"], selected["name"])
 
 
 class BVRegionalNativeConditioningNode:
@@ -749,6 +832,7 @@ NODE_CLASS_MAPPINGS = {
     "BV Regional Deconstructor": BVRegionalDeconstructorNode,
     "BV Regional Prompt Extract": BVRegionalPromptExtractNode,
     "BV Regional Mask Render": BVRegionalMaskRenderNode,
+    "BV Regional Detailer Mask": BVRegionalDetailerMaskNode,
     "BV Regional Native Conditioning": BVRegionalNativeConditioningNode,
     "BV Regional SDXL Attention": BVRegionalSDXLAttentionNode,
     "BV Regional Z-Image Attention": BVRegionalZImageAttentionNode,
@@ -770,6 +854,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Deconstructor": "🌀 BV Regional Deconstructor",
     "BV Regional Prompt Extract": "🌀 BV Regional Prompt Extract",
     "BV Regional Mask Render": "🌀 BV Regional Mask Render",
+    "BV Regional Detailer Mask": "🌀 BV Regional Detailer Mask",
     "BV Regional Native Conditioning": "🌀 BV Regional Native Conditioning",
     "BV Regional SDXL Attention": "🌀 BV Regional SDXL Attention",
     "BV Regional Z-Image Attention": "🌀 BV Regional Z-Image Attention",

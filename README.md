@@ -113,7 +113,7 @@ producer to **BV Named LoRA Stack**,
 chain its registry into the conditioning node, and connect the prompt node's
 `lora_bindings` sidecar output. The editor can then assign one unchanged live stack
 globally and one additional stack per region. The registry and bindings inputs are
-optional; workflows that do not connect them retain the previous `BV_REGIONAL` v1
+optional; workflows that do not connect them retain the previous regional LoRA
 behavior. Empty stacks and entries whose model and CLIP strengths are both zero are
 valid no-ops.
 
@@ -259,6 +259,58 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Deconstructor | Exposes AST, text, source and reusable selection data |
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
+| BV Regional Detailer Mask | Renders one named region, compiles its Global + Region prompts and outputs `IMAGE`, `MASK` and an Impact-compatible `BASIC_PIPE` |
+
+### Impact Pack detailer integration
+
+**BV Regional Detailer Mask** is a package-neutral bridge to
+[ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack). It does not
+import Impact modules or reproduce the internal `SEGS` structure. Connect a
+`BV_REGIONAL` document, the single image that will be detailed, `MODEL`, `CLIP`,
+`VAE` and a named region. The node renders the region at the image dimensions,
+encodes unmasked `Global + Region` positive/negative conditioning and returns
+`BASIC_PIPE = (model, clip, vae, positive, negative)`. Connect `image`, `mask` and
+`basic_pipe` directly to `MaskDetailer (pipe)`; Impact's separate `ToBasicPipe` node
+is not required. Positive/negative conditioning and resolved prompt text remain
+available as additional outputs for advanced compositions. Background prompts are
+intentionally excluded from the cropped detail pass. Impact detailers do not accept
+image batches, so this bridge rejects batches larger than one explicitly.
+
+The Regional Editor stores this routing directly in the `BV_REGIONAL` v2 document
+through each region's **Usage** setting: `Generation`, `Detailer only`, or
+`Generation + Detailer`. Detailer-only regions remain visible and editable but are
+excluded from every generation compiler. Disabled regions are excluded from both.
+Legacy v1 documents and v1 region imports are migrated automatically with
+`usage: "generation"`, preserving their previous render behavior; new documents and
+exports use v2.
+
+The detailer bridge encodes every scope separately. `global_influence` defaults to
+`1.0`, `background_influence` to `0.35`, and `primary_region_influence` to `1.0`.
+Dynamic context-region rows add any other enabled region with an independent
+influence value; choosing a region in the final `None` row creates the next row.
+The primary region alone defines the mask, while context regions contribute prompts
+only. Duplicate and primary-region context assignments are rejected by the UI.
+Every influence accepts `0.0` (disabled) through `2.0`.
+Alongside the plain resolved prompt outputs, `positive_weighted_text` and
+`negative_weighted_text` expose the same active scopes in standard ComfyUI syntax,
+for example `(blue eyes:0.35)`. These strings are intended for inspection and reuse;
+the Basic Pipe continues to use the separately encoded conditioning entries and
+their native strength metadata.
+
+Supported compositions use Impact's public nodes:
+
+- Direct masked detailing: connect `image`, `mask` and `basic_pipe` to `MaskDetailer (pipe)`.
+- Editable segment workflows: connect `mask` to `MASK to SEGS`, then use
+  `Detailer (SEGS)` or `SEGSDetailer` plus `SEGSPaste`.
+- Detector gating: connect detector `SEGS` and the BV `mask` to
+  `Pixelwise(SEGS & MASK)`, then feed the filtered `SEGS` to `Detailer (SEGS)`.
+
+The detector-gating path is preferred for faces: the detector retains precise face
+geometry while the BV region limits which person's detections may be processed.
+`FaceDetailer` has no external `MASK` or `SEGS` input and therefore cannot be fed
+directly by this bridge. For multiple regions or different detailer prompts, create
+one bridge per region and combine the resulting Impact `SEGS` with Impact's own
+label/concat nodes.
 
 ### Native conditioning composition
 
@@ -916,12 +968,13 @@ Regional document fixtures:
 
 Technical references:
 
-- [Regional schema v1](docs/specs/bv-regional-v1.md)
+- [Regional schema v2](docs/specs/bv-regional-v2.md) and [legacy v1 contract](docs/specs/bv-regional-v1.md)
 - [Global completion contract](docs/specs/bv-global-completion.md)
 - [Regional Editor implementation notes](docs/regional-editor-mvp.md)
 - [Smart Pipe contract ADR](docs/adr/0001-separate-smart-pipe-contract.md)
 - [Renderer-independent Subgraph UI ADR](docs/adr/0002-renderer-independent-subgraph-ui.md)
 - [Wireless Smart Pipe ADR](docs/adr/0003-wireless-smart-pipe-spine.md)
+- [Version regional usage in-document ADR](docs/adr/0004-version-regional-usage-in-document.md)
 - [Krea 2 regional-attention research](docs/research/krea2-regional-attention-backend.md)
 - [Native regional LoRA validation](docs/research/native-regional-lora-validation-2026-08.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
@@ -940,6 +993,22 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-20 — v0.14.0
+
+- Add `BV Regional Detailer Mask`, a package-neutral bridge that renders a selected
+  BV region and emits an Impact-compatible `BASIC_PIPE` with separately encoded
+  positive and negative conditioning.
+- Add `BV_REGIONAL` v2 region usage modes for generation, detailer-only or both;
+  migrate v1 documents deterministically to generation usage.
+- Let the primary region define the detail mask while optional context regions add
+  independently weighted prompt conditioning without expanding that mask.
+- Expose Global, Background, primary-region and context-region influence controls,
+  plus plain and ComfyUI-weighted resolved prompt text for inspection.
+- Preserve dynamic primary/context selections across workflow save and reload by
+  serializing only the canonical backend widget values in stable order.
+- Document direct `MaskDetailer (pipe)`, editable `SEGS` and detector-gated Impact
+  workflows without importing or vendoring Impact Pack internals.
 
 ### 2026-08-20 — v0.13.0
 

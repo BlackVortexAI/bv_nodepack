@@ -42,6 +42,7 @@ export default function LayerPanel(props: Props) {
                 <div className="region-row" onClick={() => props.onSelectRegion(region.id)}>
                     <i style={{ background: region.authoring.color }}/>
                     <EditableName value={region.name} onCommit={name => props.onRenameRegion(region.id, name)}/>
+                    <span className="region-usage" title="Region usage">{region.usage === "generation" ? "GEN" : region.usage === "detailer" ? "DET" : "BOTH"}</span>
                     <span className="priority" title="Priority">P{region.priority}</span>
                     <button title="Move region up" disabled={regionIndex === 0} onClick={event => { event.stopPropagation(); props.onMoveRegion(region.id, -1); }}>↑</button>
                     <button title="Move region down" disabled={regionIndex === props.regions.length - 1} onClick={event => { event.stopPropagation(); props.onMoveRegion(region.id, 1); }}>↓</button>

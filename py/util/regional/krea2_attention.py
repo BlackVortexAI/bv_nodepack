@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, selection_prompts
+from .document import parse_document, region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -107,7 +107,7 @@ def compile_krea2_attention(
     occupied = torch.zeros((1, height, width), dtype=torch.float32)
     regions: list[tuple[dict[str, Any], torch.Tensor]] = []
     for region in clean["regions"]:
-        if not region["enabled"]:
+        if not region_used_for(region, "generation"):
             continue
         mask = _prepare_mask(render_selection(_selection(clean, "region", region["id"]), width, height))
         if bool(torch.any(mask > 0)):

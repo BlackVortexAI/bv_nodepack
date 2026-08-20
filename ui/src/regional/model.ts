@@ -8,13 +8,14 @@ export type Geometry =
     | { id: string; layer_id?: string; mask_group_id?: string; type: "raster_mask"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number; pixel_width: number; pixel_height: number; data_url: string };
 export type GeometryAuthoring = { name: string; visible: boolean; locked: boolean };
 export type GeometryLayer = { id: string; geometries: Geometry[]; authoring: GeometryAuthoring; enabled: boolean };
+export type RegionUsage = "generation" | "detailer" | "both";
 export type Region = {
-    id: string; name: string; parent_region_id: string | null; enabled: boolean; strength: number; priority: number;
+    id: string; name: string; parent_region_id: string | null; enabled: boolean; usage: RegionUsage; strength: number; priority: number;
     prompts: PromptPair; mask: { feather: number }; geometry: Geometry[];
     authoring: { visible: boolean; locked: boolean; color: string };
 };
 export type RegionalDocument = {
-    schema: "bv.regional"; version: 1; document_id: string; title: string;
+    schema: "bv.regional"; version: 2; document_id: string; title: string;
     canvas: { width: number; height: number };
     prompts: { global: PromptPair; background: PromptPair };
     negative_mode: "auto" | "prompt" | "zero_out";
@@ -26,13 +27,13 @@ export const COLORS = ["#E45756", "#4C78A8", "#54A24B", "#F2CF5B", "#B279A2", "#
 export const automaticRegionColor = (index: number) => COLORS[index % COLORS.length];
 export const uuid = () => crypto.randomUUID();
 export const emptyDocument = (): RegionalDocument => ({
-    schema: "bv.regional", version: 1, document_id: uuid(), title: "Regional Prompt",
+    schema: "bv.regional", version: 2, document_id: uuid(), title: "Regional Prompt",
     canvas: { width: 1024, height: 1024 },
     prompts: { global: { positive_source: "", negative_source: "" }, background: { positive_source: "", negative_source: "" } },
     negative_mode: "auto", overlap: { mode: "joint" }, regions: [],
 });
 export const newRegion = (index: number): Region => ({
-    id: uuid(), name: `Region ${index + 1}`, parent_region_id: null, enabled: true, strength: 1, priority: index,
+    id: uuid(), name: `Region ${index + 1}`, parent_region_id: null, enabled: true, usage: "generation", strength: 1, priority: index,
     prompts: { positive_source: "", negative_source: "" }, mask: { feather: 0.01 }, geometry: [],
     authoring: { visible: true, locked: false, color: automaticRegionColor(index) },
 });
@@ -59,8 +60,13 @@ export function geometryMaskGroups(geometries: Geometry[]): GeometryLayer[] {
 }
 export function parseDocument(value: unknown): RegionalDocument {
     const document = typeof value === "string" ? JSON.parse(value) : clone(value);
-    if (document?.schema !== "bv.regional" || document?.version !== 1 || !Array.isArray(document?.regions)) throw new Error("Not a valid BV_REGIONAL v1 document");
+    if (document?.schema !== "bv.regional" || ![1, 2].includes(document?.version) || !Array.isArray(document?.regions)) throw new Error("Not a valid BV_REGIONAL document");
+    if (document.version === 1) {
+        for (const region of document.regions as Region[]) region.usage = "generation";
+        document.version = 2;
+    }
     for (const region of document.regions as Region[]) {
+        if (!["generation", "detailer", "both"].includes(region.usage)) throw new Error(`Invalid region usage: ${region.usage}`);
         const legacyLayerId = region.geometry.find(geometry => !geometry.layer_id)?.id;
         region.geometry.forEach((geometry, index) => {
             geometry.enabled ??= true;

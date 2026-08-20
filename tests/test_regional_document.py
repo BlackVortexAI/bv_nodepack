@@ -38,6 +38,23 @@ class RegionalDocumentTests(unittest.TestCase):
         document = parse_document(fixture())
         self.assertEqual(parse_document(serialize_document(document)), document)
 
+    def test_v1_migrates_to_v2_generation_usage(self):
+        document = parse_document(fixture())
+        self.assertEqual(document["version"], 2)
+        self.assertTrue(all(region["usage"] == "generation" for region in document["regions"]))
+
+    def test_v2_accepts_detailer_and_both_usage(self):
+        document = parse_document(fixture())
+        document["regions"][0]["usage"] = "detailer"
+        document["regions"][1]["usage"] = "both"
+        self.assertEqual(parse_document(document)["regions"][0]["usage"], "detailer")
+
+    def test_invalid_region_usage_is_rejected(self):
+        document = parse_document(fixture())
+        document["regions"][0]["usage"] = "upscaler"
+        with self.assertRaisesRegex(RegionalValidationError, "usage"):
+            parse_document(document)
+
     def test_reserved_overlap_is_storable_but_not_executable(self):
         document = fixture()
         document["overlap"]["mode"] = "priority"
