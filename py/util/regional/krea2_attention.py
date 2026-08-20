@@ -23,6 +23,7 @@ class Krea2RegionalSlot:
     mask: torch.Tensor | None
     strength: float
     token_count: int
+    scope: str | None = None
 
 
 def _selection(document: dict[str, Any], scope: str, region_id: str | None = None) -> dict[str, Any]:
@@ -153,7 +154,7 @@ def compile_krea2_attention(
         negative_values.append(_pad_tokens(neg, count))
         positive_masks.append(F.pad(pos_meta["attention_mask"], (0, count - pos.shape[1])))
         negative_masks.append(F.pad(neg_meta["attention_mask"], (0, count - neg.shape[1])))
-        slots.append(Krea2RegionalSlot(name, mask, strength, count))
+        slots.append(Krea2RegionalSlot(name, mask, strength, count, scope))
         positive_metadata = positive_metadata or pos_meta
         negative_metadata = negative_metadata or neg_meta
 

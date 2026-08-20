@@ -164,6 +164,62 @@ class RegionalNodeTests(unittest.TestCase):
             set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
             {"lora_registry", "lora_bindings"},
         )
+        mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
+        self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
+        self.assertEqual(mode[1]["default"], "token_gated_singlepass")
+
+    def test_krea2_call_without_mode_uses_singlepass_default(self):
+        node = self.module.BVRegionalKrea2AttentionNode()
+        with (
+            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
+            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={}),
+            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
+            unittest.mock.patch.object(
+                self.module, "compile_krea2_attention",
+                return_value=(["positive"], ["negative"], ["slot"], 1.0),
+            ),
+            unittest.mock.patch.object(self.module, "apply_attention_hook_passes") as legacy,
+            unittest.mock.patch.object(
+                self.module, "apply_krea2_attention_patch", return_value="attention-model"
+            ),
+            unittest.mock.patch.object(
+                self.module, "apply_krea2_token_lora_patch", return_value="singlepass-model"
+            ) as singlepass,
+        ):
+            result = node.apply("model", "clip", fixture(), 1.0, 0.0, 0.5)
+
+        legacy.assert_not_called()
+        singlepass.assert_called_once()
+        self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+
+    def test_krea2_singlepass_skips_model_hook_passes(self):
+        node = self.module.BVRegionalKrea2AttentionNode()
+        with (
+            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
+            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
+            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
+            unittest.mock.patch.object(
+                self.module, "compile_krea2_attention",
+                return_value=(["positive"], ["negative"], ["slot"], 1.0),
+            ),
+            unittest.mock.patch.object(self.module, "apply_attention_hook_passes") as legacy,
+            unittest.mock.patch.object(
+                self.module, "apply_krea2_attention_patch", return_value="attention-model"
+            ),
+            unittest.mock.patch.object(
+                self.module, "apply_krea2_token_lora_patch", return_value="singlepass-model"
+            ) as singlepass,
+        ):
+            result = node.apply(
+                "model", "clip", fixture(), 1.0, 0.0, 0.5,
+                regional_lora_mode="token_gated_singlepass",
+            )
+
+        legacy.assert_not_called()
+        singlepass.assert_called_once_with(
+            "attention-model", ["slot"], 1.0, unittest.mock.ANY, {"region-a": []}
+        )
+        self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
 
     def test_anima_adapter_is_registered_with_external_region_type(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Anima Adapter"], self.module.BVRegionalAnimaAdapterNode)

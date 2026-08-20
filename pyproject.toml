@@ -1,6 +1,6 @@
 [project]
 name = "bv_nodepack"
-version = "0.11.0"
+version = "0.12.0"
 description = "Visual regional prompting with regional LoRA hooks, native composition modes, shape authoring, mask previews and model-specific attention backends, plus Smart Pipes and ComfyUI workflow tools."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}

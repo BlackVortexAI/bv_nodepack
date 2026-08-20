@@ -35,6 +35,7 @@ from ..util.regional.flux2_klein_attention import (
     apply_flux2_klein_attention_patch,
 )
 from ..util.regional.krea2_attention import compile_krea2_attention, apply_krea2_attention_patch
+from ..util.regional.krea2_token_lora import apply_krea2_token_lora_patch
 
 
 AST = "BV_AST"
@@ -417,6 +418,11 @@ class BVRegionalKrea2AttentionNode:
                 "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
+                "regional_lora_mode": (["multipass_legacy", "token_gated_singlepass"], {
+                    "default": "token_gated_singlepass",
+                    "tooltip": "Legacy evaluates one masked model pass per distinct LoRA stack. "
+                               "Token-gated single-pass is experimental and changes results.",
+                }),
             },
             "optional": {
                 "lora_registry": (REGISTRY, {}),
@@ -433,7 +439,8 @@ class BVRegionalKrea2AttentionNode:
         "Experimental joint-attention regional routing for Krea 2 Raw and Turbo. "
         "Routes the 28 main DiT blocks with a standard KSampler; Krea's four upstream "
         "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch. "
-        "Regional LoRA hooks add one model pass per distinct effective model stack."
+        "Regional LoRAs default to token-gated single-pass; the previous multi-pass "
+        "execution remains available as multipass_legacy."
     )
 
     def apply(
@@ -444,9 +451,12 @@ class BVRegionalKrea2AttentionNode:
         attention_strength,
         start_percent,
         end_percent,
+        regional_lora_mode="token_gated_singlepass",
         lora_registry=None,
         lora_bindings=None,
     ):
+        if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
+            raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         document = parse_document(regional)
         scope_stacks = resolve_stack_paths(
             resolve_scope_stacks(lora_registry, lora_bindings, document)
@@ -455,12 +465,17 @@ class BVRegionalKrea2AttentionNode:
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
             document, clip, hook_groups
         )
-        positive, negative = apply_attention_hook_passes(
-            positive, negative, document, scope_stacks, hook_groups
-        )
+        if regional_lora_mode == "multipass_legacy":
+            positive, negative = apply_attention_hook_passes(
+                positive, negative, document, scope_stacks, hook_groups
+            )
         patched_model = apply_krea2_attention_patch(
             model, slots, aspect_ratio, attention_strength, start_percent, end_percent
         )
+        if regional_lora_mode == "token_gated_singlepass":
+            patched_model = apply_krea2_token_lora_patch(
+                patched_model, slots, aspect_ratio, document, scope_stacks
+            )
         return patched_model, positive, negative
 
 

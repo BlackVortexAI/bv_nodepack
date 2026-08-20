@@ -218,7 +218,7 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional SDXL Attention | Routes Global, Background and regional text contexts inside SDXL cross-attention; verified with WAI Illustrious SDXL and Pony Diffusion V6 XL |
 | BV Regional Z-Image Attention | Routes Global, Background and regional text contexts through Z-Image Turbo joint attention and emits KSampler-ready zero negative conditioning |
 | BV Regional FLUX.2 Klein 9B Attention | Routes Global, Background and regional text contexts through the exact FLUX.2 Klein 9B joint-attention architecture and emits sampler-ready zero negative conditioning |
-| BV Regional Krea 2 Attention (Experimental) | Routes Global, Background and regional text contexts through Krea 2's 28 main single-stream attention blocks and accepts optional regional LoRA bindings; four upstream text-fusion blocks remain global |
+| BV Regional Krea 2 Attention (Experimental) | Routes Global, Background and regional text contexts through Krea 2's 28 main single-stream attention blocks and offers default token-gated single-pass or legacy multi-pass regional LoRAs; four upstream text-fusion blocks remain global |
 | BV Regional Anima Conditioning | Applies the built-in Anima attention patch and emits KSampler-ready outputs |
 | BV Regional Anima Adapter | Optional compatibility path for the external Anima regional node pack |
 | BV Regional Color Control Image | Renders enabled regions as stable solid colors on white; P0 wins overlaps |
@@ -467,7 +467,8 @@ routes Global, Background and regional Qwen3-VL text contexts through all 28 mai
 single-stream joint-attention blocks. It works with a normal KSampler.
 
 > [!WARNING]
-> **Temporary Krea 2 FP8 limitation:** Regional LoRA hooks can currently fail on
+> **Temporary Krea 2 FP8 limitation:** The `multipass_legacy` regional LoRA hooks
+> can currently fail on
 > quantized Krea 2 models with
 > `AttributeError: 'Linear' object has no attribute 'weight_scale'` (or a similar
 > missing quantization attribute). This is an upstream ComfyUI core issue tracked
@@ -489,9 +490,26 @@ independent.
 The node also accepts the optional `lora_registry` and `lora_bindings` outputs from
 the named-stack workflow. Assigned stacks are applied to the matching Global,
 Background or region scope while the existing Krea attention router remains active.
-Every distinct effective model-side LoRA stack requires another full denoiser pass;
-Krea 2 is a large model, so dual regional stacks can substantially increase sampling
-time, VRAM pressure and system-memory use.
+`regional_lora_mode` controls only model-side LoRA execution; it does not change the
+stored regional document, prompt routing, masks or `joint` overlap semantics:
+
+- `token_gated_singlepass` is the default. Compatible Krea LoRA
+  and LoKr deltas are evaluated in activation space and multiplied by their regional
+  text/image-token masks inside one model pass. Results are intentionally not expected
+  to match legacy seeds pixel-for-pixel.
+- `multipass_legacy` preserves the previous execution method. Every distinct effective
+  model-side LoRA stack requires another full denoiser pass.
+
+Workflows saved before `regional_lora_mode` existed do not contain an explicit legacy
+marker. Loading them after this change therefore selects the new single-pass default
+and can change their image result. Select `multipass_legacy` explicitly when exact
+reproduction of an older Krea regional-LoRA workflow matters.
+
+The single-pass path keeps regional CLIP-hook encoding, supports reference-image
+tokens without exposing regional LoRAs to them, and fails rather than applying a
+non-spatial model layer globally. Switch that workflow back to `multipass_legacy` if
+a LoRA contains no compatible Krea token layers or requires an unmaskable model layer.
+The mode and patch counts are logged when the model is prepared.
 
 The verified tests showed stable character and outfit separation, region reassignment,
 and a wide empty center when prompts and masks supported that composition. This is
@@ -893,6 +911,24 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-20 — v0.12.0
+
+- Add token-gated single-pass regional LoRA and LoKr execution to
+  `BV Regional Krea 2 Attention (Experimental)`: compatible adapter deltas are
+  multiplied by their regional text/image-token masks inside one model pass.
+- Make `token_gated_singlepass` the new Krea regional-LoRA default while retaining
+  `multipass_legacy` as an explicit reproduction and compatibility fallback.
+- Preserve regional CLIP-hook encoding, inherited global stack semantics, intentional
+  duplicate adapters, promptless regional LoRA masks and Krea reference-image tokens.
+- Fail explicitly when a LoRA requires a model layer without a spatial token axis
+  instead of silently applying that layer globally; log adapter and patched-layer counts.
+- Validate the single-pass path with the existing dual-style Krea workflow on Krea 2
+  Turbo FP8 at 768 x 768, eight steps and CFG 1; the observed run completed in about
+  20.6 seconds and produced a coherent overlap without a hard regional seam.
+- Document that workflows saved before `regional_lora_mode` existed select the new
+  default when loaded and may therefore render differently; select `multipass_legacy`
+  when exact reproduction of an older Krea regional-LoRA result matters.
 
 ### 2026-08-19 — v0.11.0
 
