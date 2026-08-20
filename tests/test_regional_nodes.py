@@ -44,6 +44,34 @@ def fixture():
 
 
 class RegionalNodeTests(unittest.TestCase):
+    def test_nodes_are_grouped_by_role_and_model_in_the_menu(self):
+        expected_categories = {
+            "BV Regional Prompt": "🌀 BV Node Pack/regional/core",
+            "BV Named LoRA Stack": "🌀 BV Node Pack/regional/core",
+            "BV Regional Debug": "🌀 BV Node Pack/regional/core",
+            "BV Regional Select": "🌀 BV Node Pack/regional/core",
+            "BV Regional Deconstructor": "🌀 BV Node Pack/regional/core",
+            "BV Regional Prompt Extract": "🌀 BV Node Pack/regional/core",
+            "BV Regional Mask Render": "🌀 BV Node Pack/regional/core",
+            "BV Regional Native Conditioning": "🌀 BV Node Pack/regional/models/Generic",
+            "BV Regional SDXL Attention": "🌀 BV Node Pack/regional/models/SDXL",
+            "BV Regional Z-Image Attention": "🌀 BV Node Pack/regional/models/Z-Image",
+            "BV Regional FLUX.2 Klein 9B Attention": "🌀 BV Node Pack/regional/models/FLUX.2 Klein 9B",
+            "BV Regional Krea 2 Attention": "🌀 BV Node Pack/regional/models/Krea 2",
+            "BV Regional Anima Adapter": "🌀 BV Node Pack/regional/models/Anima",
+            "BV Regional Anima Conditioning": "🌀 BV Node Pack/regional/models/Anima",
+            "BV Regional Color Control Image": "🌀 BV Node Pack/regional/models/Anima",
+            "BV Regional Anima LLLite": "🌀 BV Node Pack/regional/models/Anima",
+            "BV Regional Image Send": "🌀 BV Node Pack/regional/output",
+            "BV Regional Image Save": "🌀 BV Node Pack/regional/output",
+        }
+
+        actual_categories = {
+            node_name: node_class.CATEGORY
+            for node_name, node_class in self.module.NODE_CLASS_MAPPINGS.items()
+        }
+        self.assertEqual(actual_categories, expected_categories)
+
     @classmethod
     def setUpClass(cls):
         cls.module = load_node_module()

@@ -39,7 +39,16 @@ from ..util.regional.krea2_token_lora import apply_krea2_token_lora_patch
 
 
 AST = "BV_AST"
-CATEGORY = "🌀 BV Node Pack/regional"
+CATEGORY_ROOT = "🌀 BV Node Pack/regional"
+CATEGORY_CORE = f"{CATEGORY_ROOT}/core"
+CATEGORY_OUTPUT = f"{CATEGORY_ROOT}/output"
+CATEGORY_MODELS = f"{CATEGORY_ROOT}/models"
+CATEGORY_MODEL_GENERIC = f"{CATEGORY_MODELS}/Generic"
+CATEGORY_MODEL_SDXL = f"{CATEGORY_MODELS}/SDXL"
+CATEGORY_MODEL_ZIMAGE = f"{CATEGORY_MODELS}/Z-Image"
+CATEGORY_MODEL_FLUX2_KLEIN = f"{CATEGORY_MODELS}/FLUX.2 Klein 9B"
+CATEGORY_MODEL_KREA2 = f"{CATEGORY_MODELS}/Krea 2"
+CATEGORY_MODEL_ANIMA = f"{CATEGORY_MODELS}/Anima"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 
@@ -71,7 +80,7 @@ class BVRegionalPromptNode:
     RETURN_TYPES = (REGIONAL, BINDINGS)
     RETURN_NAMES = ("regional", "lora_bindings")
     FUNCTION = "build"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def build(self, regional_json, lora_bindings_json=None):
         document = parse_document(regional_json)
@@ -93,7 +102,7 @@ class BVNamedLoraStackNode:
     RETURN_TYPES = (REGISTRY,)
     RETURN_NAMES = ("registry",)
     FUNCTION = "register"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
     DESCRIPTION = "Names an external LORA_STACK and adds it to a chainable BV regional registry."
 
     def register(self, lora_stack, name, stack_id, registry=None):
@@ -112,7 +121,7 @@ class BVRegionalDebugNode:
     RETURN_NAMES = ("regional_json", "summary", "document_id")
     OUTPUT_NODE = True
     FUNCTION = "run"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def run(self, regional, pretty=True):
         document = parse_document(regional)
@@ -139,7 +148,7 @@ class BVRegionalSelectNode:
     RETURN_TYPES = (SELECTION, "STRING", "STRING")
     RETURN_NAMES = ("selection", "selected_id", "selected_name")
     FUNCTION = "select"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def select(self, regional, scope, region):
         selection = select_scope(regional, scope, region)
@@ -173,7 +182,7 @@ class BVRegionalDeconstructorNode:
         "selected_name",
     )
     FUNCTION = "deconstruct"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def deconstruct(self, regional, scope, region):
         selection = select_scope(regional, scope, region)
@@ -213,7 +222,7 @@ class BVRegionalPromptExtractNode:
         "negative_source",
     )
     FUNCTION = "extract"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def extract(self, selection):
         positive, negative = selection_prompts(selection)
@@ -241,7 +250,7 @@ class BVRegionalMaskRenderNode:
     RETURN_TYPES = ("MASK", "INT", "INT", "INT", "INT")
     RETURN_NAMES = ("mask", "x", "y", "width", "height")
     FUNCTION = "render"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_CORE
 
     def render(self, selection, width, height):
         mask = render_selection(selection, int(width), int(height))
@@ -286,7 +295,7 @@ class BVRegionalNativeConditioningNode:
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("positive", "negative")
     FUNCTION = "compile"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_GENERIC
     DESCRIPTION = (
         "Compiles BV Regional into blend, exclusive, hybrid or mask-bounds native ComfyUI conditioning for a standard KSampler. "
         "mask_bounds requires a 2D image latent and is rejected for Anima with a compatibility error."
@@ -330,7 +339,7 @@ class BVRegionalSDXLAttentionNode:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_SDXL
     DESCRIPTION = (
         "SDXL cross-attention routing backend for Illustrious, Pony XL "
         "and other SDXL-family checkpoints. Uses a standard KSampler."
@@ -366,7 +375,7 @@ class BVRegionalZImageAttentionNode:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_ZIMAGE
     DESCRIPTION = "Joint-attention regional routing backend for Z-Image Turbo. Uses a standard KSampler."
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
@@ -394,7 +403,7 @@ class BVRegionalFlux2KleinAttentionNode:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_FLUX2_KLEIN
     DESCRIPTION = (
         "Joint-attention regional routing for the exact FLUX.2 Klein 9B architecture. "
         "The distilled profile uses zero negative conditioning and a standard KSampler."
@@ -439,7 +448,7 @@ class BVRegionalKrea2AttentionNode:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_KREA2
     EXPERIMENTAL = True
     DESCRIPTION = (
         "Experimental joint-attention regional routing for Krea 2 Raw and Turbo. "
@@ -498,7 +507,7 @@ class BVRegionalAnimaAdapterNode:
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING", ANIMA_REGIONS, "CONDITIONING")
     RETURN_NAMES = ("positive", "negative", "regions", "background")
     FUNCTION = "compile"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_ANIMA
     DESCRIPTION = "Compiles BV Regional for Comfyui-Anima-Regional-Conditioning without a per-region node chain."
 
     def compile(self, regional, clip):
@@ -536,7 +545,7 @@ class BVRegionalAnimaConditioningNode:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
     RETURN_NAMES = ("patched_model", "positive", "negative")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_ANIMA
     DESCRIPTION = (
         "Compiles BV Regional and applies the built-in Anima attention patch for a standard KSampler. "
         "Legacy regional LoRA hook passes preserve published results; token-gated single-pass is experimental."
@@ -607,7 +616,7 @@ class BVRegionalColorControlImageNode:
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("control_image", "legend_json")
     FUNCTION = "compile"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_ANIMA
     DESCRIPTION = "Compiles BV Regional into a solid RGB region-control image and a deterministic color legend."
 
     def compile(self, regional):
@@ -638,7 +647,7 @@ class BVRegionalAnimaLLLiteNode:
     RETURN_TYPES = ("MODEL", "IMAGE", "STRING")
     RETURN_NAMES = ("patched_model", "control_image", "legend_json")
     FUNCTION = "apply"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MODEL_ANIMA
     DESCRIPTION = (
         "Loads a local Anima LLLite MODEL_PATCH, compiles BV Regional into its color control image, "
         "and applies it through ComfyUI's native model-patch runtime."
@@ -698,7 +707,7 @@ class BVRegionalImageSendNode(_BVRegionalImageTargetMixin, PreviewImage):
     RETURN_NAMES = ("images",)
     FUNCTION = "send"
     OUTPUT_NODE = True
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_OUTPUT
     DESCRIPTION = "Previews an image, sends it to a selected BV Regional Editor, and passes the image through."
 
     def send(self, images, document_id, prompt=None, extra_pnginfo=None):
@@ -723,7 +732,7 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
     RETURN_NAMES = ("images",)
     FUNCTION = "save"
     OUTPUT_NODE = True
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_OUTPUT
     DESCRIPTION = "Saves an image, sends the saved result to a selected BV Regional Editor, and passes the image through."
 
     def save(self, images, filename_prefix, document_id, prompt=None, extra_pnginfo=None):
