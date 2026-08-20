@@ -14,6 +14,7 @@ import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdap
 import { watchActiveWorkflow } from "./regional/workflowLifecycle";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
+import { upgradeRemoteLLMProvider } from "./remoteLLM";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -26,6 +27,46 @@ const OPEN_REGIONAL_EDITOR_EVENT = "bv-open-regional-editor";
 const OPEN_REGIONAL_QUICK_EDIT_EVENT = "bv-open-regional-quick-edit";
 const REGIONAL_DOCUMENT_CHANGED_EVENT = "bv-regional-document-changed";
 const STYLE_ID = "bv-nodepack-styles";
+const DEBUG_BRIDGE_SETTING_ID = "BV.DebugBridge.Enabled";
+let debugBridgeEnabled = false;
+let debugBridgePublishTimer: number | null = null;
+
+const debugWorkflowName = () => {
+    const workflow = (comfyApp as any).extensionManager?.workflow?.activeWorkflow
+        ?? (comfyApp as any).workflowManager?.activeWorkflow;
+    return String(workflow?.filename ?? workflow?.path ?? "Current workflow");
+};
+
+const setDebugBridgeSession = async (enabled: boolean) => {
+    debugBridgeEnabled = Boolean(enabled);
+    const response = await fetch(comfyApi.apiURL("/bv_nodepack/debug/session"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: debugBridgeEnabled }),
+    });
+    if (!response.ok) throw new Error(`BV Debug Bridge session failed: ${response.status} ${await response.text()}`);
+};
+
+const publishDebugSnapshot = async () => {
+    if (!debugBridgeEnabled) return false;
+    const prompt = await (comfyApp as any).graphToPrompt();
+    const response = await fetch(comfyApi.apiURL("/bv_nodepack/debug/snapshot"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.output, workflow_name: debugWorkflowName() }),
+    });
+    if (!response.ok) throw new Error(`BV Debug Bridge snapshot failed: ${response.status} ${await response.text()}`);
+    return true;
+};
+
+const scheduleDebugSnapshot = () => {
+    if (!debugBridgeEnabled) return;
+    if (debugBridgePublishTimer != null) window.clearTimeout(debugBridgePublishTimer);
+    debugBridgePublishTimer = window.setTimeout(() => {
+        debugBridgePublishTimer = null;
+        publishDebugSnapshot().catch(error => console.error(error));
+    }, 600);
+};
 
 const hideRegionalWidget = (widget: any) => {
     widget.type = "converted-widget";
@@ -392,12 +433,29 @@ comfyApp.registerExtension({
     setup() {
         ensureMountedOnce();
         installGlobalTextareaCompletion();
+        debugBridgeEnabled = Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(DEBUG_BRIDGE_SETTING_ID, false));
+        setDebugBridgeSession(debugBridgeEnabled)
+            .then(() => { if (debugBridgeEnabled) scheduleDebugSnapshot(); })
+            .catch(error => console.error(error));
+        comfyApi.addEventListener("graphChanged", scheduleDebugSnapshot);
     },
 });
 
 comfyApp.registerExtension({
     name: "bv_nodepack.regional_editor",
     settings: [{
+        id: DEBUG_BRIDGE_SETTING_ID as any,
+        name: "Enable BV Debug Bridge",
+        type: "boolean",
+        defaultValue: false,
+        category: ["BV Node Pack", "Developer", "Enable Debug Bridge"],
+        tooltip: "Expose the current API-format workflow as an in-memory snapshot to loopback clients only.",
+        onChange: (value: boolean) => {
+            setDebugBridgeSession(Boolean(value))
+                .then(() => { if (value) scheduleDebugSnapshot(); })
+                .catch(error => console.error(error));
+        },
+    }, {
         id: COMPLETION_SETTING_ID as any,
         name: "Enable BV Prompt Autocomplete",
         type: "boolean",
@@ -428,6 +486,11 @@ comfyApp.registerExtension({
         label: "Open BV Regional Editor",
         icon: "icon-[lucide--layers]",
         function: () => { window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT)); },
+    }, {
+        id: "bv.debugBridge.publishSnapshot",
+        label: "Refresh BV Debug Bridge Snapshot",
+        icon: "icon-[lucide--radio-tower]",
+        function: () => publishDebugSnapshot().catch(error => console.error(error)),
     }],
     actionBarButtons: [{
         icon: "icon-[lucide--scan-search]",
@@ -441,6 +504,26 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (nodeData.name === "BV Remote LLM Provider") {
+            const originalCreated = nodeType.prototype.onNodeCreated;
+            const originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onNodeCreated = function () {
+                const result = originalCreated?.apply(this, arguments);
+                queueMicrotask(() => upgradeRemoteLLMProvider(this, comfyApi));
+                return result;
+            };
+            nodeType.prototype.onConfigure = function (data: any) {
+                // Prototype workflows stored the environment-variable name between model and reasoning.
+                if (Array.isArray(data?.widgets_values) && data.widgets_values.length >= 6
+                    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(data.widgets_values[3] ?? ""))) {
+                    data = { ...data, widgets_values: [...data.widgets_values.slice(0, 3), ...data.widgets_values.slice(4)] };
+                }
+                const result = originalConfigure?.call(this, data);
+                queueMicrotask(() => upgradeRemoteLLMProvider(this, comfyApi));
+                return result;
+            };
+            return;
+        }
         if (nodeData.name === "BV Named LoRA Stack") {
             const prepare = (node: any) => {
                 const idWidget = node.widgets?.find((widget: any) => widget.name === "stack_id");
@@ -556,5 +639,8 @@ comfyApp.registerExtension({
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };
+    },
+    afterConfigureGraph() {
+        scheduleDebugSnapshot();
     },
 });

@@ -1,0 +1,143 @@
+{
+  "canvas": {
+    "height": 1024,
+    "width": 1536
+  },
+  "document_id": "cf8371ba-c69e-4525-92e8-36cd11a05b76",
+  "negative_mode": "prompt",
+  "overlap": {
+    "mode": "joint"
+  },
+  "prompts": {
+    "background": {
+      "negative_source": "",
+      "positive_source": "workshop interior, shelves, concrete floor"
+    },
+    "global": {
+      "negative_source": "extra objects, wrong colors",
+      "positive_source": "three objects in a workshop, detailed, balanced"
+    }
+  },
+  "regions": [
+    {
+      "authoring": {
+        "color": "#E45756",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Ellipse 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.35,
+          "id": "22ee3975-55cf-47c3-8f7e-34b768cd5a4a",
+          "layer_id": "22ee3975-55cf-47c3-8f7e-34b768cd5a4a",
+          "operation": "add",
+          "type": "ellipse",
+          "width": 0.3,
+          "x": 0.05,
+          "y": 0.05
+        }
+      ],
+      "id": "20ffaf36-14da-4687-a4cb-eaaa31f1cc0e",
+      "mask": {
+        "feather": 0.015
+      },
+      "name": "Robot",
+      "parent_region_id": null,
+      "priority": 0,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "blue robot, dropped wrench",
+        "positive_source": "small red robot, waving, holding brass wrench, scratched paint"
+      },
+      "strength": 1
+    },
+    {
+      "authoring": {
+        "color": "#54A24B",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": true,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Ellipse 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.35,
+          "id": "6041f3f2-032f-4303-8a48-e7bedc3d640e",
+          "layer_id": "6041f3f2-032f-4303-8a48-e7bedc3d640e",
+          "operation": "add",
+          "type": "ellipse",
+          "width": 0.3,
+          "x": 0.65,
+          "y": 0.6
+        }
+      ],
+      "id": "3d123ceb-a22f-4df0-9be7-a1f52915554a",
+      "mask": {
+        "feather": 0.015
+      },
+      "name": "Drone",
+      "parent_region_id": null,
+      "priority": 1,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "red drone, below crate, camera facing away",
+        "positive_source": "blue drone, hovering above wooden crate, camera facing robot"
+      },
+      "strength": 1
+    },
+    {
+      "authoring": {
+        "color": "#4C78A8",
+        "locked": false,
+        "visible": true
+      },
+      "enabled": false,
+      "geometry": [
+        {
+          "authoring": {
+            "locked": false,
+            "name": "Rectangle 1",
+            "visible": true
+          },
+          "enabled": true,
+          "height": 0.24,
+          "id": "66331aa0-7c42-44e6-8a54-21de0f79e852",
+          "layer_id": "66331aa0-7c42-44e6-8a54-21de0f79e852",
+          "operation": "add",
+          "type": "rect",
+          "width": 0.24,
+          "x": 0.38,
+          "y": 0.38
+        }
+      ],
+      "id": "59098992-f8ed-4587-a18d-0439249fc741",
+      "mask": {
+        "feather": 0.01
+      },
+      "name": "Pedestal",
+      "parent_region_id": null,
+      "priority": 2,
+      "usage": "generation",
+      "prompts": {
+        "negative_source": "",
+        "positive_source": "glass pedestal, glowing cube on top, cables near base"
+      },
+      "strength": 0.8
+    }
+  ],
+  "schema": "bv.regional",
+  "title": "Prompt Enhancer Synthetic Spatial Stress",
+  "version": 2
+}

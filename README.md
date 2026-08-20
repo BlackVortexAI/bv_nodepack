@@ -260,6 +260,121 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
 | BV Regional Detailer Mask | Renders one named region, compiles its Global + Region prompts and outputs `IMAGE`, `MASK` and an Impact-compatible `BASIC_PIPE` |
+| BV Comfy CLIP LLM Provider | Exposes a compatible local generative CLIP through the BV prompt-enhancer provider contract |
+| BV Remote LLM Provider | Selects an OpenAI-compatible provider and model with strict structured output and a separately stored user API key |
+| BV Regional Prompt Enhancer | Proposes and verifies prompt-only changes using regional geometry and relationship context |
+| BV Apply Regional Enhancement | Applies a verified, source-matched proposal while preserving all non-prompt document data |
+
+### Spatially aware regional prompt enhancement
+
+The prompt-enhancement workflow keeps proposal and mutation separate:
+
+This is not a generic prompt rewriter. The enhancer is **spatially aware**: it
+receives the canvas, region geometry, hierarchy, overlap, priority and the existing
+Global, Background and regional prompt relationships as immutable context. It uses
+that context to improve scene coherence, spatial wording and object ownership while
+changing prompt text only; region identities, masks and workflow structure remain
+protected. Spatial awareness is guidance rather than a deterministic layout promise:
+LLM output and image sampling can still fluctuate, and the target image model may
+duplicate or mis-bind an object despite a correct enhanced prompt.
+
+`BV Regional Prompt Enhancer` separates prompt language from enhancement freedom.
+Choose `Anima / hybrid` for sentence-aware hybrid prompts, `Natural language` for
+prose-oriented models, or `Tag only / SDXL` for conservative tag collision cleanup.
+The `creativity` control ranges from `0.0` (spelling, grammar and sentence correction)
+to `1.0` (coherent creative scene enhancement). Immutable regional structure and
+source facts remain protected at every level; tag-only mode is internally capped at
+`0.3`.
+
+```text
+BV Comfy CLIP LLM Provider ─┐
+                            ├─> BV Regional Prompt Enhancer ─> BV Apply Regional Enhancement
+BV Remote LLM Provider ─────┘
+```
+
+`BV Remote LLM Provider` defaults to the generic `OpenAI Compatible` profile.
+Choose `OpenAI`, `Venice`, `Abacus.AI`, `Ollama`, `LM Studio`, `llama.cpp`,
+`vLLM`, `LocalAI`, or a custom OpenAI-compatible Chat Completions endpoint,
+then enter any compatible model ID. `OpenAI`, `Venice` and `Abacus.AI` use fixed
+catalog endpoints; Abacus.AI uses the self-service RouteLLM endpoint and defaults to
+`route-llm`. The node UI updates the endpoint when the provider changes and makes it
+read-only for fixed profiles. `custom_endpoint` is editable only for the generic profile. HTTPS is required
+except for loopback servers such as LM Studio or Ollama. The provider requests
+strict JSON-schema output and does not enable tools or web search. The Venice
+profile additionally disables Venice's own system prompt. Local profiles use managed
+loopback endpoints without API keys. `Local OpenAI Compatible (Custom)` accepts a
+custom loopback endpoint without authentication; the external custom profile retains
+Bearer-key authentication.
+
+#### Tested model recommendations
+
+These are practical starting points from the regional Anima sentence-prompt tests,
+not a universal model ranking:
+
+| Use case | Model / node setting | Effort | Notes |
+|---|---|---:|---|
+| Recommended local default | [`Qwen/Qwen3-8B-GGUF`](https://huggingface.co/Qwen/Qwen3-8B-GGUF) as `hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M` through Ollama | `low` | Best local balance tested for strict JSON, natural wording and source preservation |
+| Low-resource local fallback | `qwen3:4b` through Ollama | `low` | Functional and schema-compatible, but more likely to produce awkward tag/prose mixtures and weaker enhancements |
+| Existing ComfyUI-local alternative | [`qwen3vl_8b_fp8_scaled.safetensors`](https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_fp8_scaled.safetensors) through `BV Comfy CLIP LLM Provider` | provider-managed | Good tested enhancement quality, but uses the ComfyUI model path and more of the generation machine's resources |
+| Recommended paid baseline | `gpt-5-mini` through an available OpenAI-compatible provider | `low` | Strong tested quality without requiring a frontier-priced model |
+| Quality/reference test | `gpt-5.5` through an available OpenAI-compatible provider | provider-supported | Strong result, but substantially more expensive and unnecessary as the default |
+
+Start with `creativity = 0.5`. Use the same enhancer input, settings and image seed
+when comparing models. Evaluate the returned prompt diff separately from the rendered
+image: an image model may still duplicate or mis-bind objects even when the enhanced
+prompt correctly requests a single object. Model IDs can vary between providers; use
+the exact ID exposed by the selected service. Vision capability is not required for
+the remote/Ollama path because the enhancer sends text and JSON only.
+
+Install or start the recommended Ollama model directly with:
+
+```powershell
+ollama run hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M
+```
+
+Successful remote responses are cached persistently under
+`user/default/bv_nodepack/cache/remote_llm/v1`. The cache identity covers the
+effective request payload, provider, endpoint and model but never the API key.
+An identical request therefore does not create another paid external call after
+unrelated workflow edits or a ComfyUI restart. Changing prompts, model, provider,
+endpoint, reasoning settings, token limit or a non-zero seed creates a new request.
+
+Provider definitions are loaded from
+`data/ai/providers/remote_llm_providers_v1.json`. This versioned package catalog
+contains endpoints and suggested defaults but no user configuration or secrets.
+New profiles that use an existing adapter can therefore be shipped without changing
+the node implementation.
+
+On first use, BV creates the user-owned settings file
+`user/default/bv_nodepack/remote_llm_settings.json`. It is never replaced by a
+NodePack update. Set `default_profile_id` and optional per-profile overrides there;
+new provider nodes use those values as their initial workflow snapshot. For example:
+
+```json
+{
+  "schema": "bv.remote_llm.settings",
+  "version": 1,
+  "default_profile_id": "abacus",
+  "profile_defaults": {
+    "abacus": {
+      "model": "route-llm",
+      "reasoning_effort": "none",
+      "timeout_seconds": 60
+    }
+  }
+}
+```
+
+Use the node's `Configure <Provider> API Key` button to save, replace or delete a
+key. Keys are stored separately in the user-owned
+`user/default/bv_nodepack/remote_llm_secrets.json`; the settings endpoint reports
+only whether a key is configured and never returns its value. API keys are not
+serialized into workflows. Review `custom_endpoint` before queuing imported
+workflows because the generic profile sends its configured secret to that host.
+
+The enhancer may issue one repair request after a rejected initial response. The
+Apply node independently revalidates the result and returns the canonical source
+unchanged when the proposal is invalid, stale or belongs to another document.
 
 ### Impact Pack detailer integration
 

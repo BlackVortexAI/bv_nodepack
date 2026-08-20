@@ -610,7 +610,7 @@ class BVRegionalAnimaConditioningNode:
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.35, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "cross_mask_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "self_mask_strength": ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "self_mask_strength": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "base_ratio": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "cross_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
                 "self_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),

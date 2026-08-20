@@ -1,0 +1,204 @@
+from __future__ import annotations
+
+import json
+
+from ..util.remote_llm import build_remote_provider, load_provider_catalog, load_user_defaults
+from ..util.regional.document import REGIONAL
+from ..util.regional.prompt_enhancer import (
+    ENHANCEMENT_RESULT,
+    LLM_PROVIDER,
+    ComfyClipGenerateProvider,
+    apply_enhancement,
+    build_request,
+    build_repair_request,
+    enhancement_result,
+    preservation_issues,
+    prompt_bundle_fingerprint,
+    regional_policy_issues,
+    regional_source_warnings,
+)
+
+
+CATEGORY = "🌀 BV Node Pack/regional/prompt enhancement"
+PROMPT_LANGUAGE_OPTIONS = ["Anima / hybrid", "Natural language", "Tag only / SDXL"]
+PROMPT_LANGUAGE_CONFIG = {
+    "Anima / hybrid": ("hybrid_tags_and_language", "anima_hybrid_v1"),
+    "Natural language": ("natural_language", "natural_language_v1"),
+    "Tag only / SDXL": ("tag_only", "tag_only_v1"),
+}
+
+
+class BVComfyClipLLMProviderNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"clip": ("CLIP",)}}
+
+    RETURN_TYPES = (LLM_PROVIDER,)
+    RETURN_NAMES = ("provider",)
+    FUNCTION = "build"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Wraps a compatible generative ComfyUI CLIP and fails before inference when generation is unavailable."
+
+    def build(self, clip):
+        return (ComfyClipGenerateProvider(clip),)
+
+
+class BVRemoteLLMProviderNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        profiles = load_provider_catalog()
+        defaults = load_user_defaults(profiles, create_if_missing=True)
+        profile = next(item for item in profiles if item.id == defaults.profile_id)
+        return {
+            "required": {
+                "provider_profile": ([item.label for item in profiles], {"default": profile.label}),
+                "custom_endpoint": ("STRING", {"default": defaults.custom_endpoint}),
+                "model": ("STRING", {"default": defaults.model}),
+                "reasoning_effort": (
+                    ["none", "low", "medium", "high"], {"default": defaults.reasoning_effort}
+                ),
+                "timeout_seconds": (
+                    "INT", {"default": defaults.timeout_seconds, "min": 5, "max": 600, "step": 5}
+                ),
+            }
+        }
+
+    RETURN_TYPES = (LLM_PROVIDER,)
+    RETURN_NAMES = ("provider",)
+    FUNCTION = "build"
+    CATEGORY = CATEGORY
+    DESCRIPTION = (
+        "Creates an OpenAI-compatible local or remote Chat Completions provider with strict structured output. "
+        "The API key is read from the BV NodePack user secrets and is never serialized in the workflow."
+    )
+
+    def build(self, provider_profile, custom_endpoint, model, reasoning_effort, timeout_seconds):
+        provider = build_remote_provider(
+            provider_profile, custom_endpoint, model, reasoning_effort, timeout_seconds
+        )
+        provider.validate_configuration(require_api_key=True)
+        return (provider,)
+
+
+class BVRegionalPromptEnhancerNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "regional": (REGIONAL,),
+                "provider": (LLM_PROVIDER,),
+                "instruction": (
+                    "STRING",
+                    {
+                        "default": "Improve clarity, visual specificity, and coherence while preserving intent and BV markup.",
+                        "multiline": True,
+                    },
+                ),
+                "max_output_tokens": ("INT", {"default": 2048, "min": 128, "max": 32768, "step": 64}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF}),
+                "prompt_language": (PROMPT_LANGUAGE_OPTIONS, {"default": "Anima / hybrid"}),
+                "creativity": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}),
+            }
+        }
+
+    RETURN_TYPES = (ENHANCEMENT_RESULT, "STRING", "STRING")
+    RETURN_NAMES = ("enhancement", "diff_json", "diagnostics")
+    FUNCTION = "enhance"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Produces verified prompt-only changes without mutating the source BV_REGIONAL document."
+
+    @classmethod
+    def IS_CHANGED(cls, **_kwargs):
+        return prompt_bundle_fingerprint()
+
+    def enhance(
+        self, regional, provider, instruction, max_output_tokens, seed,
+        prompt_language="Anima / hybrid", creativity=0.5,
+    ):
+        if not callable(getattr(provider, "generate", None)):
+            raise ValueError("provider is not a valid BV_LLM_PROVIDER")
+        try:
+            language_id, policy_id = PROMPT_LANGUAGE_CONFIG[str(prompt_language)]
+        except KeyError as error:
+            raise ValueError(f"Unsupported prompt language '{prompt_language}'") from error
+        request = build_request(
+            regional, instruction, max_output_tokens, seed,
+            policy_id=policy_id, prompt_language=language_id, creativity=creativity,
+        )
+        source_warnings = regional_source_warnings(regional)
+        response = provider.generate(request)
+        result = enhancement_result(regional, response, request)
+        validation_issues = list(result["diagnostics"])
+        if result["valid"]:
+            validation_issues = [
+                *preservation_issues(regional, result["proposal"], request.policy_id, request.creativity),
+                *regional_policy_issues(regional, result["proposal"], request.policy_id, request.creativity),
+            ]
+        initial_validation_issues = list(validation_issues)
+        repaired = False
+        if validation_issues:
+            repaired = True
+            repair_request = build_repair_request(request, response.raw_text, validation_issues)
+            repair_response = provider.generate(repair_request)
+            result = enhancement_result(regional, repair_response, repair_request)
+            validation_issues = list(result["diagnostics"])
+            if result["valid"]:
+                validation_issues = [
+                    *preservation_issues(regional, result["proposal"], request.policy_id, request.creativity),
+                    *regional_policy_issues(regional, result["proposal"], request.policy_id, request.creativity),
+                ]
+            if validation_issues:
+                result["valid"] = False
+                result["proposal"] = None
+                result["diff"] = []
+                result["diagnostics"] = ["repair attempt failed", *validation_issues]
+            else:
+                result["diagnostics"] = ["repaired after initial rejection", *initial_validation_issues]
+        bundle_label = (
+            f"bundle v{request.prompt_bundle_version} {request.prompt_bundle_hash[:12]} · "
+            f"{request.policy_id} · creativity {request.creativity:.2f}"
+        )
+        if result["valid"]:
+            diagnostics = f"OK{' · repaired' if repaired else ''} · {bundle_label}"
+            if result["diagnostics"]:
+                diagnostics += "\nNotes:\n- " + "\n- ".join(result["diagnostics"])
+            if repaired and initial_validation_issues:
+                diagnostics += "\nInitial rejection:\n- " + "\n- ".join(initial_validation_issues)
+            if source_warnings:
+                diagnostics += "\nSource warnings:\n- " + "\n- ".join(source_warnings)
+                result["diagnostics"].extend(source_warnings)
+        else:
+            diagnostics = f"Rejected · {bundle_label}:\n- " + "\n- ".join(result["diagnostics"])
+            if source_warnings:
+                diagnostics += "\nSource warnings:\n- " + "\n- ".join(source_warnings)
+        return result, json.dumps(result["diff"], ensure_ascii=False, indent=2), diagnostics
+
+
+class BVApplyRegionalEnhancementNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"regional": (REGIONAL,), "enhancement": (ENHANCEMENT_RESULT,)}}
+
+    RETURN_TYPES = (REGIONAL,)
+    RETURN_NAMES = ("regional",)
+    FUNCTION = "apply"
+    CATEGORY = CATEGORY
+    DESCRIPTION = "Applies a verified result; invalid, stale, or mismatched results return the source unchanged."
+
+    def apply(self, regional, enhancement):
+        return (apply_enhancement(regional, enhancement),)
+
+
+NODE_CLASS_MAPPINGS = {
+    "BV Comfy CLIP LLM Provider": BVComfyClipLLMProviderNode,
+    "BV Remote LLM Provider": BVRemoteLLMProviderNode,
+    "BV Regional Prompt Enhancer": BVRegionalPromptEnhancerNode,
+    "BV Apply Regional Enhancement": BVApplyRegionalEnhancementNode,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "BV Comfy CLIP LLM Provider": "🌀 BV Comfy CLIP LLM Provider",
+    "BV Remote LLM Provider": "🌀 BV Remote LLM Provider",
+    "BV Regional Prompt Enhancer": "🌀 BV Regional Prompt Enhancer",
+    "BV Apply Regional Enhancement": "🌀 BV Apply Regional Enhancement",
+}

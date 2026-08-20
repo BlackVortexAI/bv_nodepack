@@ -1,0 +1,122 @@
+{
+  "schema": "bv.regional",
+  "version": 2,
+  "document_id": "b9f9f6d2-0ccc-4cf1-a3d4-3cf26850536b",
+  "title": "Prompt Enhancer Test - Geometry Only Cafe Scene",
+  "canvas": {
+    "width": 1536,
+    "height": 1024
+  },
+  "prompts": {
+    "global": {
+      "positive_source": "a picture, two people, cafe, good quality, detailed, nice lighting",
+      "negative_source": "bad, ugly, low quality, things wrong"
+    },
+    "background": {
+      "positive_source": "cafe background with tables and windows, warm, detailed background, nice atmosphere",
+      "negative_source": "bad background, empty, blurry stuff"
+    }
+  },
+  "negative_mode": "prompt",
+  "overlap": {
+    "mode": "joint"
+  },
+  "regions": [
+    {
+      "id": "20ffaf36-14da-4687-a4cb-eaaa31f1cc0e",
+      "name": "Woman",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 1.0,
+      "priority": 10,
+      "usage": "generation",
+      "prompts": {
+        "positive_source": "woman, red jacket, black short hair, sitting, holding white coffee cup, detailed woman, looks calm",
+        "negative_source": "blue jacket, blonde hair, wrong cup, bad hands"
+      },
+      "mask": {
+        "feather": 0.015
+      },
+      "geometry": [
+        {
+          "id": "22ee3975-55cf-47c3-8f7e-34b768cd5a4a",
+          "type": "ellipse",
+          "operation": "add",
+          "x": 0.08,
+          "y": 0.08,
+          "width": 0.42,
+          "height": 0.84
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#E45756"
+      }
+    },
+    {
+      "id": "3d123ceb-a22f-4df0-9be7-a1f52915554a",
+      "name": "Man",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 1.0,
+      "priority": 20,
+      "usage": "generation",
+      "prompts": {
+        "positive_source": "man, green sweater, brown curly hair, sitting opposite, notebook on table, detailed, realistic",
+        "negative_source": "red sweater, straight black hair, no notebook, deformed"
+      },
+      "mask": {
+        "feather": 0.015
+      },
+      "geometry": [
+        {
+          "id": "6041f3f2-032f-4303-8a48-e7bedc3d640e",
+          "type": "ellipse",
+          "operation": "add",
+          "x": 0.5,
+          "y": 0.08,
+          "width": 0.42,
+          "height": 0.84
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#54A24B"
+      }
+    },
+    {
+      "id": "59098992-f8ed-4587-a18d-0439249fc741",
+      "name": "Table",
+      "parent_region_id": null,
+      "enabled": true,
+      "strength": 0.8,
+      "priority": 100,
+      "usage": "generation",
+      "prompts": {
+        "positive_source": "wood table, white coffee cup near woman, open notebook near man, their hands visible, objects correct places",
+        "negative_source": "cup near man, notebook near woman, duplicated cup, duplicated notebook, mixed objects"
+      },
+      "mask": {
+        "feather": 0.01
+      },
+      "geometry": [
+        {
+          "id": "66331aa0-7c42-44e6-8a54-21de0f79e852",
+          "type": "rect",
+          "operation": "add",
+          "x": 0.22,
+          "y": 0.55,
+          "width": 0.56,
+          "height": 0.32
+        }
+      ],
+      "authoring": {
+        "visible": true,
+        "locked": false,
+        "color": "#4C78A8"
+      }
+    }
+  ]
+}
