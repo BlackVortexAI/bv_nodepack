@@ -265,9 +265,18 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Prompt Enhancer | Proposes and verifies prompt-only changes using regional geometry and relationship context |
 | BV Apply Regional Enhancement | Applies a verified, source-matched proposal while preserving all non-prompt document data |
 
-### Regional prompt enhancement
+### Spatially aware regional prompt enhancement
 
 The prompt-enhancement workflow keeps proposal and mutation separate:
+
+This is not a generic prompt rewriter. The enhancer is **spatially aware**: it
+receives the canvas, region geometry, hierarchy, overlap, priority and the existing
+Global, Background and regional prompt relationships as immutable context. It uses
+that context to improve scene coherence, spatial wording and object ownership while
+changing prompt text only; region identities, masks and workflow structure remain
+protected. Spatial awareness is guidance rather than a deterministic layout promise:
+LLM output and image sampling can still fluctuate, and the target image model may
+duplicate or mis-bind an object despite a correct enhanced prompt.
 
 `BV Regional Prompt Enhancer` separates prompt language from enhancement freedom.
 Choose `Anima / hybrid` for sentence-aware hybrid prompts, `Natural language` for
