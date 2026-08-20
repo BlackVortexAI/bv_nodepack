@@ -304,9 +304,9 @@ not a universal model ranking:
 
 | Use case | Model / node setting | Effort | Notes |
 |---|---|---:|---|
-| Recommended local default | `hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M` through Ollama | `low` | Best local balance tested for strict JSON, natural wording and source preservation |
+| Recommended local default | [`Qwen/Qwen3-8B-GGUF`](https://huggingface.co/Qwen/Qwen3-8B-GGUF) as `hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M` through Ollama | `low` | Best local balance tested for strict JSON, natural wording and source preservation |
 | Low-resource local fallback | `qwen3:4b` through Ollama | `low` | Functional and schema-compatible, but more likely to produce awkward tag/prose mixtures and weaker enhancements |
-| Existing ComfyUI-local alternative | Qwen3-VL 8B FP8 Scaled through `BV Comfy CLIP LLM Provider` | provider-managed | Good tested enhancement quality, but uses the ComfyUI model path and more of the generation machine's resources |
+| Existing ComfyUI-local alternative | [`qwen3vl_8b_fp8_scaled.safetensors`](https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_fp8_scaled.safetensors) through `BV Comfy CLIP LLM Provider` | provider-managed | Good tested enhancement quality, but uses the ComfyUI model path and more of the generation machine's resources |
 | Recommended paid baseline | `gpt-5-mini` through an available OpenAI-compatible provider | `low` | Strong tested quality without requiring a frontier-priced model |
 | Quality/reference test | `gpt-5.5` through an available OpenAI-compatible provider | provider-supported | Strong result, but substantially more expensive and unnecessary as the default |
 
@@ -316,6 +316,12 @@ image: an image model may still duplicate or mis-bind objects even when the enha
 prompt correctly requests a single object. Model IDs can vary between providers; use
 the exact ID exposed by the selected service. Vision capability is not required for
 the remote/Ollama path because the enhancer sends text and JSON only.
+
+Install or start the recommended Ollama model directly with:
+
+```powershell
+ollama run hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M
+```
 
 Successful remote responses are cached persistently under
 `user/default/bv_nodepack/cache/remote_llm/v1`. The cache identity covers the
