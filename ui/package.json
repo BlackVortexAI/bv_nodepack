@@ -1,7 +1,7 @@
 {
     "name": "bv_nodepack",
     "private": true,
-    "version": "0.14.0",
+    "version": "0.15.0",
     "type": "module",
     "scripts": {
         "build": "vite build",

@@ -332,6 +332,23 @@ Install or start the recommended Ollama model directly with:
 ollama run hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M
 ```
 
+<details>
+<summary><strong>Anima example: original vs. spatially enhanced prompt</strong></summary>
+
+This controlled comparison uses the same Anima workflow and image seed
+`827414017477856` for both outputs. The enhanced path used
+`hf.co/Qwen/Qwen3-8B-GGUF:Q4_K_M` through Ollama with
+`reasoning_effort = medium`, `creativity = 0.5`, Anima/hybrid prompt language,
+eight Euler Ancestral steps and CFG 1. In this sample, spatial enhancement keeps one
+cup near the woman and restores the open notebook near the man. Results remain
+probabilistic; other LLM responses or image seeds may be less consistent.
+
+| Original regional prompt | Spatially enhanced regional prompt |
+|---|---|
+| ![Original Anima regional prompt result](docs/assets/regional/prompt-enhancer/anima-original.png) | ![Spatially enhanced Anima regional prompt result](docs/assets/regional/prompt-enhancer/anima-spatially-enhanced.png) |
+
+</details>
+
 Successful remote responses are cached persistently under
 `user/default/bv_nodepack/cache/remote_llm/v1`. The cache identity covers the
 effective request payload, provider, endpoint and model but never the API key.
@@ -1108,6 +1125,23 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-20 — v0.15.0
+
+- Add spatially aware regional prompt enhancement that uses immutable canvas,
+  geometry, hierarchy, overlap and prompt relationships to improve scene coherence,
+  spatial wording and object ownership without changing region structure.
+- Add separate proposal and verified-apply nodes with Anima hybrid, natural-language
+  and conservative tag-only policies plus a bounded creativity control.
+- Add compatible local generation through ComfyUI CLIP and configurable
+  OpenAI-compatible HTTP providers, including managed profiles for hosted services,
+  Ollama, LM Studio, llama.cpp, vLLM and LocalAI.
+- Store provider keys separately from workflows and keep user settings independent
+  from the versioned provider catalog.
+- Cache successful provider responses by effective enhancer input so unchanged
+  requests do not trigger another paid call after workflow edits or restarts.
+- Document tested local and hosted model recommendations, direct model links and the
+  remaining nondeterminism of LLM output and image-model object binding.
 
 ### 2026-08-20 — v0.14.0
 
