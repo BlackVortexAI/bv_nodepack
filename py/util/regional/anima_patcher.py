@@ -28,6 +28,7 @@ class AnimaConditioningRegionChain:
     mask: torch.Tensor
     conditioning: list
     weight: float
+    scope: str | None = None
 
     def flatten(self) -> list["AnimaConditioningRegionChain"]:
         regions = []
@@ -383,8 +384,10 @@ class AnimaRegionalConditioningPatch:
         # after token-grid resize, which matches Flux-style boolean routing.
         self.region_masks: list[torch.Tensor] = []
         self.region_weights: list[float] = []
+        self.region_scopes: list[str] = []
         self.region_conditionings: list[tuple[torch.Tensor, dict]] = []
         self.background_conditioning: Optional[tuple[torch.Tensor, dict]] = None
+        self.token_lora = None
 
         if background_conditioning is not None:
             cond, metadata = _extract_conditioning_parts(
@@ -400,6 +403,7 @@ class AnimaRegionalConditioningPatch:
             )
             self.region_masks.append(mask)
             self.region_weights.append(weight)
+            self.region_scopes.append(region.scope or f"region_{idx}")
             self.region_conditionings.append(
                 (cond.detach().float().cpu().contiguous(), metadata.copy())
             )
@@ -488,6 +492,103 @@ def _validate_anima_model(model) -> torch.nn.Module:
 # Main wrapper
 # ---------------------------------------------------------------------------
 
+_LATE_IMAGE_LORA_FINAL_SCALE = 0.35
+
+
+def _sampling_sigma(transformer_options: dict) -> float | None:
+    sigmas = transformer_options.get("sigmas", None)
+    if sigmas is None or not torch.is_tensor(sigmas) or sigmas.numel() == 0:
+        return None
+    return float(sigmas.max().detach().cpu().item())
+
+
+def _late_image_lora_scale(
+    patch: AnimaRegionalConditioningPatch,
+    transformer_options: dict,
+) -> float | None:
+    """Return regional image-LoRA scale after attention routing, or None before it."""
+    sigma = _sampling_sigma(transformer_options)
+    if sigma is None:
+        return None
+    low = min(patch.start_sigma, patch.end_sigma)
+    high = max(patch.start_sigma, patch.end_sigma)
+    if sigma > high:
+        return None
+    if sigma >= low:
+        return 1.0
+    if low <= 0.0:
+        return _LATE_IMAGE_LORA_FINAL_SCALE
+    remaining = max(0.0, min(sigma / low, 1.0))
+    return _LATE_IMAGE_LORA_FINAL_SCALE + (
+        1.0 - _LATE_IMAGE_LORA_FINAL_SCALE
+    ) * remaining
+
+
+def _execute_image_only_token_lora(
+    executor,
+    patch: AnimaRegionalConditioningPatch,
+    args: tuple,
+    kwargs: dict,
+    input_x: torch.Tensor,
+    context: torch.Tensor,
+    num_chunks: int,
+    batch_size: int,
+    regional_scale: float,
+):
+    """Keep regional model LoRAs spatially active after attention routing ends."""
+    from .krea2_token_lora import _RUNTIME, _RuntimeContext
+
+    diffusion_model = executor.class_obj
+    patch_spatial = int(getattr(diffusion_model, "patch_spatial", 2))
+    patch_temporal = int(getattr(diffusion_model, "patch_temporal", 1))
+    latent_t = int(input_x.shape[2])
+    latent_h = int(input_x.shape[-2])
+    latent_w = int(input_x.shape[-1])
+    padded_t = math.ceil(latent_t / patch_temporal) * patch_temporal
+    padded_h = math.ceil(latent_h / patch_spatial) * patch_spatial
+    padded_w = math.ceil(latent_w / patch_spatial) * patch_spatial
+    temporal_tokens = padded_t // patch_temporal
+    h_tokens = padded_h // patch_spatial
+    w_tokens = padded_w // patch_spatial
+    image_tokens = temporal_tokens * h_tokens * w_tokens
+    base_mask = torch.zeros((1, padded_h, padded_w), dtype=torch.float32)
+    spatial_masks = _masks_to_token_masks(
+        [base_mask] + patch.region_masks,
+        latent_h,
+        latent_w,
+        patch_spatial,
+        temporal_tokens,
+    )
+    text_tokens = int(context.shape[1])
+    token_masks = patch.token_lora.masks(
+        [text_tokens] + [0] * len(patch.region_scopes),
+        patch.region_scopes,
+        spatial_masks,
+        num_chunks,
+        batch_size,
+        context.device,
+    )
+    if regional_scale < 1.0:
+        global_uids = {
+            spec.uid for spec in patch.token_lora.specs if "global" in spec.scopes
+        }
+        token_masks = {
+            uid: mask if uid in global_uids else mask * regional_scale
+            for uid, mask in token_masks.items()
+        }
+    runtime = _RuntimeContext(
+        token_masks=token_masks,
+        text_tokens=text_tokens,
+        image_tokens=image_tokens,
+        text_layers=-1,
+        image_shape=(temporal_tokens, h_tokens, w_tokens),
+    )
+    runtime_token = _RUNTIME.set(runtime)
+    try:
+        return executor(*args, **kwargs)
+    finally:
+        _RUNTIME.reset(runtime_token)
+
 def _diffusion_model_wrapper(executor, *args, **kwargs):
     transformer_options = kwargs.get("transformer_options", None)
     if not isinstance(transformer_options, dict):
@@ -496,9 +597,18 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
     patch: Optional[AnimaRegionalConditioningPatch] = transformer_options.get(WRAPPER_KEY, None)
     if patch is None:
         return executor(*args, **kwargs)
-    if not patch.is_active(transformer_options):
+    attention_active = patch.is_active(transformer_options)
+    if not attention_active and patch.token_lora is None:
         return executor(*args, **kwargs)
-    if patch.base_ratio >= 1.0 or (patch.cross_mask_strength <= 0.0 and patch.self_mask_strength <= 0.0):
+    late_image_lora_scale = None
+    if not attention_active:
+        late_image_lora_scale = _late_image_lora_scale(patch, transformer_options)
+        if late_image_lora_scale is None:
+            return executor(*args, **kwargs)
+    if attention_active and (
+        patch.base_ratio >= 1.0
+        or (patch.cross_mask_strength <= 0.0 and patch.self_mask_strength <= 0.0)
+    ):
         return executor(*args, **kwargs)
 
     diffusion_model = executor.class_obj
@@ -538,6 +648,12 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
     if B_total % num_chunks != 0:
         return executor(*args, **kwargs)
     batch_size = B_total // num_chunks
+
+    if not attention_active:
+        return _execute_image_only_token_lora(
+            executor, patch, args, kwargs, input_x, context, num_chunks, batch_size,
+            late_image_lora_scale,
+        )
 
     background_cond = patch.prepare_background_cond(diffusion_model, device, dtype)
     background_cond_batched: Optional[torch.Tensor] = None
@@ -681,7 +797,47 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
             self_parts.append(b.expand(batch_size, -1, -1, -1))
         full_self_bias = torch.cat(self_parts, dim=0)
 
-    base_output = executor(*args, **kwargs) if patch.base_ratio > 0.0 else None
+    token_runtime = None
+    base_runtime = None
+    if patch.token_lora is not None:
+        from .krea2_token_lora import _RuntimeContext
+
+        h_tokens = padded_h // patch_spatial
+        w_tokens = padded_w // patch_spatial
+        image_tokens = temporal_tokens * h_tokens * w_tokens
+        token_runtime = _RuntimeContext(
+            token_masks=patch.token_lora.masks(
+                text_lengths, patch.region_scopes, token_masks,
+                num_chunks, batch_size, device,
+            ),
+            text_tokens=S_total,
+            image_tokens=image_tokens,
+            text_layers=-1,
+            image_shape=(temporal_tokens, h_tokens, w_tokens),
+        )
+        base_runtime = _RuntimeContext(
+            token_masks=patch.token_lora.masks(
+                [S_base], [], torch.zeros((1, image_tokens), device=device),
+                num_chunks, batch_size, device, global_only=True,
+            ),
+            text_tokens=S_base,
+            image_tokens=image_tokens,
+            text_layers=-1,
+            image_shape=(temporal_tokens, h_tokens, w_tokens),
+        )
+
+    base_output = None
+    if patch.base_ratio > 0.0:
+        if base_runtime is None:
+            base_output = executor(*args, **kwargs)
+        else:
+            from .krea2_token_lora import _RUNTIME
+
+            runtime_token = _RUNTIME.set(base_runtime)
+            try:
+                base_output = executor(*args, **kwargs)
+            finally:
+                _RUNTIME.reset(runtime_token)
 
     # ---- Patch cross_attn.attn_op on all blocks ------------------------
     # We replace the attn_op callable (normally torch_attention_op) with our
@@ -720,7 +876,16 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
                 kwargs["context"] = unified_context
             args = tuple(args)
 
-        regional_output = executor(*args, **kwargs)
+        if token_runtime is None:
+            regional_output = executor(*args, **kwargs)
+        else:
+            from .krea2_token_lora import _RUNTIME
+
+            runtime_token = _RUNTIME.set(token_runtime)
+            try:
+                regional_output = executor(*args, **kwargs)
+            finally:
+                _RUNTIME.reset(runtime_token)
         if base_output is not None and torch.is_tensor(regional_output) and torch.is_tensor(base_output):
             return regional_output * (1.0 - patch.base_ratio) + base_output * patch.base_ratio
         return regional_output

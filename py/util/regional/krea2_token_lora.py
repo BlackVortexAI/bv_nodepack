@@ -43,6 +43,7 @@ class _RuntimeContext:
     text_tokens: int
     image_tokens: int
     text_layers: int
+    image_shape: tuple[int, int, int] | None = None
 
 
 _RUNTIME: contextvars.ContextVar[_RuntimeContext | None] = contextvars.ContextVar(
@@ -173,6 +174,13 @@ def _adapt_mask(mask: torch.Tensor, value: torch.Tensor) -> torch.Tensor | None:
     if value.ndim == 4 and int(value.shape[1]) == runtime.text_tokens:
         result = mask[:, :runtime.text_tokens]
         return result[..., None] if int(result.shape[0]) in (1, int(value.shape[0])) else None
+    if value.ndim == 5 and runtime.image_shape is not None:
+        temporal, height, width = runtime.image_shape
+        if tuple(value.shape[1:4]) != (temporal, height, width):
+            return None
+        result = mask[:, runtime.text_tokens:runtime.text_tokens + runtime.image_tokens]
+        result = result.reshape(result.shape[0], temporal, height, width, 1)
+        return result if int(result.shape[0]) in (1, int(value.shape[0])) else None
     return None
 
 
@@ -190,7 +198,7 @@ class _TokenLoRAMixin:
         result = super().forward(value, *args, **kwargs)
         adapters = getattr(self, "bv_krea2_token_adapters", None)
         runtime = _RUNTIME.get()
-        if not adapters or runtime is None or not torch.is_tensor(value) or value.ndim not in (3, 4):
+        if not adapters or runtime is None or not torch.is_tensor(value) or value.ndim not in (3, 4, 5):
             return result
         cache = self.__dict__.setdefault("_bv_krea2_token_cast", {})
         for uid, adapter in adapters.items():
@@ -241,7 +249,10 @@ def _patched_module(module: torch.nn.Module) -> torch.nn.Module:
     return patched
 
 
-def _module_lookup(diffusion_model: Any) -> tuple[dict[str, str], dict[str, str]]:
+def _module_lookup(
+    diffusion_model: Any,
+    excluded_fragments: tuple[str, ...] = (),
+) -> tuple[dict[str, str], dict[str, str]]:
     maskable: dict[str, str] = {}
     all_linear: dict[str, str] = {}
     for name, module in diffusion_model.named_modules():
@@ -250,15 +261,23 @@ def _module_lookup(diffusion_model: Any) -> tuple[dict[str, str], dict[str, str]
             continue
         for key in (name, name.replace(".", "_")):
             all_linear[key] = name
-            if name.startswith(("blocks.", "txtfusion.", "txtmlp", "first", "last")):
+            if (
+                name.startswith(("blocks.", "txtfusion.", "txtmlp", "first", "last"))
+                and not any(fragment in name for fragment in excluded_fragments)
+            ):
                 maskable[key] = name
     return maskable, all_linear
 
 
-def _inject_adapter(model: Any, state: dict[str, Any], spec: TokenLoRASpec) -> tuple[int, list[str], list[str]]:
+def _inject_adapter(
+    model: Any,
+    state: dict[str, Any],
+    spec: TokenLoRASpec,
+    excluded_fragments: tuple[str, ...] = (),
+) -> tuple[int, list[str], list[str]]:
     normalized = _normalize_lora_state(state)
     diffusion_model = model.get_model_object("diffusion_model")
-    maskable, all_linear = _module_lookup(diffusion_model)
+    maskable, all_linear = _module_lookup(diffusion_model, excluded_fragments)
     patched_count = 0
     unmatched: list[str] = []
     unmaskable: list[str] = []

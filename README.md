@@ -124,6 +124,35 @@ single regional stack therefore normally doubles sampling work, while two differ
 regional stacks normally triple it. Actual runtime and peak VRAM depend on the model,
 resolution, sampler and ComfyUI memory management.
 
+`BV Regional Anima Conditioning` also exposes the experimental
+`regional_lora_mode` selector. Its default remains `multipass_legacy`, preserving
+published Anima workflows and their image results. `token_gated_singlepass` applies
+compatible model-side LoRA deltas directly to the assigned regional text and
+spatiotemporal image tokens while regional attention routing is active. After
+`end_percent`, regional text routing stops as configured, while the spatially masked
+image-side LoRA deltas decay with the remaining sampling sigma from full strength
+towards 35% at the end. This preserves late character identity while leaving the base
+model more room for fine geometry and without extending the more aggressive regional
+text context through the entire denoising schedule. CLIP-side LoRA strengths continue to be
+applied while each regional prompt is encoded. Unsupported or non-maskable model
+layers fail explicitly; select `multipass_legacy` for those LoRAs. When `base_ratio`
+is greater than zero, Anima still evaluates its intentional unmodified baseline pass,
+so "single-pass" refers specifically to eliminating the additional per-stack
+regional LoRA passes.
+
+| Anima regional LoRA mode | Recommended use | Trade-off |
+| --- | --- | --- |
+| `multipass_legacy` (default) | Published workflows, maximum compatibility and quality-sensitive interaction scenes | One additional model pass per distinct effective regional model stack |
+| `token_gated_singlepass` (experimental) | Faster iteration and compositions whose subjects remain mostly spatially separated | Different image result; overlapping subjects and anatomy can receive competing regional LoRA influence |
+
+Single-pass routing controls where compatible LoRA deltas are applied; it cannot
+guarantee anatomy or resolve contradictory prompts beyond the underlying model's own
+capabilities. Direct subject interaction, shared limbs, hands, embraces and broad mask
+overlaps remain difficult cases even without regional modification. Use
+`multipass_legacy` when those details matter more than sampling speed. Existing Anima
+workflows that do not store `regional_lora_mode` continue to resolve to
+`multipass_legacy`.
+
 ### Named LoRA stack interoperability
 
 The incoming community `LORA_STACK` value itself is an unlabelled runtime list:
@@ -911,6 +940,21 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-20 — v0.13.0
+
+- Add experimental `token_gated_singlepass` regional model-LoRA execution to
+  `BV Regional Anima Conditioning` while retaining `multipass_legacy` as the default
+  for backward compatibility and published-result reproduction.
+- Apply compatible regional LoRA deltas to Anima text and spatiotemporal image tokens
+  inside the existing attention pass, eliminating additional per-stack model passes.
+- Preserve global LoRAs, scoped CLIP encoding and the intentional unmodified
+  `base_ratio` pass; reject unsupported or non-maskable model layers explicitly.
+- After the configured attention window, stop regional text routing and retain a
+  spatial image-LoRA tail that decays towards 35 percent to reduce late identity drift.
+- Document that single-pass output intentionally differs from multipass and that
+  overlapping subjects, shared anatomy and contradictory prompts remain limited by
+  both competing regional influence and the underlying model's generative capability.
 
 ### 2026-08-20 — v0.12.0
 

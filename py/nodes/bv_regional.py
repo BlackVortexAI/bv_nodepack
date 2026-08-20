@@ -44,6 +44,12 @@ DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 
 
+def apply_anima_token_lora_patch(*args, **kwargs):
+    from ..util.regional.anima_token_lora import apply_anima_token_lora_patch as apply_patch
+
+    return apply_patch(*args, **kwargs)
+
+
 class BVRegionalPromptNode:
     @classmethod
     def INPUT_TYPES(cls):
@@ -516,6 +522,10 @@ class BVRegionalAnimaConditioningNode:
                 "base_ratio": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "cross_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
                 "self_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
+                "regional_lora_mode": (["multipass_legacy", "token_gated_singlepass"], {
+                    "default": "multipass_legacy",
+                    "tooltip": "Legacy preserves published Anima results. Single-pass is an experimental token-gated model-LoRA path.",
+                }),
             },
             "optional": {
                 "lora_registry": (REGISTRY, {}),
@@ -529,7 +539,7 @@ class BVRegionalAnimaConditioningNode:
     CATEGORY = CATEGORY
     DESCRIPTION = (
         "Compiles BV Regional and applies the built-in Anima attention patch for a standard KSampler. "
-        "Regional LoRA hook passes are experimental and add one model pass per distinct effective stack."
+        "Legacy regional LoRA hook passes preserve published results; token-gated single-pass is experimental."
     )
 
     def apply(
@@ -546,9 +556,12 @@ class BVRegionalAnimaConditioningNode:
         base_ratio,
         cross_inject_every_n_blocks,
         self_inject_every_n_blocks,
+        regional_lora_mode="multipass_legacy",
         lora_registry=None,
         lora_bindings=None,
     ):
+        if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
+            raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         try:
             from ..util.regional.anima_patcher import ApplyAnimaRegionalConditioningPatch
         except ImportError as error:
@@ -563,9 +576,10 @@ class BVRegionalAnimaConditioningNode:
         )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
-        positive, negative = apply_attention_hook_passes(
-            positive, negative, document, scope_stacks, hook_groups
-        )
+        if regional_lora_mode == "multipass_legacy":
+            positive, negative = apply_attention_hook_passes(
+                positive, negative, document, scope_stacks, hook_groups
+            )
         patched_model = ApplyAnimaRegionalConditioningPatch().apply(
             model=model,
             regions=regions,
@@ -580,6 +594,8 @@ class BVRegionalAnimaConditioningNode:
             self_inject_every_n_blocks=self_inject_every_n_blocks,
             background_conditioning=background,
         )[0]
+        if regional_lora_mode == "token_gated_singlepass":
+            patched_model = apply_anima_token_lora_patch(patched_model, scope_stacks)
         return patched_model, positive, negative
 
 

@@ -237,6 +237,75 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalAnimaConditioningNode.RETURN_TYPES,
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
+        mode = self.module.BVRegionalAnimaConditioningNode.INPUT_TYPES()["required"]["regional_lora_mode"]
+        self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
+        self.assertEqual(mode[1]["default"], "multipass_legacy")
+
+    def test_anima_singlepass_skips_legacy_model_hook_passes(self):
+        node = self.module.BVRegionalAnimaConditioningNode()
+
+        class FakeApply:
+            def apply(self, **_kwargs):
+                return ("attention-model",)
+
+        fake_patcher = types.ModuleType(f"{PACKAGE}.py.util.regional.anima_patcher")
+        fake_patcher.ApplyAnimaRegionalConditioningPatch = FakeApply
+        with (
+            unittest.mock.patch.dict(sys.modules, {fake_patcher.__name__: fake_patcher}),
+            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
+            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
+            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
+            unittest.mock.patch.object(
+                self.module, "compile_anima_adapter",
+                return_value=(["positive"], ["negative"], "regions", ["background"]),
+            ),
+            unittest.mock.patch.object(self.module, "apply_attention_hook_passes") as legacy,
+            unittest.mock.patch.object(
+                self.module, "apply_anima_token_lora_patch", return_value="singlepass-model"
+            ) as singlepass,
+        ):
+            result = node.apply(
+                "model", "clip", fixture(), "disabled", 0.2, 0.0, 0.35,
+                1.0, 0.2, 0.1, 1, 1,
+                regional_lora_mode="token_gated_singlepass",
+            )
+
+        legacy.assert_not_called()
+        singlepass.assert_called_once_with("attention-model", {"region-a": []})
+        self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+
+    def test_anima_call_without_mode_preserves_legacy_hook_passes(self):
+        node = self.module.BVRegionalAnimaConditioningNode()
+
+        class FakeApply:
+            def apply(self, **_kwargs):
+                return ("attention-model",)
+
+        fake_patcher = types.ModuleType(f"{PACKAGE}.py.util.regional.anima_patcher")
+        fake_patcher.ApplyAnimaRegionalConditioningPatch = FakeApply
+        with (
+            unittest.mock.patch.dict(sys.modules, {fake_patcher.__name__: fake_patcher}),
+            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
+            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
+            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
+            unittest.mock.patch.object(
+                self.module, "compile_anima_adapter",
+                return_value=(["positive"], ["negative"], "regions", ["background"]),
+            ),
+            unittest.mock.patch.object(
+                self.module, "apply_attention_hook_passes",
+                return_value=(["legacy-positive"], ["legacy-negative"]),
+            ) as legacy,
+            unittest.mock.patch.object(self.module, "apply_anima_token_lora_patch") as singlepass,
+        ):
+            result = node.apply(
+                "model", "clip", fixture(), "disabled", 0.2, 0.0, 0.35,
+                1.0, 0.2, 0.1, 1, 1,
+            )
+
+        legacy.assert_called_once()
+        singlepass.assert_not_called()
+        self.assertEqual(result, ("attention-model", ["legacy-positive"], ["legacy-negative"]))
 
     def test_color_control_node_is_registered_and_returns_image_with_legend(self):
         node = self.module.BVRegionalColorControlImageNode()

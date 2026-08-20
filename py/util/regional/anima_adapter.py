@@ -21,6 +21,7 @@ class AnimaRegionChain:
     mask: torch.Tensor
     conditioning: list
     weight: float
+    scope: str | None = None
 
     def flatten(self) -> list["AnimaRegionChain"]:
         regions = []
@@ -103,6 +104,7 @@ def compile_anima_adapter(
             mask=mask.detach().float().clamp(0.0, 1.0).cpu().contiguous(),
             conditioning=_encode(clip, prompt["text"], scoped_hooks.get(region["id"])),
             weight=float(region["strength"]),
+            scope=region["id"],
         )
 
     if chain is None:
