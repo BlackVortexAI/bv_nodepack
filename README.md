@@ -466,6 +466,17 @@ character attributes spatially separated.
 routes Global, Background and regional Qwen3-VL text contexts through all 28 main
 single-stream joint-attention blocks. It works with a normal KSampler.
 
+> [!WARNING]
+> **Temporary Krea 2 FP8 limitation:** Regional LoRA hooks can currently fail on
+> quantized Krea 2 models with
+> `AttributeError: 'Linear' object has no attribute 'weight_scale'` (or a similar
+> missing quantization attribute). This is an upstream ComfyUI core issue tracked
+> in [ComfyUI #14382](https://github.com/Comfy-Org/ComfyUI/issues/14382), not a
+> missing BV Node Pack dependency. To keep regional LoRAs connected, use a
+> non-quantized Krea 2 model or apply the upstream temporary `model_patcher.py`
+> workaround described in that issue. Remove any local core patch after ComfyUI
+> ships an official fix.
+
 Four upstream text-fusion/refiner blocks execute before the public attention-patch
 seam and remain global. The backend therefore improves spatial prompt-to-region
 binding but is not strict end-to-end isolation.
