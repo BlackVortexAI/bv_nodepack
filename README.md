@@ -1177,6 +1177,12 @@ projects helped shape its product ideas, interaction patterns and technical rese
 - [ComfyUI_LC123_nodes](https://github.com/lonecatone23/ComfyUI_LC123_nodes)
   demonstrated painted regional authoring and provided useful Krea 2 and Anima
   workflow references.
+- [ComfyUI-Krea2-Regional](https://github.com/januspluto/ComfyUI-Krea2-Regional)
+  by januspluto provided the reference implementation and core activation-space
+  approach for token-gated single-pass regional LoRA and LoKr execution on Krea 2.
+  BV adapts those techniques to its regional document, named LoRA-stack and
+  compatibility architecture; the upstream MIT attribution is reproduced in
+  [Third-Party Notices](THIRD_PARTY_NOTICES.md).
 - [Comfyui-Anima-Regional-Conditioning](https://github.com/Sen-sou/Comfyui-Anima-Regional-Conditioning)
   provided the technical basis for the built-in Anima patch. Its MIT attribution
   is reproduced in [Third-Party Notices](THIRD_PARTY_NOTICES.md).
