@@ -10,7 +10,7 @@ function id() {
     return globalThis.crypto?.randomUUID?.() ?? `bv-control-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-const BVControlComponent: FC<{ onClose(): void }> = ({ onClose }) => {
+const BVControlComponent: FC = () => {
     const [config, setConfig] = useState<BVControlConfig>(() => {
         const current = readConfig();
         const available = new Set(collectAllGroups(getApp()).map((group) => group.id));
@@ -49,11 +49,10 @@ const BVControlComponent: FC<{ onClose(): void }> = ({ onClose }) => {
         setConfig(resolved);
     };
 
-    return <div className="bv-rack">
-        <header><div><h2>BV Control Rack</h2><p>User-defined workflow states</p></div><button onClick={onClose}>×</button></header>
+    return <div className="bv-ui-stack">
         <label className="bv-force"><input type="checkbox" checked={config.forceActive} onChange={(event) => setConfig({ ...config, forceActive: event.target.checked })} /> Force active after releasing restrictions</label>
         <div className="bv-controls">{config.controls.map((control, index) => <BVControlRowComponent key={control.id} control={control} groups={groups} conflicts={conflicts} onChange={(value) => updateControl(index, value)} />)}</div>
-        <footer><button onClick={addControl}>Add Control</button><button className="primary" onClick={save}>Save Configuration</button></footer>
+        <footer className="bv-ui-inline-footer"><button className="bv-ui-button bv-ui-button--secondary" onClick={addControl}>Add Control</button><button className="bv-ui-button bv-ui-button--primary" onClick={save}>Save Configuration</button></footer>
     </div>;
 };
 

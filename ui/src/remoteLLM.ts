@@ -1,3 +1,5 @@
+import { createBvButton, createBvDialog, createBvField } from "./ui/dom";
+
 type ProviderProfile = {
     id: string;
     label: string;
@@ -66,30 +68,19 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
     if (!selected) return;
     if (selected.auth_mode === "none") return;
-    const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;inset:0;z-index:100000;background:#0009;display:grid;place-items:center";
-    const panel = document.createElement("div");
-    panel.style.cssText = "width:min(460px,calc(100vw - 32px));background:#202225;color:#eee;border:1px solid #555;border-radius:10px;padding:18px;font:14px sans-serif;box-shadow:0 18px 60px #000";
-    const title = document.createElement("h3");
-    title.textContent = `${selected.label} API Key`;
-    title.style.margin = "0 0 12px";
+    const shell = createBvDialog({ title: `${selected.label} API Key`, description: "Credentials are stored by the local BV Nodepack backend and are never written into the workflow.", size: "small" });
     const status = document.createElement("div");
     status.textContent = selected.configured ? "A key is configured. Enter a new key to replace it." : "No key is configured.";
-    status.style.cssText = "margin-bottom:10px;color:#bbb";
+    status.className = "bv-ui-status";
     const input = document.createElement("input");
     input.type = "password";
     input.autocomplete = "off";
     input.placeholder = "Paste API key";
-    input.style.cssText = "box-sizing:border-box;width:100%;padding:9px;background:#111;color:#fff;border:1px solid #666;border-radius:5px";
     const error = document.createElement("div");
-    error.style.cssText = "min-height:18px;margin-top:8px;color:#ff8b8b";
-    const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:10px";
-    const button = (label: string) => { const element = document.createElement("button"); element.textContent = label; element.style.padding = "7px 12px"; return element; };
-    const close = button("Cancel"), remove = button("Delete key"), save = button("Save key");
+    error.className = "bv-ui-status bv-ui-status--error";
+    const close = createBvButton("Cancel"), remove = createBvButton("Delete key", "danger"), save = createBvButton("Save key", "primary");
     remove.disabled = !selected.configured;
-    close.onclick = () => overlay.remove();
-    overlay.onclick = event => { if (event.target === overlay) overlay.remove(); };
+    close.onclick = shell.close;
     save.onclick = async () => {
         error.textContent = "";
         const response = await fetch(api.apiURL("/bv_nodepack/remote_llm/api_key"), {
@@ -99,7 +90,7 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         if (!response.ok) { error.textContent = (await response.json().catch(() => null))?.error ?? "Could not save API key."; return; }
         selected.configured = true;
         applyProfile(node, profiles);
-        overlay.remove();
+        shell.close();
         loadProfiles(api, true);
     };
     remove.onclick = async () => {
@@ -107,13 +98,12 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         if (!response.ok) { error.textContent = "Could not delete API key."; return; }
         selected.configured = false;
         applyProfile(node, profiles);
-        overlay.remove();
+        shell.close();
         loadProfiles(api, true);
     };
-    actions.append(remove, close, save);
-    panel.append(title, status, input, error, actions);
-    overlay.append(panel);
-    document.body.append(overlay);
+    shell.body.append(status, createBvField("API key", input), error);
+    shell.footer.append(remove, close, save);
+    shell.show();
     input.focus();
 };
 

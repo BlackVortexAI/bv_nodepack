@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BV UI Component Showcase</title>
+  <link rel="stylesheet" href="./extended-controls.css">
+  <style>
+    /* Persistent BV UI component showcase and visual implementation reference. */
+    :root {
+      color-scheme: dark;
+      --bv-canvas: #121116;
+      --bv-window: #1e1c24;
+      --bv-surface: #2a2732;
+      --bv-input: #17161b;
+      --bv-border: rgba(231, 225, 247, 0.14);
+      --bv-border-hover: rgba(231, 225, 247, 0.24);
+      --bv-text: #f2eef8;
+      --bv-muted: #a8a1b3;
+      --bv-purple: #8d70ff;
+      --bv-danger: #ee6f83;
+      --bv-disabled: rgba(168, 161, 179, 0.45);
+      --bv-ui-scale: 1;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bv-canvas);
+      color: var(--bv-text);
+    }
+
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; background: radial-gradient(circle at 80% 0, rgba(141,112,255,.09), transparent 32%), var(--bv-canvas); }
+    button, input { font: inherit; }
+    .prototype-page { width:min(920px,calc(100% - 31.5px)); margin:0 auto; padding:63px 0 135px; zoom:var(--bv-ui-scale); }
+    html.bv-ui-small { --bv-ui-scale:.888889; }
+    html.bv-ui-small .prototype-page { width:min(1035px,calc(100% - 36px)); }
+    html.bv-ui-large { --bv-ui-scale:1.111111; }
+    html.bv-ui-large .prototype-page { width:min(828px,calc(100% - 29.25px)); }
+    .prototype-kicker { margin: 0 0 9px; color: var(--bv-purple); font-size: 13.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(29.25px, 5vw, 47.25px); line-height: 1.1; }
+    .prototype-intro { max-width: 742.5px; margin: 15.75px 0 40.5px; color: var(--bv-muted); line-height: 1.55; }
+    .prototype-window { padding: 31.5px; border: 1.125px solid var(--bv-border); border-radius: 15.75px; background: var(--bv-window); box-shadow: 0 27px 78.75px rgba(5,4,9,.36), inset 0 1.125px rgba(255,255,255,.05); }
+    .variant-title { display:flex; align-items:baseline; justify-content:space-between; gap:18px; margin-bottom:29.25px; padding-bottom:20.25px; border-bottom:1.125px solid var(--bv-border); }
+    .variant-title h2 { margin:0; font-size:20.25px; font-weight:600; }
+    .variant-title span { color:var(--bv-muted); font-size:13.5px; }
+    .input-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:27px; }
+    .input-demo { min-width:0; }
+    .input-demo-wide { grid-column:1/-1; }
+    .demo-name { display:block; margin-bottom:11.25px; color:var(--bv-muted); font-size:13.5px; }
+    .helper { display:block; margin-top:7.875px; color:var(--bv-muted); font-size:13.5px; }
+    .helper.error { color:var(--bv-danger); }
+
+    .ci-reference { display:grid; gap:20.25px; margin-bottom:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .ci-reference header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .ci-reference h2 { margin:0; font-size:18px; }
+    .ci-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .ci-palette { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px; }
+    .ci-swatch { min-width:0; }
+    .ci-color { height:49.5px; border-radius:9px; background:var(--swatch); box-shadow:inset 0 0 0 1.125px rgba(255,255,255,.12); }
+    .ci-swatch span,.ci-swatch code { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ci-swatch span { margin-top:6.75px; font-size:12.375px; }
+    .ci-swatch code { margin-top:2.25px; color:var(--bv-muted); font-size:11.25px; }
+    .ci-forms { display:flex; flex-wrap:wrap; gap:20.25px; align-items:center; padding-top:4.5px; border-top:1.125px solid var(--bv-border); }
+    .ci-form { display:flex; align-items:center; gap:9px; color:var(--bv-muted); font-size:12.375px; }
+    .ci-shape { width:49.5px; height:36px; border:1.125px solid var(--bv-border); background:var(--bv-surface); }
+    .ci-radius-sm { border-radius:6.75px; }.ci-radius-md { border-radius:9px; }.ci-radius-lg { border-radius:15.75px; }
+    .ci-focus { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .ci-glass { background:rgba(42,39,50,.7); box-shadow:0 9px 22.5px rgba(0,0,0,.25); backdrop-filter:blur(13.5px); }
+
+    .component-divider { grid-column:1/-1; display:flex; align-items:center; gap:13.5px; margin:9px 0 2.25px; color:var(--bv-muted); font-size:13.5px; }
+    .component-divider::after { content:""; flex:1; height:1.125px; background:var(--bv-border); }
+    .number-field { display:grid; gap:9px; }
+    .number-label-row { display:flex; align-items:center; gap:13.5px; color:var(--bv-muted); font-size:13.5px; }
+    .number-value-row { display:grid; grid-template-columns:minmax(90px,1fr) minmax(166.5px,auto); align-items:center; gap:15.75px; }
+    .number-track { width:100%; height:20.25px; margin:0; padding:0; appearance:none; background:transparent; cursor:pointer; }
+    .number-track::-webkit-slider-runnable-track { height:4.5px; border-radius:1123.875px; background:linear-gradient(90deg,var(--bv-purple) 0 var(--range-fill,50%),rgba(168,161,179,.18) var(--range-fill,50%) 100%); }
+    .number-track::-webkit-slider-thumb { width:18px; height:18px; margin-top:-6px; appearance:none; border:2.25px solid var(--bv-window); border-radius:50%; background:var(--bv-purple); box-shadow:0 0 0 1.125px rgba(141,112,255,.34),0 3.375px 9px rgba(0,0,0,.32); }
+    .number-track:hover::-webkit-slider-thumb { background:#9a82ff; }
+    .number-track:focus-visible::-webkit-slider-thumb { box-shadow:0 0 0 4.5px rgba(141,112,255,.2),0 3.375px 9px rgba(0,0,0,.32); }
+    .number-track::-moz-range-track { height:4.5px; border-radius:1123.875px; background:rgba(168,161,179,.18); }
+    .number-track::-moz-range-progress { height:4.5px; border-radius:1123.875px; background:var(--bv-purple); }
+    .number-track::-moz-range-thumb { width:15.75px; height:15.75px; border:2.25px solid var(--bv-window); border-radius:50%; background:var(--bv-purple); box-shadow:0 0 0 1.125px rgba(141,112,255,.34),0 3.375px 9px rgba(0,0,0,.32); }
+    .number-slider { position:relative; min-width:0; }
+    .number-bubble { position:absolute; z-index:2; left:var(--bubble-left,50%); bottom:calc(100% + 7.875px); translate:-50% 3.375px; padding:5.625px 7.875px; color:var(--bv-text); white-space:nowrap; background:#302c3a; border:1.125px solid rgba(231,225,247,.18); border-radius:6.75px; box-shadow:0 7.875px 22.5px rgba(0,0,0,.32); font-size:12.375px; opacity:0; pointer-events:none; transition:opacity .12s ease,translate .12s ease; }
+    .number-bubble::after { content:""; position:absolute; top:100%; left:50%; width:7.875px; height:7.875px; translate:-50% -4px; rotate:45deg; background:#302c3a; border-right:1.125px solid rgba(231,225,247,.18); border-bottom:1.125px solid rgba(231,225,247,.18); }
+    .number-slider:hover .number-bubble,.number-slider:focus-within .number-bubble,.number-slider.is-dragging .number-bubble { opacity:1; translate:-50% 0; }
+    .number-box { display:flex; min-width:166.5px; height:47.25px; overflow:hidden; background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; transition:border-color .14s ease,box-shadow .14s ease; }
+    .number-box:hover { border-color:var(--bv-border-hover); }
+    .number-box:focus-within { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .number-box input { min-width:0; width:100%; padding:0 11.25px; color:var(--bv-text); text-align:right; background:transparent; border:0; outline:0; }
+    .number-box input { font-variant-numeric:tabular-nums; }
+    .number-unit { display:grid; place-items:center; min-width:42.75px; padding:0 10.125px; color:var(--bv-muted); background:rgba(255,255,255,.035); border-left:1.125px solid var(--bv-border); font-size:13.5px; user-select:none; }
+    .number-ticks { display:flex; justify-content:space-between; padding-right:141.75px; color:var(--bv-muted); font-size:11.25px; }
+    .number-field.compact { grid-template-columns:135px minmax(90px,1fr) minmax(166.5px,auto); align-items:center; }
+    .number-field.compact .number-label-row { display:block; }
+    .number-field.compact .number-value-row { display:contents; }
+    .number-field.compact .number-ticks { display:none; }
+    .number-field.compact .number-box { height:40.5px; }
+    .number-field.stacked .number-value-row { grid-template-columns:1fr; }
+    .number-field.stacked .number-box { width:166.5px; justify-self:end; }
+    .number-field.stacked .number-ticks { padding-right:0; }
+    .icon-field { display:grid; gap:7.875px; }
+    .icon-field > label { color:var(--bv-muted); font-size:13.5px; }
+    .icon-input-shell { display:flex; align-items:center; height:47.25px; overflow:hidden; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; transition:border-color .14s ease,box-shadow .14s ease; }
+    .icon-input-shell:hover { border-color:var(--bv-border-hover); }
+    .icon-input-shell:focus-within { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .field-icon { display:grid; place-items:center; width:42.75px; height:100%; flex:0 0 42.75px; color:var(--bv-muted); border-right:1.125px solid var(--bv-border); }
+    .field-icon svg { width:19.125px; height:19.125px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .icon-input-shell input { min-width:0; width:100%; height:100%; padding:0 12.375px; color:var(--bv-text); background:transparent; border:0; outline:0; }
+    .textarea-field { display:grid; gap:7.875px; }
+    .textarea-field > label { color:var(--bv-muted); font-size:13.5px; }
+    .textarea-shell { display:flex; align-items:stretch; min-height:126px; overflow:hidden; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; transition:border-color .14s ease,box-shadow .14s ease; }
+    .textarea-shell:hover { border-color:var(--bv-border-hover); }
+    .textarea-shell:focus-within { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .textarea-shell .field-icon { height:auto; align-self:stretch; padding-top:13.5px; place-items:start center; }
+    .textarea-shell textarea { min-width:0; width:100%; min-height:123.75px; max-height:360px; padding:12.375px 13.5px; color:var(--bv-text); background:transparent; border:0; outline:0; resize:vertical; font:inherit; line-height:1.45; }
+    .textarea-shell textarea::placeholder { color:rgba(168,161,179,.58); }
+    .textarea-resize-boundary { width:100%; min-width:0; max-width:100%; overflow:hidden; contain:inline-size; }
+    .textarea-shell.resize-both { width:min(585px,75%); min-width:min(292.5px,100%); max-width:100%; min-height:126px; max-height:360px; overflow:auto; resize:both; }
+    .textarea-shell.resize-both textarea { height:100%; min-height:100%; max-height:none; resize:none; }
+    .textarea-field.error .textarea-shell { border-color:rgba(238,111,131,.72); }
+    .textarea-field.error .textarea-shell:focus-within { box-shadow:0 0 0 3.375px rgba(238,111,131,.16); }
+    .textarea-integrated { position:relative; padding-top:6.75px; }
+    .textarea-integrated > label { position:absolute; z-index:1; top:0; left:11.25px; padding:0 5.625px; background:var(--bv-window); font-size:12.375px; }
+    .textarea-integrated .textarea-shell { min-height:144px; border-radius:11.25px; }
+    .textarea-inspector { display:grid; grid-template-columns:135px minmax(0,1fr); gap:18px; align-items:start; }
+    .textarea-inspector > label { padding-top:11.25px; }
+    .textarea-inspector .textarea-shell { min-height:101.25px; }
+    .textarea-inspector .textarea-shell textarea { min-height:99px; }
+    .boolean-field { display:grid; gap:7.875px; }
+    .boolean-field > label,.boolean-field > .boolean-label { color:var(--bv-muted); font-size:13.5px; }
+    .boolean-row { display:flex; min-height:42.75px; align-items:center; gap:11.25px; }
+    .boolean-switch { position:relative; display:inline-flex; align-items:center; gap:11.25px; cursor:pointer; }
+    .boolean-switch input { width:47.25px; height:24.75px; margin:0; appearance:none; background:rgba(168,161,179,.22); border:1.125px solid var(--bv-border); border-radius:1123.875px; cursor:pointer; transition:background-color .14s ease,border-color .14s ease; }
+    .boolean-switch input::before { content:""; display:block; width:18px; height:18px; margin:2.25px; background:#c8c2d0; border-radius:50%; box-shadow:0 2.25px 6.75px rgba(0,0,0,.34); transition:translate .14s ease,background-color .14s ease; }
+    .boolean-switch input:checked { background:var(--bv-purple); border-color:var(--bv-purple); }
+    .boolean-switch input:checked::before { translate:22.5px 0; background:white; }
+    .boolean-switch input:focus-visible { outline:3.375px solid rgba(141,112,255,.22); outline-offset:2.25px; }
+    .boolean-status { min-width:47.25px; color:var(--bv-text); font-size:13.5px; }
+    .boolean-checkbox { display:inline-flex; align-items:center; gap:10.125px; color:var(--bv-text); cursor:pointer; }
+    .boolean-checkbox input { width:19.125px; height:19.125px; margin:0; accent-color:var(--bv-purple); }
+    .boolean-select { width:min(202.5px,100%); height:45px; padding:0 38.25px 0 12.375px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; outline:none; }
+    .boolean-select:hover { border-color:var(--bv-border-hover); }
+    .boolean-select:focus { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .boolean-reference { display:grid; gap:20.25px; margin-top:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .boolean-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .boolean-reference h2 { margin:0; font-size:18px; }
+    .boolean-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .boolean-comparison { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:22.5px; }
+    .boolean-example { display:grid; align-content:start; gap:13.5px; min-width:0; padding:18px; background:rgba(18,17,22,.5); border:1.125px solid var(--bv-border); border-radius:11.25px; }
+    .boolean-example > strong { font-size:14.625px; }
+    .boolean-example > small { color:var(--bv-muted); font-size:12.375px; line-height:1.45; }
+    .dropdown-reference { display:grid; gap:20.25px; margin-top:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .dropdown-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .dropdown-reference h2 { margin:0; font-size:18px; }
+    .dropdown-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .dropdown-comparison { display:grid; grid-template-columns:minmax(247.5px,.65fr) minmax(360px,1.35fr); gap:22.5px; align-items:start; }
+    .dropdown-example { display:grid; gap:13.5px; min-width:0; padding:18px; background:rgba(18,17,22,.5); border:1.125px solid var(--bv-border); border-radius:11.25px; }
+    .dropdown-example > strong { font-size:14.625px; }
+    .dropdown-field { display:grid; gap:7.875px; }
+    .dropdown-field > label { color:var(--bv-muted); font-size:13.5px; }
+    .single-select { width:100%; height:47.25px; padding:0 40.5px 0 12.375px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; outline:none; }
+    .single-select:hover { border-color:var(--bv-border-hover); }
+    .single-select:focus { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .rich-dropdown { position:relative; min-width:0; }
+    .rich-trigger { display:grid; grid-template-columns:38.25px minmax(0,1fr) 22.5px; align-items:center; gap:11.25px; width:100%; min-height:60.75px; padding:7.875px 11.25px; color:var(--bv-text); text-align:left; background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; cursor:pointer; }
+    .rich-trigger:hover { border-color:var(--bv-border-hover); }
+    .rich-trigger[aria-expanded="true"] { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .option-icon { display:grid; place-items:center; width:36px; height:36px; color:#dcd3ff; background:rgba(141,112,255,.16); border-radius:9px; }
+    .option-icon svg { width:19.125px; height:19.125px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .rich-copy { min-width:0; }
+    .rich-copy strong,.rich-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .rich-copy strong { font-size:13.5px; font-weight:600; }
+    .rich-copy small { margin-top:3.375px; color:var(--bv-muted); font-size:12.375px; }
+    .rich-chevron { color:var(--bv-muted); text-align:center; }
+    .rich-menu { position:absolute; z-index:20; top:calc(100% + 7.875px); left:0; width:100%; min-width:371.25px; padding:9px; background:#24212b; border:1.125px solid rgba(231,225,247,.18); border-radius:11.25px; box-shadow:0 20.25px 60.75px rgba(0,0,0,.55); }
+    .rich-search { width:100%; height:42.75px; margin-bottom:7.875px; padding:0 11.25px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:7.875px; outline:none; }
+    .rich-search:focus { border-color:var(--bv-purple); box-shadow:0 0 0 2.25px rgba(141,112,255,.16); }
+    .rich-list { display:grid; gap:3.375px; max-height:292.5px; overflow:auto; }
+    .rich-option-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:6.75px; border-radius:7.875px; }
+    .rich-option-row:hover,.rich-option-row[aria-selected="true"] { background:rgba(141,112,255,.12); }
+    .rich-option-select { display:grid; grid-template-columns:38.25px minmax(0,1fr); align-items:center; gap:11.25px; min-width:0; padding:7.875px; color:var(--bv-text); text-align:left; background:transparent; border:0; cursor:pointer; }
+    .rich-option-select:focus-visible { outline:2.25px solid var(--bv-purple); outline-offset:-2px; border-radius:7.875px; }
+    .option-info { margin:0 7.875px 9px 0; padding:3.375px 5.625px; color:#b9a9ff; background:transparent; border:0; border-radius:5.625px; cursor:pointer; font-size:12.375px; }
+    .option-info:hover { background:rgba(141,112,255,.14); }
+    .dropdown-status { min-height:18px; color:var(--bv-muted); font-size:12.375px; }
+    .search-reference { display:grid; gap:20.25px; margin-top:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .search-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .search-reference h2 { margin:0; font-size:18px; }
+    .search-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .search-config { display:flex; flex-wrap:wrap; gap:15.75px; align-items:end; }
+    .search-config label { display:grid; gap:6.75px; color:var(--bv-muted); font-size:13.5px; }
+    .search-config select { min-width:168.75px; height:42.75px; padding:0 36px 0 11.25px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:7.875px; }
+    .autocomplete { position:relative; width:min(697.5px,100%); }
+    .search-shell { display:grid; grid-template-columns:42.75px minmax(0,1fr) 38.25px; align-items:center; height:49.5px; overflow:hidden; background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; }
+    .search-shell:focus-within { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .search-shell .field-icon { border-right:0; }
+    .search-shell input { min-width:0; width:100%; height:100%; padding:0; color:var(--bv-text); background:transparent; border:0; outline:0; }
+    .search-clear { width:33.75px; height:33.75px; color:var(--bv-muted); background:transparent; border:0; border-radius:6.75px; cursor:pointer; }
+    .search-clear:hover { color:var(--bv-text); background:rgba(255,255,255,.07); }
+    .search-menu { position:absolute; z-index:21; top:calc(100% + 7.875px); left:0; width:100%; padding:9px; background:#24212b; border:1.125px solid rgba(231,225,247,.18); border-radius:11.25px; box-shadow:0 20.25px 60.75px rgba(0,0,0,.55); }
+    .search-results { display:grid; gap:3.375px; max-height:326.25px; overflow:auto; }
+    .search-empty { padding:15.75px; color:var(--bv-muted); text-align:center; font-size:13.5px; }
+    .search-result { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:6.75px; border-radius:7.875px; }
+    .search-result[aria-selected="true"],.search-result:hover { background:rgba(141,112,255,.12); }
+    .search-result-select { display:grid; grid-template-columns:38.25px minmax(0,1fr); align-items:center; gap:11.25px; min-width:0; padding:7.875px; color:var(--bv-text); text-align:left; background:transparent; border:0; cursor:pointer; }
+    .search-result-select:focus-visible { outline:2.25px solid var(--bv-purple); outline-offset:-2px; border-radius:7.875px; }
+    .search-result-info { margin:0 7.875px 9px 0; padding:3.375px 5.625px; color:#b9a9ff; background:transparent; border:0; border-radius:5.625px; cursor:pointer; font-size:12.375px; }
+    .search-result-info:hover { background:rgba(141,112,255,.14); }
+    .search-state { min-height:19.125px; color:var(--bv-muted); font-size:12.375px; }
+    .multi-reference { display:grid; gap:20.25px; margin-top:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .multi-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .multi-reference h2 { margin:0; font-size:18px; }
+    .multi-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .multi-grid { display:grid; grid-template-columns:1fr 1fr; gap:22.5px; align-items:start; }
+    .multi-example { display:grid; gap:11.25px; min-width:0; }
+    .multi-example > strong { font-size:14.625px; }
+    .multi-control { display:flex; flex-wrap:wrap; align-items:center; gap:6.75px; min-height:49.5px; padding:5.625px 42.75px 5.625px 6.75px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; }
+    .multi-control:focus-within { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .selection-tag { display:inline-flex; align-items:center; gap:5.625px; min-width:0; max-width:213.75px; padding:4.5px 5.625px 4.5px 9px; color:#ddd5ff; background:rgba(141,112,255,.14); border:1.125px solid rgba(141,112,255,.2); border-radius:6.75px; font-size:12.375px; }
+    .selection-tag span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .selection-tag button { display:grid; place-items:center; width:20.25px; height:20.25px; flex:0 0 20.25px; padding:0; color:var(--bv-muted); background:transparent; border:0; border-radius:4.5px; cursor:pointer; }
+    .selection-tag button:hover { color:var(--bv-text); background:rgba(255,255,255,.08); }
+    .multi-dropdown,.multi-search { position:relative; min-width:0; }
+    .multi-trigger { position:absolute; top:7.875px; right:7.875px; width:33.75px; height:33.75px; color:var(--bv-muted); background:transparent; border:0; border-radius:6.75px; cursor:pointer; }
+    .multi-trigger:hover { color:var(--bv-text); background:rgba(255,255,255,.07); }
+    .multi-menu { position:absolute; z-index:22; top:calc(100% + 7.875px); left:0; width:100%; min-width:337.5px; padding:9px; background:#24212b; border:1.125px solid rgba(231,225,247,.18); border-radius:11.25px; box-shadow:0 20.25px 60.75px rgba(0,0,0,.55); }
+    .multi-option { display:flex; align-items:center; gap:10.125px; width:100%; padding:9px; color:var(--bv-text); text-align:left; background:transparent; border:0; border-radius:7.875px; cursor:pointer; }
+    .multi-option:hover,.multi-option[aria-selected="true"] { background:rgba(141,112,255,.12); }
+    .multi-check { display:grid; place-items:center; width:19.125px; height:19.125px; flex:0 0 19.125px; border:1.125px solid var(--bv-border-hover); border-radius:4.5px; color:white; font-size:12.375px; }
+    .multi-option[aria-selected="true"] .multi-check { background:var(--bv-purple); border-color:var(--bv-purple); }
+    .multi-search-input { flex:1 1 135px; min-width:90px; height:33.75px; padding:0 5.625px; color:var(--bv-text); background:transparent; border:0; outline:0; }
+    .multi-search-results { display:grid; gap:3.375px; max-height:270px; overflow:auto; }
+    .optionset-reference { display:grid; gap:20.25px; margin-top:40.5px; padding:24.75px; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .optionset-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .optionset-reference h2 { margin:0; font-size:18px; }
+    .optionset-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .optionset-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:22.5px; align-items:start; }
+    .optionset-example { display:grid; align-content:start; gap:13.5px; min-width:0; padding:18px; background:rgba(18,17,22,.5); border:1.125px solid var(--bv-border); border-radius:11.25px; }
+    .optionset-example > strong { font-size:14.625px; }
+    .optionset-label { color:var(--bv-muted); font-size:13.5px; }
+    .radio-group { display:grid; gap:10.125px; }
+    .radio-option { display:flex; align-items:center; gap:10.125px; color:var(--bv-text); cursor:pointer; }
+    .radio-option input { width:19.125px; height:19.125px; margin:0; accent-color:var(--bv-purple); }
+    .segmented-control { display:inline-flex; max-width:100%; overflow:hidden; border:1.125px solid var(--bv-border); border-radius:9px; background:var(--bv-input); }
+    .segment { position:relative; min-width:0; flex:1 1 auto; }
+    .segment + .segment { border-left:1.125px solid var(--bv-border); }
+    .segment input { position:absolute; opacity:0; pointer-events:none; }
+    .segment span { display:grid; place-items:center; min-height:42.75px; padding:0 14.625px; color:var(--bv-muted); white-space:nowrap; cursor:pointer; }
+    .segment input:checked + span { color:white; background:rgba(141,112,255,.28); box-shadow:inset 0 0 0 1.125px rgba(141,112,255,.32); }
+    .segment input:focus-visible + span { outline:2.25px solid var(--bv-purple); outline-offset:-3px; }
+    .optionset-status { min-height:18px; color:var(--bv-muted); font-size:12.375px; }
+
+    .adaptive-reference { display:grid; gap:20.25px; min-width:0; margin-top:40.5px; padding:24.75px; overflow:hidden; border:1.125px solid var(--bv-border); border-radius:15.75px; background:rgba(30,28,36,.72); }
+    .adaptive-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .adaptive-reference h2 { margin:0; font-size:18px; }
+    .adaptive-reference header span,.adaptive-help { color:var(--bv-muted); font-size:13.5px; }
+    .adaptive-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:20.25px; align-items:start; }
+    .adaptive-case { display:grid; gap:9px; min-width:0; max-width:100%; overflow:hidden; contain:inline-size; }
+    .adaptive-case-wide { grid-column:1/-1; }
+    .adaptive-case > strong { font-size:13.5px; font-weight:600; }
+    .space-demo { position:relative; container-type:inline-size; box-sizing:border-box; width:100%; min-width:168.75px; max-width:100%; padding:15.75px; overflow:hidden; background:rgba(18,17,22,.58); border:1.125px dashed rgba(231,225,247,.18); border-radius:11.25px; }
+    .space-resize-handle { position:absolute; z-index:5; right:0; bottom:0; width:22.5px; height:22.5px; padding:0; touch-action:none; cursor:ew-resize; background:transparent; border:0; }
+    .space-resize-handle::after { content:""; position:absolute; right:4.5px; bottom:4.5px; width:7.875px; height:7.875px; border-right:1.125px solid var(--bv-muted); border-bottom:1.125px solid var(--bv-muted); }
+    .space-resize-handle:hover::after,.space-resize-handle:focus-visible::after { border-color:var(--bv-purple); }
+    .compact-trigger { display:none; align-items:center; justify-content:space-between; gap:9px; width:100%; height:42.75px; padding:0 10.125px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; cursor:pointer; }
+    .compact-trigger .field-icon { width:31.5px; height:31.5px; flex-basis:31.5px; border:0; }
+    .compact-trigger .compact-value { min-width:0; overflow:hidden; color:var(--bv-muted); text-overflow:ellipsis; white-space:nowrap; }
+    .field-popover { width:min(438.75px,calc(100vw - 36px)); margin:auto; padding:18px; color:var(--bv-text); background:#24212b; border:1.125px solid rgba(231,225,247,.18); border-radius:13.5px; box-shadow:0 22.5px 72px rgba(0,0,0,.55); }
+    /* Canvas contract: BV overlays never blur, dim, or block the ComfyUI canvas. */
+    .field-popover::backdrop { background:transparent; backdrop-filter:none; pointer-events:none; }
+    .field-popover header { display:flex; align-items:center; justify-content:space-between; gap:13.5px; margin-bottom:18px; }
+    .field-popover header strong { font-size:14.625px; }
+    .field-popover-close { width:33.75px; height:33.75px; color:var(--bv-muted); background:transparent; border:0; border-radius:7.875px; cursor:pointer; }
+    .field-popover .textarea-shell { min-height:258.75px; }
+    .field-popover .textarea-shell textarea { min-height:256.5px; max-height:55vh; }
+    .popover-number-field { grid-template-columns:minmax(0,1fr) auto; gap:10.125px 13.5px; }
+    .popover-number-field .number-label-row { grid-column:1/-1; grid-row:1; }
+    .popover-number-field .number-value-row { display:contents; }
+    .popover-number-field .number-slider { grid-column:1/-1; grid-row:2; width:100%; }
+    .popover-number-field .number-ticks { grid-column:1/-1; grid-row:3; padding-right:0; }
+    .popover-number-field .number-box { grid-column:1/-1; grid-row:4; width:min(292.5px,100%); margin-top:7.875px; justify-self:center; }
+    .blur-reference { display:grid; gap:15.75px; margin-top:40.5px; }
+    .blur-reference > header { display:flex; align-items:baseline; justify-content:space-between; gap:18px; }
+    .blur-reference h2 { margin:0; font-size:18px; }
+    .blur-reference header span { color:var(--bv-muted); font-size:13.5px; }
+    .blur-stage { position:relative; min-height:585px; overflow:hidden; border:1.125px solid var(--bv-border); border-radius:15.75px; background:#0c0d0e; }
+    .blur-canvas-image { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center; }
+    .canvas-test-button { position:absolute; right:20.25px; bottom:20.25px; z-index:2; padding:9px 13.5px; color:var(--bv-text); background:#24212b; border:1.125px solid var(--bv-border); border-radius:9px; cursor:pointer; }
+    .blur-floating-window { position:absolute; z-index:3; top:51.75px; left:50%; translate:-50% 0; width:min(483.75px,calc(100% - 40.5px)); overflow:hidden; color:var(--bv-text); background:var(--bv-window); border:1.125px solid rgba(231,225,247,.18); border-radius:15.75px; box-shadow:0 24.75px 72px rgba(0,0,0,.56); }
+    .blur-window-header { display:flex; align-items:center; justify-content:space-between; gap:13.5px; min-height:58.5px; padding:0 18px; border-bottom:1.125px solid var(--bv-border); }
+    .blur-window-header strong { font-size:14.625px; }
+    .blur-window-content { display:grid; gap:13.5px; padding:20.25px; transition:filter .14s ease,opacity .14s ease; }
+    .blur-window-content p { margin:0; color:var(--bv-muted); font-size:13.5px; }
+    .blur-window-actions { display:flex; flex-wrap:wrap; gap:9px; }
+    .blur-action { padding:9px 12.375px; color:var(--bv-text); background:var(--bv-surface); border:1.125px solid var(--bv-border); border-radius:9px; cursor:pointer; }
+    .blur-action.primary { color:white; background:var(--bv-purple); border-color:transparent; }
+    .scoped-popup { position:absolute; z-index:4; inset:81px 27px auto; display:none; padding:18px; background:#282430; border:1.125px solid rgba(231,225,247,.2); border-radius:12.375px; box-shadow:0 20.25px 56.25px rgba(0,0,0,.52); }
+    .scoped-popup strong { display:block; margin-bottom:7.875px; font-size:14.625px; }
+    .scoped-popup p { margin:0 0 15.75px; color:var(--bv-muted); font-size:13.5px; }
+    .blur-floating-window.has-popup .scoped-popup { display:block; }
+    .blur-floating-window.has-popup.effects-full .blur-window-content { filter:blur(3.375px); opacity:.55; pointer-events:none; }
+    .blur-floating-window.has-popup.effects-off .blur-window-content { filter:none; opacity:.38; pointer-events:none; }
+    .blur-status { display:flex; flex-wrap:wrap; gap:13.5px; align-items:center; color:var(--bv-muted); font-size:13.5px; }
+    .blur-status label { display:flex; gap:7.875px; align-items:center; }
+    @container (min-width:348.76px) and (max-width:573.75px) {
+      .space-demo > .number-field .number-value-row { grid-template-columns:1fr; gap:9px; }
+      .space-demo > .number-field .number-box { grid-row:1; width:min(292.5px,100%); justify-self:center; }
+      .space-demo > .number-field .number-slider { grid-row:2; width:100%; }
+      .space-demo > .number-field .number-ticks { padding-right:0; }
+    }
+    @container (max-width:348.75px) { .wide-control { display:none; } .compact-trigger { display:flex; } }
+
+    .field-a { display:grid; gap:7.875px; }
+    .field-a label { color:var(--bv-muted); font-size:13.5px; }
+    .field-a input { width:100%; height:47.25px; padding:0 13.5px; color:var(--bv-text); background:var(--bv-input); border:1.125px solid var(--bv-border); border-radius:9px; outline:none; transition:border-color .14s ease, box-shadow .14s ease, background-color .14s ease; }
+    .field-a input::placeholder { color:rgba(168,161,179,.58); }
+    .field-a input:hover:not(:disabled) { border-color:var(--bv-border-hover); background:#19181e; }
+    .field-a input:focus { border-color:var(--bv-purple); box-shadow:0 0 0 3.375px rgba(141,112,255,.18); }
+    .field-a.error input { border-color:rgba(238,111,131,.72); }
+    .field-a.error input:focus { box-shadow:0 0 0 3.375px rgba(238,111,131,.16); }
+    .field-a input:disabled { color:var(--bv-disabled); background:rgba(23,22,27,.58); cursor:not-allowed; }
+
+    .field-b { position:relative; padding-top:6.75px; }
+    .field-b label { position:absolute; z-index:1; top:0; left:11.25px; padding:0 5.625px; color:var(--bv-muted); background:var(--bv-window); font-size:12.375px; }
+    .field-b input { width:100%; height:54px; padding:7.875px 15.75px 0; color:var(--bv-text); background:rgba(23,22,27,.72); border:1.125px solid var(--bv-border); border-radius:11.25px; outline:none; transition:border-color .14s ease, box-shadow .14s ease; }
+    .field-b input:hover:not(:disabled) { border-color:var(--bv-border-hover); }
+    .field-b:focus-within label { color:#b9a9ff; }
+    .field-b input:focus { border-color:var(--bv-purple); box-shadow:inset 3.375px 0 0 var(--bv-purple), 0 0 0 2.25px rgba(141,112,255,.12); }
+    .field-b.error label { color:var(--bv-danger); }
+    .field-b.error input { border-color:rgba(238,111,131,.68); }
+    .field-b input:disabled { opacity:.5; cursor:not-allowed; }
+
+    .field-c { display:grid; grid-template-columns:minmax(123.75px, .42fr) minmax(0,1fr); align-items:center; gap:18px; }
+    .field-c label { color:var(--bv-muted); font-size:13.5px; }
+    .field-c input { width:100%; height:40.5px; padding:0 11.25px; color:var(--bv-text); background:#17161b; border:1.125px solid var(--bv-border); border-radius:6.75px; outline:none; transition:border-color .12s ease, box-shadow .12s ease; }
+    .field-c input:hover:not(:disabled) { border-color:var(--bv-border-hover); }
+    .field-c input:focus { border-color:var(--bv-purple); box-shadow:0 0 0 2.25px rgba(141,112,255,.17); }
+    .field-c.error label { color:var(--bv-danger); }
+    .field-c.error input { border-color:rgba(238,111,131,.7); }
+    .field-c input:disabled { opacity:.48; cursor:not-allowed; }
+    .variant-c .input-grid { grid-template-columns:1fr; gap:20.25px; }
+
+    .prototype-switcher { position:fixed; z-index:10; left:50%; bottom:27px; translate:-50% 0; display:flex; align-items:center; gap:4.5px; padding:6.75px; color:#f2eef8; background:#25222c; border:1.125px solid rgba(255,255,255,.17); border-radius:1123.875px; box-shadow:0 13.5px 40.5px rgba(0,0,0,.48); }
+    .prototype-switcher button { display:grid; place-items:center; width:38.25px; height:38.25px; padding:0; color:inherit; background:transparent; border:0; border-radius:50%; cursor:pointer; }
+    .prototype-switcher button:hover { background:rgba(255,255,255,.1); }
+    .prototype-switcher output { min-width:202.5px; text-align:center; font-size:13.5px; }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; } }
+    @media (max-width:650px) { .ci-palette { grid-template-columns:repeat(3,1fr); } .ci-reference header,.adaptive-reference > header,.boolean-reference > header,.dropdown-reference > header,.search-reference > header,.multi-reference > header,.optionset-reference > header { align-items:flex-start; flex-direction:column; } .optionset-grid,.multi-grid,.dropdown-comparison,.boolean-comparison,.adaptive-grid { grid-template-columns:1fr; } .rich-menu,.multi-menu { min-width:100%; } .adaptive-case-wide { grid-column:auto; } .input-grid { grid-template-columns:1fr; } .input-demo-wide { grid-column:auto; } .prototype-window { padding:22.5px; } .field-c,.textarea-inspector { grid-template-columns:1fr; gap:7.875px; } .number-value-row { grid-template-columns:1fr; } .number-box { width:166.5px; justify-self:end; } .number-ticks { padding-right:0; } .number-field.compact { grid-template-columns:1fr; } .number-field.compact .number-value-row { display:grid; } }
+  </style>
+</head>
+<body>
+  <aside class="showcase-nav" aria-label="Showcase navigation">
+    <header><a href="#showcase-top"><span aria-hidden="true">◎</span><span><strong>BV UI Showcase</strong><small>Component index</small></span></a></header>
+    <nav class="showcase-nav-groups">
+      <details open><summary>Foundations</summary><a href="#ci-reference-title">Design reference</a><a href="#typography-title">Typography</a><a href="#content-elements-title">Content</a><a href="#table-reference-title">Tables</a><a href="#definition-reference-title">Definitions</a><a href="#text-primitives-title">Text primitives</a><a href="#section-reference-title">Sections</a><a href="#header-reference-title">Headers & toolbars</a></details>
+      <details open><summary>Patterns</summary><a href="#callout-reference-title">Callouts</a><a href="#badge-reference-title">Badges</a><a href="#state-reference-title">Loading & empty</a><a href="#surface-reference-title">Cards & dividers</a><a href="#navigation-reference-title">Breadcrumbs & steps</a><a href="#disclosure-reference-title">Accordions</a><a href="#tabs-reference-title">Tabs</a><a href="#tooltip-reference-title">Tooltips</a><a href="#toast-reference-title">Toasts</a><a href="#validation-reference-title">Validation</a><a href="#footer-reference-title">Status & footers</a><a href="#command-reference-title">Command palette</a><a href="#popover-reference-title">Popovers</a><a href="#list-navigation-title">Lists & trees</a><a href="#dialog-reference-title">Dialogs</a></details>
+      <details open><summary>Inputs & controls</summary><a href="#boolean-reference-title">Boolean</a><a href="#dropdown-reference-title">Dropdown</a><a href="#search-reference-title">Search</a><a href="#multi-reference-title">Multi-select</a><a href="#optionset-reference-title">Option sets</a><a href="#adaptive-title">Adaptive fields</a><a href="#blur-title">Scoped blur</a><a href="#compound-title">Numeric groups</a><a href="#tags-title">Tags</a><a href="#utility-title">Utility fields</a><a href="#color-title">Color</a><a href="#json-title">JSON editor</a><a href="#image-picker-title">Image picker</a><a href="#sortable-title">Sortable list</a><a href="#buttons-title">Buttons</a></details>
+    </nav>
+    <label class="showcase-jump"><span>Jump to component</span><select id="showcase-jump-select"><option value="">Choose section…</option><optgroup label="Foundations"><option value="ci-reference-title">Design reference</option><option value="typography-title">Typography</option><option value="content-elements-title">Content typography</option><option value="table-reference-title">Tables</option><option value="section-reference-title">Sections</option><option value="header-reference-title">Headers & toolbars</option></optgroup><optgroup label="Patterns"><option value="callout-reference-title">Callouts</option><option value="badge-reference-title">Badges</option><option value="state-reference-title">Loading & empty states</option><option value="disclosure-reference-title">Accordions</option><option value="tabs-reference-title">Tabs</option><option value="toast-reference-title">Toasts</option><option value="validation-reference-title">Validation</option><option value="command-reference-title">Command palette</option><option value="popover-reference-title">Popovers</option><option value="list-navigation-title">Lists & trees</option><option value="dialog-reference-title">Dialogs</option></optgroup><optgroup label="Inputs & controls"><option value="boolean-reference-title">Boolean</option><option value="dropdown-reference-title">Dropdown</option><option value="search-reference-title">Search</option><option value="multi-reference-title">Multi-select</option><option value="optionset-reference-title">Option sets</option><option value="adaptive-title">Adaptive fields</option><option value="compound-title">Numeric groups</option><option value="tags-title">Tags</option><option value="utility-title">Utility fields</option><option value="color-title">Color</option><option value="json-title">JSON editor</option><option value="image-picker-title">Image picker</option><option value="sortable-title">Sortable list</option><option value="buttons-title">Buttons</option></optgroup></select></label>
+  </aside>
+  <main id="showcase-top" class="prototype-page">
+    <p class="prototype-kicker">UI component showcase</p>
+    <h1>BV UI Component Showcase</h1>
+    <p class="prototype-intro">Persistent visual reference for BV colors, controls, states, responsive behavior, and interaction patterns. Use this page when implementing or reviewing BV interfaces.</p>
+    <section class="scale-switcher" aria-labelledby="scale-switcher-title">
+      <div><strong id="scale-switcher-title">UI size</strong><span>Global preview for regular and accessibility-oriented sizing.</span></div>
+      <div class="scale-options" role="group" aria-label="UI size"><button type="button" data-ui-scale="small" aria-pressed="false">Small <small>100%</small></button><button type="button" data-ui-scale="standard" aria-pressed="true">Standard <small>112.5%</small></button><button type="button" data-ui-scale="large" aria-pressed="false">Large <small>125%</small></button></div>
+      <output id="scale-status" class="control-status" aria-live="polite">Standard UI size · 112.5%</output>
+    </section>
+    <section class="ci-reference" aria-labelledby="ci-reference-title">
+      <header><h2 id="ci-reference-title">Design reference</h2><span>Colors · radii · focus · effects</span></header>
+      <div class="ci-palette">
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#121116"></div><span>Canvas</span><code>#121116</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#1e1c24"></div><span>Window</span><code>#1E1C24</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#2a2732"></div><span>Surface</span><code>#2A2732</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#17161b"></div><span>Input</span><code>#17161B</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#8d70ff"></div><span>Spiral</span><code>#8D70FF</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#667dff"></div><span>Indigo</span><code>#667DFF</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#52aee3"></div><span>Orbit</span><code>#52AEE3</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#f2eef8"></div><span>Text</span><code>#F2EEF8</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#a8a1b3"></div><span>Muted</span><code>#A8A1B3</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#55c994"></div><span>Success</span><code>#55C994</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#e9b65f"></div><span>Warning</span><code>#E9B65F</code></div>
+        <div class="ci-swatch"><div class="ci-color" style="--swatch:#ee6f83"></div><span>Danger</span><code>#EE6F83</code></div>
+      </div>
+      <div class="ci-forms">
+        <div class="ci-form"><span class="ci-shape ci-radius-sm"></span>6 px compact</div>
+        <div class="ci-form"><span class="ci-shape ci-radius-md"></span>8 px controls</div>
+        <div class="ci-form"><span class="ci-shape ci-radius-lg"></span>14 px windows</div>
+        <div class="ci-form"><span class="ci-shape ci-radius-md ci-focus"></span>Focus</div>
+        <div class="ci-form"><span class="ci-shape ci-radius-md ci-glass"></span>Optional scoped glass</div>
+      </div>
+    </section>
+    <section class="typography-reference" aria-labelledby="typography-title">
+      <header><h2 id="typography-title">Typography scale</h2><span>System fonts · proposed visual hierarchy</span></header>
+      <div class="type-specimens">
+        <article class="type-specimen"><div><p class="type-display">Regional workspace</p><p class="type-purpose">Display · standalone editor or help landing page</p></div><code>30 px / 1.15 · 650</code></article>
+        <article class="type-specimen"><div><h1 class="type-h1">Configure detailer plan</h1><p class="type-purpose">Heading 1 · window and page title</p></div><code>23 px / 1.2 · 650</code></article>
+        <article class="type-specimen"><div><h2 class="type-h2">Detector configuration</h2><p class="type-purpose">Heading 2 · primary section</p></div><code>18 px / 1.3 · 600</code></article>
+        <article class="type-specimen"><div><h3 class="type-h3">Face refinement</h3><p class="type-purpose">Heading 3 · subsection, card, or grouped controls</p></div><code>15 px / 1.35 · 600</code></article>
+        <article class="type-specimen"><div><p class="type-body">Use the regional editor to assign prompts, masks, and detector jobs to individual image areas. Mixed prompt styles remain unchanged.</p><p class="type-purpose">Body · descriptions, documentation, and regular content</p></div><code>14 px / 1.55 · 400</code></article>
+        <article class="type-specimen"><div><p class="type-label">Output image width</p><p class="type-purpose">Label · fields, compact controls, and table headers</p></div><code>12 px / 1.4 · 500</code></article>
+        <article class="type-specimen"><div><p class="type-caption">Last updated by Sender 2 · 1024 × 1024</p><p class="type-purpose">Caption · metadata, helper text, and secondary status</p></div><code>11 px / 1.45 · 400</code></article>
+        <article class="type-specimen"><div><p class="type-code">BV_REGIONAL / detector_registry.json</p><p class="type-purpose">Code · paths, identifiers, values, and technical content</p></div><code>12 px / 1.5 · 400</code></article>
+      </div>
+      <div class="type-inline-demo"><p><strong>Inline emphasis</strong> remains restrained, <em>italic emphasis</em> is reserved for prose, and <a href="#typography-title">links use the spiral tint</a> without becoming visually louder than surrounding controls.</p><p><span class="text-success">Valid configuration</span><span class="text-warning">Review required</span><span class="text-danger">Invalid JSON</span><span class="text-muted">Optional metadata</span></p></div>
+    </section>
+    <section class="content-reference" aria-labelledby="content-elements-title">
+      <header><h2 id="content-elements-title">Content typography</h2><span>Code · quotations · ordered and unordered lists</span></header>
+      <div class="content-grid">
+        <article class="content-example content-example-wide"><strong>Inline code and code block</strong><p class="content-body">Use <code class="inline-code">BV_REGIONAL</code> as the document type and keep <code class="inline-code">region_id</code> stable during serialization.</p><div id="content-code-block" class="code-block show-line-numbers"><header><span>JSON</span><span class="code-block-actions"><label><input id="toggle-code-lines" type="checkbox" checked> Line numbers</label><button id="copy-code-example" type="button">Copy</button></span></header><pre><code id="code-example"><span class="code-line">{</span><span class="code-line">  "region_id": "subject-primary",</span><span class="code-line">  "prompt": "portrait, cinematic rim light",</span><span class="code-line">  "usage": "generation"</span><span class="code-line">}</span></code></pre></div><output id="copy-code-status" class="control-status" aria-live="polite"></output></article>
+        <article class="content-example"><strong>Quotation</strong><blockquote><p>The canvas remains the primary workspace. Supporting windows should add context without hiding it.</p><footer>BV interface principle</footer></blockquote></article>
+        <article class="content-example"><strong>Unordered list</strong><ul class="content-list"><li>Preserve stable region IDs</li><li>Keep the canvas interactive<ul><li>Scope blur to BV windows</li><li>Avoid blocking overlays</li></ul></li><li>Validate before applying changes</li></ul></article>
+        <article class="content-example"><strong>Numbered procedure</strong><ol class="content-list"><li>Select the target image</li><li>Define regions and prompts</li><li>Review validation messages</li><li>Apply the regional document</li></ol></article>
+      </div>
+    </section>
+    <section class="table-reference" aria-labelledby="table-reference-title">
+      <header><h2 id="table-reference-title">Tables</h2><span>Documentation and compact technical data</span></header>
+      <article class="table-example">
+        <div class="table-example-header"><div><strong>Documentation table</strong><small>Readable rows for help pages and configuration summaries</small></div><label><input id="toggle-table-stripes" type="checkbox"> Striped rows</label></div>
+        <div class="table-scroll"><table id="documentation-table"><thead><tr><th scope="col">Component</th><th scope="col">Purpose</th><th scope="col">State</th><th scope="col" class="numeric-cell">Items</th></tr></thead><tbody><tr><th scope="row">Regional Editor</th><td>Assign prompts and masks to image regions</td><td><span class="table-status success">Ready</span></td><td class="numeric-cell">12</td></tr><tr><th scope="row">Detector Registry</th><td>Manage reusable detector definitions</td><td><span class="table-status warning">Review</span></td><td class="numeric-cell">3</td></tr><tr><th scope="row">Detailer Plan</th><td>Configure ordered refinement jobs</td><td><span class="table-status muted">Draft</span></td><td class="numeric-cell">7</td></tr></tbody></table></div>
+      </article>
+      <article class="table-example">
+        <div class="table-example-header"><div><strong>Compact technical table</strong><small>Dense metadata, identifiers, values, and limits</small></div></div>
+        <div class="table-scroll"><table class="compact-table"><thead><tr><th scope="col">Key</th><th scope="col">Type</th><th scope="col">Default</th><th scope="col" class="numeric-cell">Range</th></tr></thead><tbody><tr><th scope="row"><code>threshold</code></th><td>float</td><td><code>0.50</code></td><td class="numeric-cell">0–1</td></tr><tr><th scope="row"><code>guide_size</code></th><td>integer</td><td><code>512</code></td><td class="numeric-cell">64–2048 px</td></tr><tr><th scope="row"><code>region_id</code></th><td>string</td><td><span class="text-muted">required</span></td><td class="numeric-cell">—</td></tr><tr><th scope="row"><code>enabled</code></th><td>boolean</td><td><code>true</code></td><td class="numeric-cell">—</td></tr></tbody></table></div>
+      </article>
+    </section>
+    <section class="definition-reference" aria-labelledby="definition-reference-title">
+      <header><h2 id="definition-reference-title">Definition lists</h2><span>Terminology and compact property summaries</span></header>
+      <div class="definition-grid">
+        <article class="definition-example"><strong>Glossary · descriptive</strong><dl class="glossary-list"><div><dt>Regional document</dt><dd>A structured description of image regions, prompts, masks, and their intended consumers.</dd></div><div><dt>Primary region</dt><dd>The region used as the semantic fallback when no more specific assignment applies.</dd></div><div><dt>Detector registry</dt><dd>A reusable collection of detector definitions referenced by stable identifiers.</dd></div></dl></article>
+        <article class="definition-example"><strong>Properties · compact</strong><dl class="property-list"><div><dt>Document type</dt><dd><code>BV_REGIONAL</code></dd></div><div><dt>Schema version</dt><dd>2</dd></div><div><dt>Regions</dt><dd>12</dd></div><div><dt>Validation</dt><dd><span class="text-success">Valid</span></dd></div><div><dt>Last source</dt><dd>Sender 2</dd></div></dl></article>
+      </div>
+    </section>
+    <section class="text-primitives-reference" aria-labelledby="text-primitives-title">
+      <header><h2 id="text-primitives-title">Text primitives</h2><span>Paragraph rhythm · inline semantics · overflow · dividers</span></header>
+      <div class="text-primitives-grid">
+        <article class="text-primitive-example"><strong>Paragraph rhythm</strong><div class="prose-sample"><p class="lead-text">Regional workflows remain understandable when structure and editing context stay visible.</p><p>Use regular body text for explanations that require more than a compact helper label. Consecutive paragraphs receive consistent spacing without forcing every author to add layout classes.</p><p>Keep one semantic idea per paragraph. This makes embedded help content easier to scan inside narrow floating windows.</p><p class="small-text">Small text is reserved for supporting notes, limitations, and secondary context.</p></div></article>
+        <article class="text-primitive-example"><strong>Inline semantics</strong><div class="inline-semantics"><p><mark>Highlighted text</mark> draws temporary attention without representing a warning.</p><p><del>Legacy regional mode</del> communicates removed or replaced terminology.</p><p>Press <kbd>Ctrl</kbd><span class="key-separator">+</span><kbd>Shift</kbd><span class="key-separator">+</span><kbd>P</kbd> to open the quick prompt editor.</p><p><abbr title="Bounding volume">BV</abbr> abbreviations retain their explanation through the native tooltip.</p></div></article>
+        <article class="text-primitive-example"><strong>Overflow behavior</strong><div class="overflow-samples"><div><span>Single-line ellipsis</span><p class="text-ellipsis" title="BV Regional Anima Conditioning · Extremely long workflow component name">BV Regional Anima Conditioning · Extremely long workflow component name</p></div><div><span>Two-line clamp</span><p class="text-clamp">A longer help description may use at most two visible lines before it is shortened. The full content should remain available through expansion or a dedicated help surface.</p></div><div><span>Technical wrap</span><p class="text-break">models/detectors/ultralytics/segmentation/very_long_detector_file_name_v2.4.safetensors</p></div></div></article>
+        <article class="text-primitive-example"><strong>Dividers</strong><div class="divider-samples"><p>Content before a neutral divider</p><hr><p>Content between grouped sections</p><div class="labeled-divider"><span>Advanced settings</span></div><p>Content after a labeled divider</p></div></article>
+      </div>
+    </section>
+    <section class="section-reference" aria-labelledby="section-reference-title">
+      <header><h2 id="section-reference-title">Section surfaces</h2><span>Hierarchy without turning every group into a loud card</span></header>
+      <div class="section-showcase">
+        <article class="section-demo section-flat"><header><div><span class="section-eyebrow">Flat · default</span><h3>Regional behavior</h3><p>Use for primary content groups when the surrounding window already provides a clear surface.</p></div><button class="bv-button subtle" type="button">Reset</button></header><div class="section-demo-content"><div class="property-row"><span>Overlap mode</span><strong>Exclusive</strong></div><div class="property-row"><span>Region priority</span><strong>Semantic order</strong></div></div></article>
+        <article class="section-demo section-outlined"><header><div class="section-heading-with-icon"><span class="section-heading-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M14 17h6M17 14v6"/></svg></span><div><span class="section-eyebrow">Outlined · icon header</span><h3>Region settings</h3><p>Optional icons identify recurring functional areas without changing the section hierarchy.</p></div></div><span class="section-meta">12 regions</span></header><div class="section-demo-content"><div class="property-row"><span>Overlap mode</span><span class="table-status success">Exclusive</span></div><div class="property-row"><span>Priority order</span><span class="table-status warning">Review</span></div></div></article>
+        <article class="section-demo section-elevated"><header><div><span class="section-eyebrow">Elevated · emphasis</span><h3>Validation summary</h3><p>Reserved for temporary focus, important summaries, or content above the regular hierarchy.</p></div><span class="section-icon" aria-hidden="true">✓</span></header><div class="section-demo-content"><p class="section-message">The regional document is valid and can be applied to the current workflow.</p><div class="inline-actions"><button class="bv-button primary" type="button">Apply</button><button class="bv-button ghost" type="button">View details</button></div></div></article>
+        <article class="section-demo section-nested"><header><div><span class="section-eyebrow">Nested · subgroups</span><h3>Advanced detector settings</h3><p>A parent section may contain quiet inset groups without adding another full card hierarchy.</p></div></header><div class="nested-groups"><section><h4>Detection</h4><div class="property-row"><span>Threshold</span><strong>0.50</strong></div><div class="property-row"><span>Dilation</span><strong>0 px</strong></div></section><section><h4>Refinement</h4><div class="property-row"><span>Guide size</span><strong>512 px</strong></div><div class="property-row"><span>Feather</span><strong>5 px</strong></div></section></div></article>
+      </div>
+    </section>
+    <section class="header-reference" aria-labelledby="header-reference-title">
+      <header><h2 id="header-reference-title">Headers & toolbars</h2><span>Window hierarchy, floating panels, grouped tools, and overflow</span></header>
+      <div class="header-showcase">
+        <article class="header-example header-example-wide"><strong>Window header</strong><div class="window-header-demo"><div class="window-title-group"><span class="window-title-icon" aria-hidden="true">◎</span><div><div class="window-title-line"><h3>Regional Editor</h3><span class="table-status success">Connected</span></div><p>Edit regions, prompts, masks, and workflow assignments.</p></div></div><div class="window-header-actions"><button class="bv-button subtle" type="button">Help</button><button class="bv-button icon-only ghost" type="button" aria-label="Close window">×</button></div></div></article>
+        <article class="header-example"><strong>Floating panel header</strong><div class="panel-header-demo"><button class="panel-drag-handle" type="button" aria-label="Move panel" title="Move panel">⠿</button><div><h3>Region properties</h3><p>Subject primary · P0</p></div><span class="panel-unsaved" title="Unsaved changes">●</span><button class="panel-header-button" type="button" aria-label="Collapse panel">−</button><button class="panel-header-button" type="button" aria-label="Close panel">×</button></div><p class="header-note">The drag affordance is visual only until the docking/layout research.</p></article>
+        <article class="header-example"><strong>Vertical editor toolbar</strong><div class="vertical-toolbar-stage"><div class="editor-toolbar vertical" role="toolbar" aria-orientation="vertical" aria-label="Vertical regional editing tools"><div class="toolbar-group" aria-label="Selection tools"><button class="toolbar-button icon active" type="button" aria-pressed="true" title="Select" aria-label="Select">↖</button><button class="toolbar-button icon" type="button" aria-pressed="false" title="Move" aria-label="Move">✥</button></div><span class="toolbar-divider" aria-hidden="true"></span><div class="toolbar-group" aria-label="Drawing tools"><button class="toolbar-button icon" type="button" aria-pressed="false" title="Rectangle" aria-label="Rectangle">□</button><button class="toolbar-button icon" type="button" aria-pressed="false" title="Brush" aria-label="Brush">⌁</button><button class="toolbar-button icon" type="button" aria-pressed="false" title="Polygon" aria-label="Polygon">⬡</button></div><span class="toolbar-spacer"></span><div class="toolbar-group toolbar-secondary"><button class="toolbar-button icon" type="button" title="Undo" aria-label="Undo">↶</button><button class="toolbar-button icon" type="button" title="Redo" aria-label="Redo">↷</button></div><div class="toolbar-overflow vertical-overflow"><button id="vertical-toolbar-overflow-trigger" class="toolbar-button icon" type="button" aria-label="More tools" aria-expanded="false">•••</button><div id="vertical-toolbar-overflow-menu" class="button-menu-popup" hidden><button type="button">Merge selected regions</button><button type="button">Split connected areas</button><button type="button">Delete selected regions</button></div></div></div><div class="vertical-toolbar-context"><span>Docked left</span><strong>Brush and region tools remain available in narrow workspaces.</strong><output class="control-status">Active tool: Select</output></div></div></article>
+        <article class="header-example header-example-wide"><strong>Editor toolbar</strong><div class="editor-toolbar" role="toolbar" aria-label="Regional editing tools"><div class="toolbar-group" aria-label="Selection tools"><button class="toolbar-button active" type="button" aria-pressed="true" title="Select"><span aria-hidden="true">↖</span><span>Select</span></button><button class="toolbar-button" type="button" aria-pressed="false" title="Move"><span aria-hidden="true">✥</span><span>Move</span></button></div><span class="toolbar-divider" aria-hidden="true"></span><div class="toolbar-group" aria-label="Drawing tools"><button class="toolbar-button" type="button" aria-pressed="false" title="Rectangle"><span aria-hidden="true">□</span><span>Rectangle</span></button><button class="toolbar-button" type="button" aria-pressed="false" title="Brush"><span aria-hidden="true">⌁</span><span>Brush</span></button><button class="toolbar-button" type="button" aria-pressed="false" title="Polygon"><span aria-hidden="true">⬡</span><span>Polygon</span></button></div><span class="toolbar-spacer"></span><div class="toolbar-group toolbar-secondary"><button class="toolbar-button icon" type="button" title="Undo" aria-label="Undo">↶</button><button class="toolbar-button icon" type="button" title="Redo" aria-label="Redo">↷</button></div><div class="toolbar-overflow"><button id="toolbar-overflow-trigger" class="toolbar-button icon" type="button" aria-label="More tools" aria-expanded="false">•••</button><div id="toolbar-overflow-menu" class="button-menu-popup" hidden><button type="button">Merge selected regions</button><button type="button">Split connected areas</button><button type="button">Delete selected regions</button></div></div></div><output id="toolbar-status" class="control-status">Active tool: Select</output></article>
+      </div>
+    </section>
+    <section class="callout-reference" aria-labelledby="callout-reference-title">
+      <header><h2 id="callout-reference-title">Callouts & status messages</h2><span>Neutral guidance, information, success, warning, and danger</span></header>
+      <div class="callout-showcase">
+        <aside class="callout neutral"><span class="callout-icon" aria-hidden="true">✦</span><div><h3>Helpful context</h3><p>Use neutral callouts for guidance that improves understanding but does not require action.</p></div></aside>
+        <aside class="callout info"><span class="callout-icon" aria-hidden="true">i</span><div><h3>Queue image selection</h3><p>The Regional Editor displays images received during the latest queue run.</p><a href="#image-picker-title">View ImagePicker reference</a></div></aside>
+        <aside class="callout success" role="status"><span class="callout-icon" aria-hidden="true">✓</span><div><h3>Configuration valid</h3><p>All region IDs and detector assignments passed validation.</p></div></aside>
+        <aside class="callout warning"><span class="callout-icon" aria-hidden="true">!</span><div><h3>Review recommended</h3><p>Two regions reference detectors that are currently unavailable.</p><div class="callout-actions"><button class="bv-button warning" type="button">Review assignments</button><button class="bv-button ghost" type="button">Ignore for now</button></div></div></aside>
+        <aside class="callout danger" role="alert"><span class="callout-icon" aria-hidden="true">×</span><div><h3>Document cannot be applied</h3><p>The regional document contains duplicate stable IDs. Resolve the conflict before continuing.</p><div class="callout-actions"><button class="bv-button danger" type="button">Show conflicts</button></div></div></aside>
+      </div>
+      <div class="inline-banners"><div class="inline-banner info"><span aria-hidden="true">i</span><p><strong>Info:</strong> Changes are stored in memory until the workflow is saved.</p><button type="button" aria-label="Dismiss information">×</button></div><div class="inline-banner warning"><span aria-hidden="true">!</span><p><strong>Warning:</strong> Large masks may increase processing time.</p><button type="button" aria-label="Dismiss warning">×</button></div></div>
+    </section>
+    <section class="badge-reference" aria-labelledby="badge-reference-title">
+      <header><h2 id="badge-reference-title">Badges, status chips & counters</h2><span>Compact metadata, state, selection, and notification indicators</span></header>
+      <div class="badge-showcase">
+        <article class="badge-example"><strong>Neutral metadata</strong><div class="badge-row"><span class="ui-badge">Regional</span><span class="ui-badge subtle">Optional</span><span class="ui-badge outlined">BV_REGIONAL</span></div><small>Low-emphasis context that should not compete with primary content.</small></article>
+        <article class="badge-example"><strong>Semantic status</strong><div class="badge-row"><span class="ui-badge info"><span class="badge-dot"></span>Queued</span><span class="ui-badge success"><span class="badge-dot"></span>Ready</span><span class="ui-badge warning"><span class="badge-dot"></span>Review</span><span class="ui-badge danger"><span class="badge-dot"></span>Failed</span></div><small>Color always accompanies text; it is never the only status signal.</small></article>
+        <article class="badge-example"><strong>Removable selection chips</strong><div class="badge-row"><span class="ui-chip">Face detector<button type="button" aria-label="Remove Face detector">×</button></span><span class="ui-chip">Foreground<button type="button" aria-label="Remove Foreground">×</button></span></div><small>For selected filters or values; removal behavior belongs to the consuming component.</small></article>
+        <article class="badge-example"><strong>Counters & notification dots</strong><div class="counter-demo"><button class="counter-host" type="button">Regions <span class="ui-counter">12</span></button><button class="icon-counter-host" type="button" aria-label="Open validation results">!</button><span class="ui-notification-dot" aria-label="New validation results"></span><span class="ui-counter muted">99+</span></div><small>Counters use tabular numerals and remain compact for large values.</small></article>
+        <article class="badge-example badge-example-wide"><strong>Badges in context</strong><div class="badge-context-row"><div><span class="badge-context-title">Regional Detailer Plan</span><span class="badge-context-meta">Last validated a moment ago</span></div><div class="badge-row"><span class="ui-badge success"><span class="badge-dot"></span>Valid</span><span class="ui-counter">7 jobs</span></div></div></article>
+      </div>
+    </section>
+    <section class="state-reference" aria-labelledby="state-reference-title">
+      <header><h2 id="state-reference-title">Progress, loading & empty states</h2><span>Determinate work, indeterminate activity, skeletons, and missing content</span></header>
+      <div class="state-showcase">
+        <article class="state-example"><div class="state-example-heading"><strong>Determinate progress</strong><span>68%</span></div><div class="progress-track" role="progressbar" aria-label="Regional plan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="68"><span style="width:68%"></span></div><div class="progress-meta"><span>Processing region 7 of 10</span><span>About 14s remaining</span></div></article>
+        <article class="state-example"><div class="state-example-heading"><strong>Indeterminate activity</strong><span>Connecting</span></div><div class="progress-track indeterminate" role="progressbar" aria-label="Connecting to provider"><span></span></div><div class="inline-loading"><span class="state-spinner" aria-hidden="true"></span><span>Waiting for the external provider…</span></div></article>
+        <article class="state-example"><strong>Compact progress</strong><div class="progress-list"><div><span>Model</span><span class="progress-track compact"><span style="width:100%"></span></span><span class="progress-state success">Ready</span></div><div><span>Detectors</span><span class="progress-track compact"><span style="width:54%"></span></span><span class="progress-state">3 / 6</span></div><div><span>Preview</span><span class="progress-track compact muted"><span style="width:0"></span></span><span class="progress-state muted">Pending</span></div></div></article>
+        <article class="state-example"><strong>Skeleton placeholder</strong><div class="skeleton-card" aria-label="Content is loading" aria-busy="true"><span class="skeleton-block image"></span><div><span class="skeleton-block title"></span><span class="skeleton-block line"></span><span class="skeleton-block line short"></span></div></div><small class="state-note">Use only when the final layout is predictable; otherwise prefer a spinner with descriptive text.</small></article>
+        <article class="state-example state-example-wide"><strong>Empty states</strong><div class="empty-state-grid"><div class="empty-state"><span class="empty-state-icon" aria-hidden="true">◇</span><div><h3>No regions yet</h3><p>Draw a region on the image to create the first entry.</p></div><button class="bv-button primary" type="button">Create region</button></div><div class="empty-state compact"><span class="empty-state-icon" aria-hidden="true">⌕</span><div><h3>No matching detectors</h3><p>Try a broader search or clear the active filters.</p></div><button class="bv-button ghost" type="button">Clear filters</button></div></div></article>
+      </div>
+    </section>
+    <section class="surface-reference" aria-labelledby="surface-reference-title">
+      <header><h2 id="surface-reference-title">Cards, surfaces & dividers</h2><span>Reusable content grouping without inventing new hierarchy levels</span></header>
+      <div class="surface-grid">
+        <article class="surface-card flat"><span class="surface-kicker">Flat</span><h3>Embedded content</h3><p>Use inside an already defined section when another border would add noise.</p></article>
+        <article class="surface-card outlined"><span class="surface-kicker">Outlined</span><h3>Detector preset</h3><p>A clear boundary for selectable or independently meaningful content.</p><div class="surface-footer"><span class="ui-badge subtle">3 rules</span><button class="bv-button ghost" type="button">Open</button></div></article>
+        <article class="surface-card elevated"><span class="surface-kicker">Elevated</span><h3>Floating summary</h3><p>Reserved for content that visually sits above its surrounding surface.</p><div class="surface-footer"><span class="ui-badge success"><span class="badge-dot"></span>Ready</span><button class="bv-button secondary" type="button">Details</button></div></article>
+      </div>
+      <div class="divider-showcase"><div><span>Horizontal</span><hr class="ui-divider"></div><div><span>With label</span><div class="ui-divider labeled"><span>Advanced settings</span></div></div><div class="vertical-divider-example"><span>Before</span><i class="ui-divider vertical"></i><span>After</span></div></div>
+    </section>
+    <section class="navigation-reference" aria-labelledby="navigation-reference-title">
+      <header><h2 id="navigation-reference-title">Breadcrumbs, pagination & steps</h2><span>Location, bounded collections, and short guided processes</span></header>
+      <div class="navigation-showcase">
+        <article class="navigation-example navigation-wide"><strong>Breadcrumbs</strong><nav class="breadcrumbs" aria-label="Breadcrumb"><ol><li><a href="#">Help</a></li><li><a href="#">Regional Editor</a></li><li aria-current="page">Detector assignments</li></ol></nav></article>
+        <article class="navigation-example"><strong>Pagination</strong><nav class="pagination" aria-label="Image pages"><button type="button" aria-label="Previous page">‹</button><button type="button">1</button><button class="active" type="button" aria-current="page">2</button><button type="button">3</button><span>…</span><button type="button">12</button><button type="button" aria-label="Next page">›</button></nav><small>For stable pages; use virtualization or incremental loading for long live collections.</small></article>
+        <article class="navigation-example"><strong>Compact stepper</strong><ol class="stepper"><li class="complete"><span>✓</span><div><strong>Source</strong><small>Image received</small></div></li><li class="active" aria-current="step"><span>2</span><div><strong>Regions</strong><small>Configure masks</small></div></li><li><span>3</span><div><strong>Review</strong><small>Validate plan</small></div></li></ol></article>
+      </div>
+    </section>
+    <section class="disclosure-reference" aria-labelledby="disclosure-reference-title">
+      <header><h2 id="disclosure-reference-title">Accordions & disclosure</h2><span>Progressive detail for settings and future help content</span></header>
+      <div class="accordion-list">
+        <details class="ui-accordion" open><summary><span class="accordion-icon" aria-hidden="true">◎</span><span><strong>Region behavior</strong><small>Mask, overlap, and ordering rules</small></span><span class="ui-badge subtle">4 settings</span><i class="accordion-chevron" aria-hidden="true"></i></summary><div class="accordion-content"><p>Expanded content follows the same spacing and typography as a regular section body.</p><div class="property-row"><span>Overlap mode</span><span class="ui-badge">Exclusive</span></div><div class="property-row"><span>Sort order</span><span class="ui-badge subtle">Manual</span></div></div></details>
+        <details class="ui-accordion"><summary><span class="accordion-icon" aria-hidden="true">⌁</span><span><strong>Detector overrides</strong><small>Optional per-region adjustments</small></span><span class="ui-badge warning">Review</span><i class="accordion-chevron" aria-hidden="true"></i></summary><div class="accordion-content"><p>Collapsed groups keep complex forms scannable without hiding validation state.</p></div></details>
+        <details class="ui-accordion disabled"><summary aria-disabled="true"><span class="accordion-icon" aria-hidden="true">◇</span><span><strong>Generated preview</strong><small>Available after the first queue run</small></span><span class="ui-badge subtle">Unavailable</span><i class="accordion-chevron" aria-hidden="true"></i></summary></details>
+      </div>
+      <div class="accordion-variant-heading"><div><strong>Exclusive accordion</strong><small>Exactly one item may be expanded within this group.</small></div><span class="ui-badge outlined">Single expand</span></div>
+      <div class="accordion-list" data-exclusive-accordion>
+        <details class="ui-accordion" open><summary><span class="accordion-icon" aria-hidden="true">1</span><span><strong>General</strong><small>Names and document behavior</small></span><span class="ui-badge subtle">Active</span><i class="accordion-chevron" aria-hidden="true"></i></summary><div class="accordion-content"><p>General settings are currently visible. Opening another item closes this one automatically.</p></div></details>
+        <details class="ui-accordion"><summary><span class="accordion-icon" aria-hidden="true">2</span><span><strong>Canvas</strong><small>Display and interaction options</small></span><span class="ui-badge subtle">3 settings</span><i class="accordion-chevron" aria-hidden="true"></i></summary><div class="accordion-content"><p>Canvas settings keep the ComfyUI workspace sharp and interactive.</p></div></details>
+        <details class="ui-accordion"><summary><span class="accordion-icon" aria-hidden="true">3</span><span><strong>Performance</strong><small>Optional visual effects</small></span><span class="ui-badge subtle">2 settings</span><i class="accordion-chevron" aria-hidden="true"></i></summary><div class="accordion-content"><p>Performance settings can disable blur, animation, and other decorative effects.</p></div></details>
+      </div>
+    </section>
+    <section class="tabs-reference" aria-labelledby="tabs-reference-title">
+      <header><h2 id="tabs-reference-title">Tabs</h2><span>Document, compact, and vertical navigation variants</span></header>
+      <div class="tabs-showcase">
+        <article class="tabs-example tabs-wide"><strong>Document tabs</strong><div class="tab-list document-tabs" role="tablist" aria-label="Regional documents"><button id="document-tab-regions" role="tab" aria-selected="true" aria-controls="document-panel-regions" tabindex="0">Regions <span class="ui-counter">12</span></button><button id="document-tab-prompts" role="tab" aria-selected="false" aria-controls="document-panel-prompts" tabindex="-1">Prompts</button><button id="document-tab-history" role="tab" aria-selected="false" aria-controls="document-panel-history" tabindex="-1">History <span class="notification-inline" aria-label="New history item"></span></button></div><div class="tab-panel" id="document-panel-regions" role="tabpanel" aria-labelledby="document-tab-regions">Region list and canvas-related controls belong here.</div><div class="tab-panel" id="document-panel-prompts" role="tabpanel" aria-labelledby="document-tab-prompts" hidden>Prompt assignments and shared text content belong here.</div><div class="tab-panel" id="document-panel-history" role="tabpanel" aria-labelledby="document-tab-history" hidden>Queue-run revisions and received images belong here.</div></article>
+        <article class="tabs-example"><strong>Compact tabs</strong><div class="tab-list compact-tabs" role="tablist" aria-label="Inspector mode"><button id="compact-tab-properties" role="tab" aria-selected="true" aria-controls="compact-panel-properties" tabindex="0">Properties</button><button id="compact-tab-help" role="tab" aria-selected="false" aria-controls="compact-panel-help" tabindex="-1">Help</button></div><div id="compact-panel-properties" class="tab-panel compact" role="tabpanel" aria-labelledby="compact-tab-properties">Focused editing controls.</div><div id="compact-panel-help" class="tab-panel compact" role="tabpanel" aria-labelledby="compact-tab-help" hidden>Context-sensitive documentation.</div></article>
+        <article class="tabs-example"><strong>Vertical tabs</strong><div class="vertical-tabs"><div class="tab-list" role="tablist" aria-orientation="vertical" aria-label="Settings categories"><button id="vertical-tab-general" role="tab" aria-selected="true" aria-controls="vertical-panel-general" tabindex="0">General</button><button id="vertical-tab-canvas" role="tab" aria-selected="false" aria-controls="vertical-panel-canvas" tabindex="-1">Canvas</button><button id="vertical-tab-performance" role="tab" aria-selected="false" aria-controls="vertical-panel-performance" tabindex="-1">Performance</button></div><div id="vertical-panel-general" class="tab-panel" role="tabpanel" aria-labelledby="vertical-tab-general">General editor behavior.</div><div id="vertical-panel-canvas" class="tab-panel" role="tabpanel" aria-labelledby="vertical-tab-canvas" hidden>Canvas interaction settings.</div><div id="vertical-panel-performance" class="tab-panel" role="tabpanel" aria-labelledby="vertical-tab-performance" hidden>Optional visual effects and rendering settings.</div></div></article>
+      </div>
+    </section>
+    <section class="tooltip-reference" aria-labelledby="tooltip-reference-title">
+      <header><h2 id="tooltip-reference-title">Tooltips & contextual hints</h2><span>Short explanations for unfamiliar icons and compact controls</span></header>
+      <div class="tooltip-showcase"><div class="tooltip-demo"><button class="tooltip-trigger" type="button" aria-describedby="tooltip-brush">⌁</button><span id="tooltip-brush" class="ui-tooltip" role="tooltip">Brush tool <kbd>B</kbd></span></div><div class="tooltip-demo static"><button class="tooltip-trigger" type="button" aria-describedby="tooltip-static">?</button><span id="tooltip-static" class="ui-tooltip" role="tooltip">Tooltips stay concise and never contain required actions.</span></div><p>Hover or focus the first icon. The second tooltip remains visible as a positioning reference.</p></div>
+    </section>
+    <section class="toast-reference" aria-labelledby="toast-reference-title">
+      <header><h2 id="toast-reference-title">Toasts & temporary notifications</h2><span>Short-lived feedback that does not interrupt the current task</span></header>
+      <div class="toast-controls"><button id="show-toast-stack" class="bv-button primary" type="button">Show toast stack</button><button id="clear-toast-stack" class="bv-button secondary" type="button">Clear</button><span>Preview position: bottom right of the owning BV window</span></div>
+      <div class="toast-stage">
+        <div class="toast-stage-content"><span class="surface-kicker">Modeless workspace</span><strong>Regional Editor remains interactive</strong><p>Toasts float above BV content but never blur or block the ComfyUI canvas.</p></div>
+        <div id="toast-stack" class="toast-stack" aria-label="Notifications" aria-live="polite">
+          <article class="ui-toast success" role="status"><span class="toast-icon" aria-hidden="true">✓</span><div><strong>Plan saved</strong><p>The regional document was stored successfully.</p></div><button class="toast-close" type="button" aria-label="Dismiss Plan saved">×</button></article>
+          <article class="ui-toast warning" role="status"><span class="toast-icon" aria-hidden="true">!</span><div><strong>Detector unavailable</strong><p>One assignment needs review.</p><button class="toast-action" type="button">Review</button></div><button class="toast-close" type="button" aria-label="Dismiss Detector unavailable">×</button></article>
+          <article class="ui-toast info timed" role="status"><span class="toast-icon" aria-hidden="true">i</span><div><strong>Preview updated</strong><p>Sender 2 supplied a newer image.</p></div><button class="toast-close" type="button" aria-label="Dismiss Preview updated">×</button><span class="toast-timer" aria-hidden="true"></span></article>
+        </div>
+      </div>
+      <p class="toast-guidance"><strong>Usage:</strong> Success and informational messages may disappear automatically. Warnings with unresolved actions remain until dismissed. Errors that block work belong in a persistent callout or dialog instead.</p>
+    </section>
+    <section class="validation-reference" aria-labelledby="validation-reference-title">
+      <header><h2 id="validation-reference-title">Form validation & error summaries</h2><span>Required values, inline feedback, warnings, and submit-level guidance</span></header>
+      <form id="validation-demo" class="validation-layout" novalidate>
+        <aside id="validation-summary" class="validation-summary" role="alert" aria-labelledby="validation-summary-title"><span class="validation-summary-icon" aria-hidden="true">!</span><div><strong id="validation-summary-title">2 issues prevent this plan from being applied</strong><p>Review the highlighted fields, then validate again.</p><ul><li><a href="#validation-region-id">Region ID is required.</a></li><li><a href="#validation-threshold">Threshold must be between 0 and 1.</a></li></ul></div></aside>
+        <div class="validation-grid">
+          <div class="validation-field invalid"><div class="validation-label"><label for="validation-region-id">Region ID <span aria-hidden="true">*</span></label><span>Required</span></div><div class="icon-input-shell"><span class="field-icon" aria-hidden="true">#</span><input id="validation-region-id" name="regionId" value="" placeholder="subject-primary" required aria-invalid="true" aria-describedby="validation-region-id-message"></div><small id="validation-region-id-message" class="validation-message error"><span aria-hidden="true">×</span>Enter a stable region ID.</small></div>
+          <div class="validation-field warning"><div class="validation-label"><label for="validation-name">Display name</label><span>Optional</span></div><div class="icon-input-shell"><span class="field-icon" aria-hidden="true">✎</span><input id="validation-name" value="Subject" aria-describedby="validation-name-message"></div><small id="validation-name-message" class="validation-message warning"><span aria-hidden="true">!</span>This name is already used by another region.</small></div>
+          <div class="validation-field invalid"><div class="validation-label"><label for="validation-threshold">Threshold <span aria-hidden="true">*</span></label><span>0–1</span></div><div class="utility-shell"><span aria-hidden="true">◇</span><input id="validation-threshold" name="threshold" type="number" min="0" max="1" step="0.05" value="1.4" required aria-invalid="true" aria-describedby="validation-threshold-message"></div><small id="validation-threshold-message" class="validation-message error"><span aria-hidden="true">×</span>Enter a value from 0 to 1.</small></div>
+          <div class="validation-field valid"><div class="validation-label"><label for="validation-provider">Provider</label><span>Validated</span></div><div class="icon-input-shell"><span class="field-icon" aria-hidden="true">◎</span><input id="validation-provider" value="Comfy local" readonly aria-describedby="validation-provider-message"></div><small id="validation-provider-message" class="validation-message success"><span aria-hidden="true">✓</span>Provider is available.</small></div>
+        </div>
+        <div class="validation-actions"><span><span aria-hidden="true">*</span> Required fields</span><button id="reset-validation-demo" class="bv-button ghost" type="button">Reset example</button><button class="bv-button primary" type="submit">Validate plan</button></div>
+      </form>
+    </section>
+    <section class="footer-reference" aria-labelledby="footer-reference-title">
+      <header><h2 id="footer-reference-title">Status bars & window footers</h2><span>Persistent context, background activity, and final task actions</span></header>
+      <div class="footer-showcase">
+        <article class="footer-example footer-wide"><strong>Application status bar</strong><div class="app-status-bar"><div class="status-group"><span class="status-connection"><i></i>Connected</span><span class="status-separator"></span><button type="button"><span aria-hidden="true">◇</span> 2 regions selected</button></div><div class="status-group status-center"><span class="status-activity"><i class="state-spinner" aria-hidden="true"></i>Queue item 3 of 7</span></div><div class="status-group"><button type="button">100%</button><span class="status-separator"></span><button type="button" aria-label="Open status details">•••</button></div></div><small>Use for continuously relevant workspace state, never for transient success messages.</small></article>
+        <article class="footer-example"><strong>Standard task footer</strong><div class="window-footer"><div><span class="footer-state success"><i></i>All changes valid</span></div><div class="footer-actions"><button class="bv-button ghost" type="button">Cancel</button><button class="bv-button primary" type="button">Apply changes</button></div></div><small>Primary action stays on the right; supporting state remains on the left.</small></article>
+        <article class="footer-example"><strong>Dirty and asynchronous state</strong><div class="window-footer stacked"><div><span class="footer-state warning"><i></i>Unsaved changes</span><span class="footer-detail">Autosave paused while validation is running.</span></div><div class="footer-actions"><button class="bv-button secondary" type="button">Discard</button><button class="bv-button primary" type="button" disabled><span class="spinner"></span>Validating</button></div></div><small>Disabled submission always includes a readable reason nearby.</small></article>
+        <article class="footer-example footer-wide"><strong>Compact inspector footer</strong><div class="inspector-footer"><span>Region P0</span><span class="status-separator"></span><span>1024 × 1024</span><span class="inspector-spacer"></span><button type="button">Reset section</button><button class="primary" type="button">Done</button></div></article>
+      </div>
+    </section>
+    <section class="command-reference" aria-labelledby="command-reference-title">
+      <header><h2 id="command-reference-title">Command palette & quick actions</h2><span>Keyboard-first access to actions without permanent toolbar clutter</span></header>
+      <div class="command-preview"><div><span class="surface-kicker">Global action search</span><strong>Find editor commands, navigation targets, and help articles.</strong><p>The palette is modal, searchable, and optimized for short keyboard interactions.</p><output id="command-demo-status" class="control-status" aria-live="polite">No command executed yet.</output></div><button id="open-command-palette" class="bv-button primary" type="button"><span aria-hidden="true">⌕</span> Open command palette <kbd>Ctrl K</kbd></button></div>
+      <div class="command-guidance" aria-label="Quick actions"><button type="button" data-quick-command="Create region"><span class="command-icon" aria-hidden="true">＋</span><span><strong>Create region</strong><small>Immediate command</small></span><span aria-hidden="true">→</span></button><button type="button" data-quick-command="Go to Detector Registry"><span class="command-icon" aria-hidden="true">◎</span><span><strong>Detector Registry</strong><small>Navigation command</small></span><span aria-hidden="true">→</span></button><button type="button" data-quick-command="Help: Region priority"><span class="command-icon" aria-hidden="true">?</span><span><strong>Region priority help</strong><small>Documentation command</small></span><span aria-hidden="true">→</span></button></div>
+    </section>
+    <dialog id="command-palette" class="command-palette" aria-labelledby="command-palette-title"><header><span aria-hidden="true">⌕</span><input id="command-search" type="search" autocomplete="off" placeholder="Search commands…" aria-label="Search commands" aria-controls="command-results"><button id="close-command-palette" class="command-close" type="button" aria-label="Close command palette">×</button><kbd>Esc</kbd></header><div id="command-results" class="command-results" role="listbox" aria-label="Commands"><div class="command-group" data-command-group><span>Recent</span><button role="option" aria-selected="true" data-search="create region new mask"><span class="command-icon" aria-hidden="true">＋</span><span><strong>Create region</strong><small>Add a new editable mask</small></span><kbd>R</kbd></button><button role="option" aria-selected="false" data-search="open quick prompts edit text"><span class="command-icon" aria-hidden="true">✎</span><span><strong>Open Quick Prompts</strong><small>Edit shared and regional prompts</small></span><kbd>Q</kbd></button></div><div class="command-group" data-command-group><span>Navigate</span><button role="option" aria-selected="false" data-search="go detector registry navigation"><span class="command-icon" aria-hidden="true">◎</span><span><strong>Go to Detector Registry</strong><small>Navigate to reusable detectors</small></span></button><button role="option" aria-selected="false" data-search="show received images history queue"><span class="command-icon" aria-hidden="true">▧</span><span><strong>Show received images</strong><small>Review the latest queue run</small></span></button></div><div class="command-group" data-command-group><span>Help</span><button role="option" aria-selected="false" data-search="help region priority documentation wiki"><span class="command-icon" aria-hidden="true">?</span><span><strong>Help: Region priority</strong><small>Open the contextual help article</small></span></button><button role="option" aria-selected="false" data-search="keyboard shortcuts keybindings help"><span class="command-icon" aria-hidden="true">⌨</span><span><strong>Keyboard shortcuts</strong><small>Review and customize keybindings</small></span></button></div><div id="command-empty" class="command-empty" hidden><span aria-hidden="true">⌕</span><strong>No matching commands</strong><small>Try a shorter or more general term.</small></div></div><footer><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Run</span><output id="command-status" aria-live="polite"></output></footer></dialog>
+    <section class="popover-reference" aria-labelledby="popover-reference-title">
+      <header><h2 id="popover-reference-title">Popovers & contextual menus</h2><span>Anchored detail, feature guidance, and pointer-specific actions</span></header>
+      <div class="popover-grid">
+        <article class="popover-example"><strong>Information popover</strong><p>Useful for optional detail that belongs to a specific field or control.</p><div class="popover-anchor"><button id="info-popover-trigger" class="bv-button secondary" type="button" aria-expanded="false" aria-controls="info-popover">Region priority help</button><div id="info-popover" class="ui-popover" hidden><header><span class="dialog-title-icon info" aria-hidden="true">i</span><div><strong>Region priority</strong><small>Painting and processing order</small></div><button class="popover-close" type="button" aria-label="Close information">×</button></header><p>P0 is evaluated before P1, but lower numeric priority is painted last and therefore appears on top.</p><a href="#">Read full article →</a></div></div></article>
+        <article class="popover-example"><strong>Teaching bubble</strong><p>Shown sparingly when introducing an unfamiliar feature for the first time.</p><div class="popover-anchor teaching-anchor"><button id="teaching-trigger" class="bv-button subtle" type="button" aria-expanded="false" aria-controls="teaching-popover">Show new feature</button><div id="teaching-popover" class="ui-popover teaching-popover" hidden><span class="ui-badge info">New</span><h3>Quick region presets</h3><p>Save frequently used mask and detector combinations, then apply them from the toolbar.</p><div class="popover-actions"><button class="bv-button ghost popover-close" type="button">Not now</button><button class="bv-button primary popover-close" type="button">Try presets</button></div></div></div></article>
+        <article class="popover-example popover-example-wide"><strong>Context menu</strong><p>Right-click the stage or use the keyboard button. The menu is positioned at the invocation point and remains inside the viewport.</p><div id="context-stage" class="context-stage" tabindex="0"><span aria-hidden="true">◇</span><div><strong>Subject region</strong><small>Right-click for available actions</small></div><button id="context-menu-trigger" class="bv-button ghost" type="button" aria-haspopup="menu" aria-expanded="false">•••</button></div></article>
+      </div>
+      <div id="region-context-menu" class="context-menu" role="menu" hidden><button role="menuitem" type="button"><span aria-hidden="true">✎</span><span>Rename region</span><kbd>F2</kbd></button><button role="menuitem" type="button"><span aria-hidden="true">⧉</span><span>Duplicate region</span><kbd>Ctrl+D</kbd></button><div class="context-menu-divider" role="separator"></div><button role="menuitem" type="button"><span aria-hidden="true">⇄</span><span>Merge selected</span></button><button class="danger" role="menuitem" type="button"><span aria-hidden="true">×</span><span>Delete region</span><kbd>Del</kbd></button></div>
+    </section>
+    <section class="list-navigation-reference" aria-labelledby="list-navigation-title">
+      <header><h2 id="list-navigation-title">Navigation lists & tree views</h2><span>Sidebars, actionable rows, and expandable hierarchical content</span></header>
+      <div class="list-navigation-grid">
+        <article class="list-navigation-example"><strong>Sidebar navigation</strong><nav class="sidebar-nav" aria-label="Regional Editor sections"><a class="active" href="#" aria-current="page"><span aria-hidden="true">◎</span><span><strong>Regions</strong><small>Masks and priorities</small></span><span class="ui-counter">12</span></a><a href="#"><span aria-hidden="true">⌁</span><span><strong>Prompts</strong><small>Shared and regional text</small></span></a><a href="#"><span aria-hidden="true">◇</span><span><strong>Detectors</strong><small>Assignments and overrides</small></span><span class="ui-badge warning">2</span></a><a href="#"><span aria-hidden="true">↶</span><span><strong>History</strong><small>Latest queue run</small></span></a></nav></article>
+        <article class="list-navigation-example"><strong>Action list</strong><div class="action-list"><button type="button"><span class="action-list-icon" aria-hidden="true">＋</span><span><strong>Create region</strong><small>Draw a new editable mask</small></span><span class="action-list-meta">R</span></button><button type="button"><span class="action-list-icon" aria-hidden="true">⇄</span><span><strong>Merge selected regions</strong><small>Keep the original mask groups</small></span><span class="action-list-meta">2 selected</span></button><button type="button" disabled><span class="action-list-icon" aria-hidden="true">⌁</span><span><strong>Split connected areas</strong><small>Select a compound region first</small></span></button></div></article>
+        <article class="list-navigation-example list-navigation-wide"><div class="tree-example-heading"><div><strong>Expandable tree</strong><small>Suitable for documentation, settings, and nested editor structures.</small></div><button id="expand-tree" class="bv-button ghost" type="button">Expand all</button></div><div id="reference-tree" class="ui-tree" role="tree" aria-label="BV documentation"><div class="tree-node" role="treeitem" aria-expanded="true" aria-selected="false" tabindex="0"><div class="tree-row"><button class="tree-toggle" type="button" aria-label="Collapse Regional Editor"><i></i></button><span class="tree-icon" aria-hidden="true">▤</span><span class="tree-label"><strong>Regional Editor</strong><small>Editor workspace</small></span><span class="ui-badge subtle">6 pages</span></div><div class="tree-group" role="group"><div class="tree-node leaf" role="treeitem" aria-selected="true" tabindex="-1"><div class="tree-row"><span class="tree-indent"></span><span class="tree-icon" aria-hidden="true">◇</span><span class="tree-label"><strong>Region priority</strong><small>Selected article</small></span></div></div><div class="tree-node leaf" role="treeitem" aria-selected="false" tabindex="-1"><div class="tree-row"><span class="tree-indent"></span><span class="tree-icon" aria-hidden="true">⌁</span><span class="tree-label"><strong>Mask operations</strong><small>Merge and split</small></span></div></div></div></div><div class="tree-node" role="treeitem" aria-expanded="false" aria-selected="false" tabindex="-1"><div class="tree-row"><button class="tree-toggle" type="button" aria-label="Expand Detector Registry"><i></i></button><span class="tree-icon" aria-hidden="true">◎</span><span class="tree-label"><strong>Detector Registry</strong><small>Reusable detector definitions</small></span><span class="ui-badge warning">Review</span></div><div class="tree-group" role="group" hidden><div class="tree-node leaf" role="treeitem" aria-selected="false" tabindex="-1"><div class="tree-row"><span class="tree-indent"></span><span class="tree-icon" aria-hidden="true">□</span><span class="tree-label"><strong>External detectors</strong><small>Provider assignments</small></span></div></div></div></div><div class="tree-node leaf" role="treeitem" aria-selected="false" tabindex="-1"><div class="tree-row"><span class="tree-indent root"></span><span class="tree-icon" aria-hidden="true">?</span><span class="tree-label"><strong>Troubleshooting</strong><small>Common workflow issues</small></span></div></div></div><output id="tree-status" class="control-status" aria-live="polite">Selected: Region priority</output></article>
+      </div>
+    </section>
+    <section class="dialog-reference" aria-labelledby="dialog-reference-title">
+      <header><h2 id="dialog-reference-title">Dialogs & window modes</h2><span>Modal decisions, standard tasks, and modeless contextual help</span></header>
+      <div class="dialog-grid">
+        <article class="dialog-pattern"><span class="dialog-pattern-icon danger" aria-hidden="true">!</span><div><strong>Confirmation dialog</strong><p>For destructive or irreversible decisions that require an explicit answer.</p></div><button id="open-confirm-dialog" class="bv-button danger" type="button">Preview</button></article>
+        <article class="dialog-pattern"><span class="dialog-pattern-icon" aria-hidden="true">□</span><div><strong>Standard task dialog</strong><p>For focused configuration that temporarily owns the interaction.</p></div><button id="open-task-dialog" class="bv-button secondary" type="button">Preview</button></article>
+        <article class="dialog-pattern"><span class="dialog-pattern-icon info" aria-hidden="true">?</span><div><strong>Modeless help window</strong><p>Context remains visible and the underlying workspace stays interactive.</p></div><button id="open-help-dialog" class="bv-button subtle" type="button">Preview</button></article>
+      </div>
+      <div class="dialog-contract"><span class="ui-badge warning"><span class="badge-dot"></span>Modal</span><p>May dim and block interaction, but never blurs the ComfyUI canvas.</p><span class="ui-badge info"><span class="badge-dot"></span>Modeless</span><p>Never adds a backdrop and never blocks the canvas.</p></div>
+    </section>
+    <dialog id="confirm-dialog" class="bv-dialog compact-dialog" aria-labelledby="confirm-dialog-title"><form method="dialog"><header><span class="dialog-title-icon danger" aria-hidden="true">!</span><div><h2 id="confirm-dialog-title">Delete selected region?</h2><p>This removes its mask and prompt assignments.</p></div><button class="dialog-close" value="cancel" aria-label="Close dialog">×</button></header><div class="dialog-body"><aside class="callout warning"><span class="callout-icon" aria-hidden="true">!</span><div><h3>Workflow references remain unchanged</h3><p>Nodes referencing this stable region ID may require manual reassignment.</p></div></aside></div><footer><button class="bv-button ghost" value="cancel">Cancel</button><button class="bv-button danger" value="confirm">Delete region</button></footer></form></dialog>
+    <dialog id="task-dialog" class="bv-dialog task-dialog" aria-labelledby="task-dialog-title"><form method="dialog"><header><span class="dialog-title-icon" aria-hidden="true">□</span><div><h2 id="task-dialog-title">Create region preset</h2><p>Configure a reusable starting point.</p></div><button class="dialog-close" value="cancel" aria-label="Close dialog">×</button></header><div class="dialog-body"><label class="field-label" for="dialog-preset-name">Preset name</label><div class="utility-shell"><span aria-hidden="true">◇</span><input id="dialog-preset-name" value="Portrait subject"></div><label class="boolean-checkbox"><input type="checkbox" checked> Include detector assignments</label></div><footer><button class="bv-button ghost" value="cancel">Cancel</button><button class="bv-button primary" value="confirm">Create preset</button></footer></form></dialog>
+    <dialog id="help-dialog" class="bv-dialog modeless-dialog" aria-labelledby="help-dialog-title"><div class="modeless-handle"><span aria-hidden="true">⠿</span><span>Modeless help</span></div><header><span class="dialog-title-icon info" aria-hidden="true">?</span><div><h2 id="help-dialog-title">Region priority</h2><p>Regional Editor · Contextual help</p></div><button id="close-help-dialog" class="dialog-close" type="button" aria-label="Close help">×</button></header><div class="dialog-body help-content"><p>Lower numeric priorities are painted later and therefore appear above regions with higher numbers.</p><div class="ui-divider labeled"><span>Example</span></div><ol class="content-list ordered"><li>P0 — foreground subject</li><li>P1 — clothing details</li><li>P2 — background</li></ol><a href="#">Open full documentation →</a></div></dialog>
+    <section id="variant-root" aria-live="polite"></section>
+    <section class="boolean-reference" aria-labelledby="boolean-reference-title">
+      <header><h2 id="boolean-reference-title">BooleanField comparison</h2><span>All supported presentations in one place</span></header>
+      <div class="boolean-comparison">
+        <div class="boolean-example">
+          <strong>Toggle · default</strong>
+          <div class="boolean-field"><span class="boolean-label">Enable regional processing</span><div class="boolean-row"><label class="boolean-switch"><input type="checkbox" checked data-boolean-toggle data-true-label="True" data-false-label="False" aria-label="Enable regional processing"><span class="boolean-status" aria-live="polite"></span></label></div></div>
+          <small>Shows a configurable dynamic status next to the switch.</small>
+        </div>
+        <div class="boolean-example">
+          <strong>Checkbox · optional</strong>
+          <div class="boolean-field"><span class="boolean-label">Mask behavior</span><div class="boolean-row"><label class="boolean-checkbox"><input type="checkbox" checked> Preserve disconnected mask areas</label></div></div>
+          <small>Uses one static descriptive label without duplicate status text.</small>
+        </div>
+        <div class="boolean-example">
+          <strong>Select · optional</strong>
+          <div class="boolean-field"><label for="boolean-reference-select">Enable preview</label><select id="boolean-reference-select" class="boolean-select"><option value="true">Yes</option><option value="false">No</option></select></div>
+          <small>Option labels may be configured as Yes/No or True/False.</small>
+        </div>
+      </div>
+    </section>
+    <section class="dropdown-reference" aria-labelledby="dropdown-reference-title">
+      <header><h2 id="dropdown-reference-title">DropdownField comparison</h2><span>Native select and reusable rich option list</span></header>
+      <div class="dropdown-comparison">
+        <div class="dropdown-example">
+          <strong>Single-line select · default</strong>
+          <div class="dropdown-field"><label for="single-dropdown">Detector type</label><select id="single-dropdown" class="single-select"><option>Face detector</option><option>Bounding box detector</option><option>Segmentation detector</option></select></div>
+          <small class="helper">Use the native select when one line of text fully identifies every option.</small>
+        </div>
+        <div class="dropdown-example">
+          <strong>Rich two-line dropdown · optional</strong>
+          <div class="dropdown-field"><label id="rich-dropdown-label">Model provider</label>
+            <div class="rich-dropdown">
+              <button id="rich-dropdown-trigger" class="rich-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="rich-dropdown-label rich-selected-title">
+                <span class="option-icon" data-selected-icon aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M6 4v6M5 14h14v6H5z"/></svg></span>
+                <span class="rich-copy"><strong id="rich-selected-title">Comfy local</strong><small id="rich-selected-meta">Local runtime · no API key</small></span><span class="rich-chevron"><span class="chevron-icon" aria-hidden="true"></span></span>
+              </button>
+              <div id="rich-dropdown-menu" class="rich-menu" hidden>
+                <input id="rich-dropdown-search" class="rich-search" type="search" placeholder="Filter providers" aria-label="Filter providers">
+                <div class="rich-list" role="listbox" aria-labelledby="rich-dropdown-label">
+                  <div class="rich-option-row" role="option" aria-selected="true" data-value="comfy" data-title="Comfy local" data-meta="Local runtime · no API key">
+                    <button class="rich-option-select" type="button"><span class="option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M6 4v6M5 14h14v6H5z"/></svg></span><span class="rich-copy"><strong>Comfy local</strong><small>Local runtime · no API key</small></span></button><button class="option-info" type="button" data-info="Uses the currently connected ComfyUI model provider.">Details</button>
+                  </div>
+                  <div class="rich-option-row" role="option" aria-selected="false" data-value="qwen" data-title="Qwen enhancer" data-meta="Local vision-language model · recommended">
+                    <button class="rich-option-select" type="button"><span class="option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 1 0 7 7M12 7v6l4 2"/></svg></span><span class="rich-copy"><strong>Qwen enhancer</strong><small>Local vision-language model · recommended</small></span></button><button class="option-info" type="button" data-info="Supports structured regional prompt enhancement.">Docs</button>
+                  </div>
+                  <div class="rich-option-row" role="option" aria-selected="false" data-value="remote" data-title="Remote API" data-meta="External provider · credentials required">
+                    <button class="rich-option-select" type="button"><span class="option-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 17z"/></svg></span><span class="rich-copy"><strong>Remote API</strong><small>External provider · credentials required</small></span></button><button class="option-info" type="button" data-info="Requires an explicitly configured external provider.">Setup</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <output id="dropdown-status" class="dropdown-status" aria-live="polite">Selected: Comfy local</output>
+        </div>
+      </div>
+    </section>
+    <section class="search-reference" aria-labelledby="search-reference-title">
+      <header><h2 id="search-reference-title">SearchField & autocomplete</h2><span>Shared rich results with configurable matching</span></header>
+      <div class="search-config"><label>Matching strategy<select id="search-mode"><option value="exact">Exact</option><option value="prefix">Starts with</option><option value="fuzzy" selected>Fuzzy</option></select></label><span class="helper">This is prototype configuration; production fields receive the strategy as a prop.</span></div>
+      <div class="dropdown-field"><label for="autocomplete-input">Search components and providers</label>
+        <div class="autocomplete">
+          <div class="search-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg></span><input id="autocomplete-input" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="autocomplete-results" placeholder="Try qwen, rgp, detector…" autocomplete="off"><button id="autocomplete-clear" class="search-clear" type="button" aria-label="Clear search">×</button></div>
+          <div id="autocomplete-menu" class="search-menu" hidden><div id="autocomplete-results" class="search-results" role="listbox" aria-label="Search results"></div></div>
+        </div>
+      </div>
+      <output id="autocomplete-status" class="search-state" aria-live="polite">Fuzzy matching · type to search</output>
+    </section>
+    <section class="multi-reference" aria-labelledby="multi-reference-title">
+      <header><h2 id="multi-reference-title">Multi-select tags</h2><span>Rich dropdown and autocomplete presentations</span></header>
+      <div class="multi-grid">
+        <div class="multi-example"><strong>Rich dropdown · multi-select</strong><label class="helper" for="multi-dropdown-trigger">Active providers</label><div class="multi-dropdown"><div id="multi-dropdown-tags" class="multi-control"></div><button id="multi-dropdown-trigger" class="multi-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Open provider selection"><span class="chevron-icon" aria-hidden="true"></span></button><div id="multi-dropdown-menu" class="multi-menu" hidden><div id="multi-dropdown-options" role="listbox" aria-multiselectable="true"></div></div></div><output id="multi-dropdown-status" class="search-state" aria-live="polite"></output></div>
+        <div class="multi-example"><strong>Autocomplete · multi-select</strong><label class="helper" for="multi-search-input">Components</label><div class="multi-search"><div class="multi-control"><div id="multi-search-tags" style="display:contents"></div><input id="multi-search-input" class="multi-search-input" type="search" placeholder="Search and add…" autocomplete="off" aria-haspopup="listbox" aria-expanded="false"></div><div id="multi-search-menu" class="multi-menu" hidden><div id="multi-search-results" class="multi-search-results" role="listbox" aria-multiselectable="true"></div></div></div><output id="multi-search-status" class="search-state" aria-live="polite"></output></div>
+      </div>
+    </section>
+    <section class="optionset-reference" aria-labelledby="optionset-reference-title">
+      <header><h2 id="optionset-reference-title">OptionSet comparison</h2><span>One value, three presentations</span></header>
+      <div class="optionset-grid">
+        <div class="optionset-example"><strong>Radio group · default</strong><span id="radio-label" class="optionset-label">Regional usage</span><div class="radio-group" role="radiogroup" aria-labelledby="radio-label"><label class="radio-option"><input type="radio" name="usage-radio" value="Generation" checked> Generation</label><label class="radio-option"><input type="radio" name="usage-radio" value="Detailer"> Detailer</label><label class="radio-option"><input type="radio" name="usage-radio" value="Both"> Both</label></div><output class="optionset-status" data-optionset-status="usage-radio">Selected: Generation</output></div>
+        <div class="optionset-example"><strong>Select · compact alternative</strong><label class="optionset-label" for="usage-select">Regional usage</label><select id="usage-select" class="single-select" data-optionset-select><option>Generation</option><option>Detailer</option><option>Both</option></select><output class="optionset-status">Selected: Generation</output></div>
+        <div class="optionset-example"><strong>Segmented control · short options</strong><span id="segment-label" class="optionset-label">Regional usage</span><div class="segmented-control" role="radiogroup" aria-labelledby="segment-label"><label class="segment"><input type="radio" name="usage-segment" value="Generation" checked><span>Generation</span></label><label class="segment"><input type="radio" name="usage-segment" value="Detailer"><span>Detailer</span></label><label class="segment"><input type="radio" name="usage-segment" value="Both"><span>Both</span></label></div><output class="optionset-status" data-optionset-status="usage-segment">Selected: Generation</output></div>
+      </div>
+    </section>
+    <section class="adaptive-reference" aria-labelledby="adaptive-title">
+      <header><h2 id="adaptive-title">Icons & limited space</h2><span>Drag the right edge of each test area</span></header>
+      <div class="adaptive-grid">
+        <div class="adaptive-case">
+          <strong>TextInput with semantic icon</strong>
+          <div class="space-demo">
+            <div class="wide-control icon-field"><label for="adaptive-text">Width description</label><div class="icon-input-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><input id="adaptive-text" value="1024 pixel output width"></div></div>
+            <button class="compact-trigger" type="button" popovertarget="text-field-popover"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><span class="compact-value" data-text-summary>1024 pixel output width</span></button>
+            <button class="space-resize-handle" type="button" aria-label="Resize TextInput test area"></button>
+          </div>
+          <span class="adaptive-help">Below 310 px the field stops shrinking and becomes a compact editor trigger.</span>
+        </div>
+        <div class="adaptive-case">
+          <strong>NumberField with adaptive slider</strong>
+          <div class="space-demo">
+            <div class="wide-control number-field" data-number-field data-mode="integer" data-number-key="adaptive-width"><div class="number-label-row"><label for="adaptive-width">Output width</label></div><div class="number-value-row"><input class="number-track" type="range" min="256" max="2048" step="64" value="1024"><div class="number-box"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><input id="adaptive-width" type="text" inputmode="numeric" value="1024"><span class="number-unit">px</span></div></div><div class="number-ticks"><span>256</span><span>2048</span></div></div>
+            <button class="compact-trigger" type="button" popovertarget="number-field-popover"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><span class="compact-value"><span data-number-summary="adaptive-width">1024</span> px</span></button>
+            <button class="space-resize-handle" type="button" aria-label="Resize NumberField test area"></button>
+          </div>
+          <span class="adaptive-help">Wide: inline slider. Medium: full-width slider row. Compact: editor popover.</span>
+        </div>
+        <div class="adaptive-case adaptive-case-wide">
+          <strong>Textarea with adaptive editor</strong>
+          <div class="space-demo">
+            <div class="wide-control textarea-field"><label for="adaptive-textarea">Regional prompt</label><div class="textarea-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 9h16M4 13h11M4 17h8"/></svg></span><textarea id="adaptive-textarea">portrait, cinematic rim light, detailed fabric, natural skin texture</textarea></div></div>
+            <button class="compact-trigger" type="button" popovertarget="textarea-field-popover"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 9h16M4 13h11M4 17h8"/></svg></span><span class="compact-value" data-textarea-summary>portrait, cinematic rim light, detailed fabric…</span></button>
+            <button class="space-resize-handle" type="button" aria-label="Resize Textarea test area"></button>
+          </div>
+          <span class="adaptive-help">A multiline value never collapses into an unusably narrow textarea; the compact summary opens a full editor.</span>
+        </div>
+      </div>
+    </section>
+    <section class="blur-reference" aria-labelledby="blur-title">
+      <header><h2 id="blur-title">Canvas & scoped blur test</h2><span>The workflow canvas must remain sharp and interactive</span></header>
+      <div class="blur-status">
+        <label><input id="blur-effects" type="checkbox" checked> Blur own window content when its child popup is open</label>
+        <output id="canvas-click-status">Canvas test clicks: 0</output>
+      </div>
+      <div class="blur-stage">
+        <img class="blur-canvas-image" src="assets/workflow-canvas.png" alt="ComfyUI workflow canvas used to verify scoped blur behavior">
+        <div id="blur-window" class="blur-floating-window effects-full">
+          <header class="blur-window-header"><strong>Modeless BV window</strong><span>Canvas stays available</span></header>
+          <div class="blur-window-content">
+            <p>This floating window never applies blur or a blocking overlay to the ComfyUI canvas.</p>
+            <div class="icon-field"><label for="blur-test-input">Example field</label><div class="icon-input-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><input id="blur-test-input" value="Editable while no child popup is open"></div></div>
+            <div class="blur-window-actions"><button id="open-scoped-popup" class="blur-action primary" type="button">Open child popup</button></div>
+          </div>
+          <div class="scoped-popup" role="dialog" aria-modal="false" aria-labelledby="scoped-popup-title">
+            <strong id="scoped-popup-title">Window-scoped popup</strong>
+            <p>Only the owning BV window content may blur. The workflow canvas remains sharp and clickable.</p>
+            <button id="close-scoped-popup" class="blur-action" type="button">Close popup</button>
+          </div>
+        </div>
+        <button id="canvas-test-button" class="canvas-test-button" type="button">Test canvas interaction</button>
+      </div>
+    </section>
+    <section class="extended-reference" aria-labelledby="compound-title">
+      <header><h2 id="compound-title">Compound numeric fields</h2><span>Existing NumberFields composed into domain groups</span></header>
+      <div class="compound-grid">
+        <fieldset class="compound-field"><legend>CoordinateField</legend><label><span>X</span><input type="number" value="128"><small>px</small></label><label><span>Y</span><input type="number" value="256"><small>px</small></label></fieldset>
+        <fieldset class="compound-field"><legend>SizeField</legend><label><span>↔ Width</span><input type="number" value="1024"><small>px</small></label><label><span>↕ Height</span><input type="number" value="1536"><small>px</small></label></fieldset>
+        <fieldset class="compound-field compound-bounds"><legend>BoundsField</legend><label><span>X</span><input type="number" value="64"><small>px</small></label><label><span>Y</span><input type="number" value="80"><small>px</small></label><label><span>W</span><input type="number" value="768"><small>px</small></label><label><span>H</span><input type="number" value="1024"><small>px</small></label></fieldset>
+      </div>
+    </section>
+    <section class="extended-reference" aria-labelledby="tags-title">
+      <header><h2 id="tags-title">TagInput</h2><span>Free values and constrained suggestions</span></header>
+      <div class="two-column"><div><strong class="example-title">Free tags</strong><div class="tag-input" id="free-tag-field"><div class="tag-values"></div><input aria-label="Add detector label" placeholder="Type and press Enter or comma"></div><output class="control-status" id="free-tag-status"></output></div><div><strong class="example-title">Suggested tags</strong><div class="tag-input" id="suggested-tag-field"><div class="tag-values"></div><input aria-label="Add preset tag" placeholder="portrait, detailer, regional…" list="tag-suggestions"><datalist id="tag-suggestions"><option value="portrait"><option value="detailer"><option value="regional"><option value="foreground"></datalist></div><output class="control-status" id="suggested-tag-status"></output></div></div>
+    </section>
+    <section class="extended-reference" aria-labelledby="utility-title">
+      <header><h2 id="utility-title">Utility fields</h2><span>Shortcuts, secrets, files and directories</span></header>
+      <div class="utility-grid">
+        <div class="utility-example"><strong>KeybindingField</strong><label class="field-label" for="shortcut-recorder">Open quick prompt</label><button id="shortcut-recorder" class="shortcut-recorder" type="button"><span class="key-chip">Ctrl</span><span>+</span><span class="key-chip">Shift</span><span>+</span><span class="key-chip">P</span></button><div class="inline-actions"><button id="record-shortcut" class="mini-button" type="button">Record</button><button id="clear-shortcut" class="mini-button" type="button">Clear</button></div><output id="shortcut-status" class="control-status">Click Record, then press a combination.</output></div>
+        <div class="utility-example"><strong>SecretField</strong><label class="field-label" for="provider-secret">Provider API key</label><div class="utility-shell"><span aria-hidden="true">⌁</span><input id="provider-secret" type="password" value="bv-demo-secret-value" autocomplete="off"><button id="toggle-secret" type="button" aria-label="Show secret">Show</button><button id="clear-secret" type="button">Clear</button></div><output id="secret-status" class="control-status success">Configured · prototype value is never persisted</output></div>
+        <div class="utility-example"><strong>FileNameField</strong><label class="field-label" for="filename-field">Output file name</label><div class="utility-shell"><span aria-hidden="true">▤</span><input id="filename-field" value="BV_regional_%date:yyyy-MM-dd%"><span id="filename-suffix" class="field-suffix">.png</span><label class="native-picker-button" for="native-file-input" tabindex="0">Browse</label><input id="native-file-input" type="file" hidden></div><output id="filename-status" class="control-status">Editable name with an optional native file selection.</output></div>
+        <div class="utility-example"><strong>PathField</strong><label class="field-label" for="path-field">Dataset directory</label><div class="utility-shell"><span aria-hidden="true">⌂</span><input id="path-field" value="autocomplete/datasets" readonly><label class="native-picker-button" for="native-directory-input" tabindex="0">Browse</label><input id="native-directory-input" type="file" webkitdirectory directory hidden></div><output id="path-status" class="control-status">Browse delegates to the native system directory picker.</output></div>
+      </div>
+    </section>
+    <section class="extended-reference" aria-labelledby="color-title">
+      <header><h2 id="color-title">ColorField</h2><span>Lightweight library, wrapped in BV styling</span></header>
+      <div id="color-field-root"></div>
+    </section>
+    <section class="extended-reference" aria-labelledby="json-title">
+      <header><h2 id="json-title">JsonEditor</h2><span>Lightweight syntax highlighting, formatting and validation</span></header>
+      <div id="json-editor-root"></div>
+    </section>
+    <section class="extended-reference" aria-labelledby="image-picker-title">
+      <header><h2 id="image-picker-title">ImagePicker</h2><span>Last queue run · compact selection with optional large preview</span></header>
+      <div class="image-picker-layout"><div class="image-picker"><button id="image-picker-trigger" class="image-picker-trigger" type="button" aria-expanded="false"><span class="image-thumb"><img src="assets/workflow-canvas.png" alt=""></span><span class="image-copy"><strong id="image-picker-name">Sender 2 · Image 2</strong><small id="image-picker-meta">Latest · 1024 × 1024</small></span><span class="chevron-center"><span class="chevron-icon" aria-hidden="true"></span></span></button><div id="image-picker-menu" class="image-picker-menu" hidden></div></div><button id="open-image-preview" class="mini-button" type="button">Large preview</button></div>
+    </section>
+    <section class="extended-reference" aria-labelledby="sortable-title">
+      <header><h2 id="sortable-title">SortableList</h2><span>Compact rows and expandable component containers</span></header>
+      <p class="section-note">Drag only by the handle. Expand, edit, and reorder with the keyboard without triggering accidental dragging.</p>
+      <div id="sortable-list" class="sortable-list"></div>
+      <output id="sortable-status" class="control-status"></output>
+    </section>
+    <section class="extended-reference" aria-labelledby="buttons-title">
+      <header><h2 id="buttons-title">Button system</h2><span>Hierarchy, intent, icons, menus and states</span></header>
+      <div class="button-groups">
+        <div><strong class="example-title">Hierarchy</strong><div class="button-row"><button class="bv-button primary" type="button">Primary action</button><button class="bv-button secondary" type="button">Secondary</button><button class="bv-button subtle" type="button">Subtle</button><button class="bv-button ghost" type="button">Ghost</button></div></div>
+        <div><strong class="example-title">Intent</strong><div class="button-row"><button class="bv-button warning" type="button">Review changes</button><button class="bv-button danger" type="button">Delete region</button><button class="bv-button success" type="button">Apply plan</button></div></div>
+        <div><strong class="example-title">Icons and states</strong><div class="button-row"><button class="bv-button secondary" type="button"><span aria-hidden="true">＋</span> Add region</button><button class="bv-button icon-only secondary" type="button" aria-label="Refresh">↻</button><button class="bv-button secondary loading" type="button" aria-busy="true"><span class="spinner"></span> Loading</button><button class="bv-button secondary" type="button" disabled>Disabled</button></div></div>
+        <div><strong class="example-title">Menu and split button</strong><div class="button-row"><div class="button-menu"><button id="menu-button" class="bv-button secondary" type="button" aria-expanded="false">Export <span class="chevron-icon" aria-hidden="true"></span></button><div id="button-menu-popup" class="button-menu-popup" hidden><button type="button">Export JSON</button><button type="button">Copy to clipboard</button></div></div><div class="split-button"><button class="bv-button primary" type="button">Run plan</button><button id="split-menu-button" class="bv-button primary split-trigger" type="button" aria-label="More run options" aria-expanded="false"><span class="chevron-icon" aria-hidden="true"></span></button><div id="split-menu-popup" class="button-menu-popup" hidden><button type="button">Run selected jobs</button><button type="button">Dry run</button></div></div></div></div>
+      </div>
+    </section>
+  </main>
+  <dialog id="image-preview-dialog" class="image-preview-dialog"><header><strong id="preview-dialog-title">Image preview</strong><button id="close-image-preview" type="button" aria-label="Close preview">×</button></header><img id="preview-dialog-image" src="assets/workflow-canvas.png" alt="Selected queue image preview"><small id="preview-dialog-meta"></small></dialog>
+  <div id="text-field-popover" class="field-popover" popover>
+    <header><strong>Edit width description</strong><button class="field-popover-close" type="button" popovertarget="text-field-popover" popovertargetaction="hide" aria-label="Close">×</button></header>
+    <div class="icon-field"><label for="adaptive-text-popup">Width description</label><div class="icon-input-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><input id="adaptive-text-popup" value="1024 pixel output width" data-compact-text></div></div>
+  </div>
+  <div id="number-field-popover" class="field-popover" popover>
+    <header><strong>Edit output width</strong><button class="field-popover-close" type="button" popovertarget="number-field-popover" popovertargetaction="hide" aria-label="Close">×</button></header>
+    <div class="number-field popover-number-field" data-number-field data-mode="integer" data-number-key="adaptive-width"><div class="number-label-row"><label for="adaptive-width-popup">Output width</label></div><div class="number-value-row"><input class="number-track" type="range" min="256" max="2048" step="64" value="1024"><div class="number-box"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h18M3 12l4-4M3 12l4 4M21 12l-4-4M21 12l-4 4"/></svg></span><input id="adaptive-width-popup" type="text" inputmode="numeric" value="1024"><span class="number-unit">px</span></div></div><div class="number-ticks"><span>256</span><span>2048</span></div></div>
+  </div>
+  <div id="textarea-field-popover" class="field-popover" popover>
+    <header><strong>Edit regional prompt</strong><button class="field-popover-close" type="button" popovertarget="textarea-field-popover" popovertargetaction="hide" aria-label="Close">×</button></header>
+    <div class="textarea-field"><label for="adaptive-textarea-popup">Regional prompt</label><div class="textarea-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 9h16M4 13h11M4 17h8"/></svg></span><textarea id="adaptive-textarea-popup" data-compact-textarea>portrait, cinematic rim light, detailed fabric, natural skin texture</textarea></div></div>
+  </div>
+  <nav class="prototype-switcher" aria-label="Prototype variants">
+    <button id="previous" type="button" aria-label="Previous variant">←</button>
+    <output id="variant-label"></output>
+    <button id="next" type="button" aria-label="Next variant">→</button>
+  </nav>
+
+  <template id="variant-a">
+    <div class="prototype-window variant-a">
+      <header class="variant-title"><h2>A — Quiet inset</h2><span>quiet · flexible · universal</span></header>
+      <div class="input-grid">
+        <div class="input-demo"><span class="demo-name">Default</span><div class="field-a"><label for="a-default">Label</label><input id="a-default" placeholder="Enter text"></div></div>
+        <div class="input-demo"><span class="demo-name">Filled</span><div class="field-a"><label for="a-filled">Label</label><input id="a-filled" value="Existing value"></div></div>
+        <div class="input-demo"><span class="demo-name">Error</span><div class="field-a error"><label for="a-error">Label</label><input id="a-error" value="Invalid value" aria-invalid="true" aria-describedby="a-error-text"><small id="a-error-text" class="helper error">Check the entered value.</small></div></div>
+        <div class="input-demo"><span class="demo-name">Disabled</span><div class="field-a"><label for="a-disabled">Label</label><input id="a-disabled" value="Unavailable" disabled></div></div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">With helper text</span><div class="field-a"><label for="a-help">Model path</label><input id="a-help" placeholder="models/detector/example.pt" aria-describedby="a-help-text"><small id="a-help-text" class="helper">Relative path inside the ComfyUI installation.</small></div></div>
+        <div class="component-divider">Textarea</div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Default · optional icon</span><div class="textarea-field"><label for="a-textarea">Prompt</label><div class="textarea-shell"><span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 9h16M4 13h11M4 17h8"/></svg></span><textarea id="a-textarea" placeholder="Enter a multiline prompt"></textarea></div><small class="helper">Resize vertically when more room is useful.</small></div></div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Optional · horizontal and vertical resize</span><div class="textarea-field"><label for="a-textarea-both">Free-form notes</label><div class="textarea-resize-boundary" data-resize-boundary><div class="textarea-shell resize-both"><textarea id="a-textarea-both">This opt-in mode is intended only for unconstrained editor surfaces.</textarea></div></div><small class="helper">Drag the lower-right corner. Width remains constrained to the owning container.</small></div></div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Error</span><div class="textarea-field error"><label for="a-textarea-error">Prompt</label><div class="textarea-shell"><textarea id="a-textarea-error" aria-invalid="true">Incomplete structured prompt</textarea></div><small class="helper error">Complete the required prompt structure.</small></div></div>
+        <div class="component-divider">BooleanField · default toggle</div>
+        <div class="input-demo"><span class="demo-name">True / False</span><div class="boolean-field"><span class="boolean-label">Enable regional processing</span><div class="boolean-row"><label class="boolean-switch"><input type="checkbox" checked data-boolean-toggle data-true-label="True" data-false-label="False" aria-label="Enable regional processing"><span class="boolean-status" aria-live="polite"></span></label></div></div></div>
+        <div class="input-demo"><span class="demo-name">Yes / No</span><div class="boolean-field"><span class="boolean-label">Use detector fallback</span><div class="boolean-row"><label class="boolean-switch"><input type="checkbox" data-boolean-toggle data-true-label="Yes" data-false-label="No" aria-label="Use detector fallback"><span class="boolean-status" aria-live="polite"></span></label></div></div></div>
+        <div class="component-divider">NumberField</div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Integer · slider + direct input</span><div class="number-field" data-number-field data-mode="integer"><div class="number-label-row"><label for="a-steps">Steps</label></div><div class="number-value-row"><input class="number-track" type="range" min="1" max="100" step="1" value="24" aria-label="Adjust steps"><div class="number-box"><input id="a-steps" type="text" inputmode="numeric" value="24" aria-label="Steps"><span class="number-unit">steps</span></div></div><div class="number-ticks"><span>1</span><span>100</span></div></div></div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Float · percent</span><div class="number-field" data-number-field data-mode="float"><div class="number-label-row"><label for="a-weight">Influence</label></div><div class="number-value-row"><input class="number-track" type="range" min="0" max="100" step="0.5" value="72.5" aria-label="Adjust influence"><div class="number-box"><input id="a-weight" type="text" inputmode="decimal" value="72.5" aria-label="Influence"><span class="number-unit">%</span></div></div><div class="number-ticks"><span>0</span><span>100</span></div></div></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="variant-b">
+    <div class="prototype-window variant-b">
+      <header class="variant-title"><h2>B — Integrated label</h2><span>compact · distinct · strongly guided</span></header>
+      <div class="input-grid">
+        <div class="input-demo"><span class="demo-name">Default</span><div class="field-b"><label for="b-default">Label</label><input id="b-default" placeholder="Enter text"></div></div>
+        <div class="input-demo"><span class="demo-name">Filled</span><div class="field-b"><label for="b-filled">Label</label><input id="b-filled" value="Existing value"></div></div>
+        <div class="input-demo"><span class="demo-name">Error</span><div class="field-b error"><label for="b-error">Label</label><input id="b-error" value="Invalid value" aria-invalid="true"></div><small class="helper error">Check the entered value.</small></div>
+        <div class="input-demo"><span class="demo-name">Disabled</span><div class="field-b"><label for="b-disabled">Label</label><input id="b-disabled" value="Unavailable" disabled></div></div>
+        <div class="component-divider">Textarea · integrated label</div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Integrated label</span><div class="textarea-field textarea-integrated"><label for="b-textarea">Prompt</label><div class="textarea-shell"><textarea id="b-textarea">high-detail portrait, studio lighting, neutral background</textarea></div></div></div>
+        <div class="component-divider">BooleanField · checkbox</div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Static descriptive label</span><div class="boolean-field"><span class="boolean-label">Mask behavior</span><div class="boolean-row"><label class="boolean-checkbox"><input type="checkbox" checked> Preserve disconnected mask areas</label></div><small class="helper">The label remains static; no duplicate True/False text is shown.</small></div></div>
+        <div class="component-divider">NumberField · vertical</div>
+        <div class="input-demo"><span class="demo-name">Integer</span><div class="number-field stacked" data-number-field data-mode="integer"><div class="number-label-row"><label for="b-count">Count</label></div><div class="number-value-row"><input class="number-track" type="range" min="1" max="32" step="1" value="8"><div class="number-box"><input id="b-count" type="text" inputmode="numeric" value="8"><span class="number-unit">items</span></div></div><div class="number-ticks"><span>1</span><span>32</span></div></div></div>
+        <div class="input-demo"><span class="demo-name">Float</span><div class="number-field stacked" data-number-field data-mode="float"><div class="number-label-row"><label for="b-scale">Scale</label></div><div class="number-value-row"><input class="number-track" type="range" min="0" max="2" step="0.05" value="1.25"><div class="number-box"><input id="b-scale" type="text" inputmode="decimal" value="1.25"><span class="number-unit">×</span></div></div><div class="number-ticks"><span>0</span><span>2</span></div></div></div>
+      </div>
+    </div>
+  </template>
+
+  <template id="variant-c">
+    <div class="prototype-window variant-c">
+      <header class="variant-title"><h2>C — Dense inspector</h2><span>Comfy-nah · platzsparend · sachlich</span></header>
+      <div class="input-grid">
+        <div class="input-demo"><span class="demo-name">Default</span><div class="field-c"><label for="c-default">Label</label><input id="c-default" placeholder="Enter text"></div></div>
+        <div class="input-demo"><span class="demo-name">Filled</span><div class="field-c"><label for="c-filled">Label</label><input id="c-filled" value="Existing value"></div></div>
+        <div class="input-demo"><span class="demo-name">Error</span><div class="field-c error"><label for="c-error">Label</label><input id="c-error" value="Invalid value" aria-invalid="true"></div></div>
+        <div class="input-demo"><span class="demo-name">Disabled</span><div class="field-c"><label for="c-disabled">Label</label><input id="c-disabled" value="Unavailable" disabled></div></div>
+        <div class="component-divider">Textarea · inspector</div>
+        <div class="input-demo input-demo-wide"><span class="demo-name">Compact inspector</span><div class="textarea-field textarea-inspector"><label for="c-textarea">Prompt</label><div class="textarea-shell"><textarea id="c-textarea">subject details, controlled lighting, clean silhouette</textarea></div></div></div>
+        <div class="component-divider">BooleanField · select</div>
+        <div class="input-demo"><span class="demo-name">Yes / No options</span><div class="boolean-field"><label for="c-boolean-yes-no">Enable preview</label><select id="c-boolean-yes-no" class="boolean-select"><option value="true">Yes</option><option value="false">No</option></select></div></div>
+        <div class="input-demo"><span class="demo-name">True / False options</span><div class="boolean-field"><label for="c-boolean-true-false">Return mask</label><select id="c-boolean-true-false" class="boolean-select"><option value="true">True</option><option value="false" selected>False</option></select></div></div>
+        <div class="component-divider">NumberField · Inspector</div>
+        <div class="input-demo"><span class="demo-name">Compact rows</span><div class="number-field compact" data-number-field data-mode="integer"><div class="number-label-row"><label for="c-width">Width</label></div><div class="number-value-row"><input class="number-track" type="range" min="256" max="2048" step="64" value="1024"><div class="number-box"><input id="c-width" type="text" inputmode="numeric" value="1024"><span class="number-unit">px</span></div></div><div class="number-ticks"><span>256</span><span>2048</span></div></div></div>
+        <div class="input-demo"><span class="demo-name">Percent</span><div class="number-field compact" data-number-field data-mode="float"><div class="number-label-row"><label for="c-strength">Strength</label></div><div class="number-value-row"><input class="number-track" type="range" min="0" max="100" step="0.5" value="65"><div class="number-box"><input id="c-strength" type="text" inputmode="decimal" value="65"><span class="number-unit">%</span></div></div><div class="number-ticks"><span>0</span><span>100</span></div></div></div>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    const variants = [
+      { key: "A", name: "Quiet inset" },
+      { key: "B", name: "Integrated label" },
+      { key: "C", name: "Dense inspector" }
+    ];
+    const root = document.getElementById("variant-root");
+    const label = document.getElementById("variant-label");
+    const getVariant = () => {
+      const requested = new URLSearchParams(location.search).get("variant")?.toUpperCase();
+      return variants.find((entry) => entry.key === requested) ?? variants[0];
+    };
+    const render = () => {
+      const current = getVariant();
+      const template = document.getElementById(`variant-${current.key.toLowerCase()}`);
+      root.replaceChildren(template.content.cloneNode(true));
+      label.value = `${current.key} — ${current.name}`;
+      root.querySelectorAll("[data-number-field]").forEach(connectNumberField);
+      root.querySelectorAll("[data-boolean-toggle]").forEach(connectBooleanToggle);
+      connectResizeBoundaries(root);
+    };
+    const parseNumber = (value) => Number(value.trim());
+    const formatNumber = (value, mode) => mode === "integer" ? String(Math.round(value)) : String(value);
+    function connectBooleanToggle(input) {
+      const status = input.closest(".boolean-switch").querySelector(".boolean-status");
+      const update = () => { status.textContent = input.checked ? input.dataset.trueLabel : input.dataset.falseLabel; };
+      input.addEventListener("change", update);
+      update();
+    }
+    function connectResizeBoundaries(scope) {
+      scope.querySelectorAll("[data-resize-boundary]").forEach((boundary) => {
+        const target = boundary.querySelector(".resize-both");
+        const clampWidth = () => {
+          const availableWidth = boundary.clientWidth;
+          if (availableWidth > 0 && target.getBoundingClientRect().width > availableWidth) target.style.width = `${availableWidth}px`;
+        };
+        const observer = new ResizeObserver(clampWidth);
+        observer.observe(boundary);
+        observer.observe(target);
+        clampWidth();
+      });
+    }
+    function connectSpaceDemoBoundaries(scope) {
+      scope.querySelectorAll(".space-demo").forEach((target) => {
+        if (target.dataset.resizeConnected === "true") return;
+        target.dataset.resizeConnected = "true";
+        const boundary = target.closest(".adaptive-case");
+        if (!boundary) return;
+        const handle = target.querySelector(".space-resize-handle");
+        const minimumWidth = Number.parseFloat(getComputedStyle(target).minWidth) || 150;
+        const clampWidth = () => {
+          const availableWidth = boundary.clientWidth;
+          if (availableWidth > 0 && target.getBoundingClientRect().width > availableWidth) {
+            target.style.width = `${availableWidth}px`;
+          }
+        };
+        const observer = new ResizeObserver(clampWidth);
+        observer.observe(boundary);
+        observer.observe(target);
+        handle?.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          const startX = event.clientX;
+          const startWidth = target.getBoundingClientRect().width;
+          const resize = (moveEvent) => {
+            const maximumWidth = boundary.clientWidth;
+            const nextWidth = Math.min(maximumWidth, Math.max(minimumWidth, startWidth + moveEvent.clientX - startX));
+            target.style.width = `${nextWidth}px`;
+          };
+          const finish = () => {
+            removeEventListener("pointermove", resize);
+            removeEventListener("pointerup", finish);
+            removeEventListener("pointercancel", finish);
+            clampWidth();
+          };
+          addEventListener("pointermove", resize);
+          addEventListener("pointerup", finish);
+          addEventListener("pointercancel", finish);
+        });
+        clampWidth();
+      });
+    }
+    function connectNumberField(field) {
+      if (field.dataset.connected === "true") return;
+      field.dataset.connected = "true";
+      const slider = field.querySelector(".number-track");
+      const input = field.querySelector(".number-box input");
+      const unit = field.querySelector(".number-unit")?.textContent ?? "";
+      const mode = field.dataset.mode;
+      const numberKey = field.dataset.numberKey;
+      const sliderShell = document.createElement("div");
+      sliderShell.className = "number-slider";
+      slider.parentNode.insertBefore(sliderShell, slider);
+      sliderShell.append(slider);
+      const bubble = document.createElement("output");
+      bubble.className = "number-bubble";
+      sliderShell.append(bubble);
+      const commit = (rawValue, broadcast = true) => {
+        let value = parseNumber(String(rawValue));
+        if (!Number.isFinite(value)) value = Number(slider.value);
+        value = Math.min(Number(slider.max), Math.max(Number(slider.min), value));
+        if (mode === "integer") value = Math.round(value);
+        slider.value = String(value);
+        const position = ((value - Number(slider.min)) / (Number(slider.max) - Number(slider.min))) * 100;
+        slider.style.setProperty("--range-fill", `${position}%`);
+        sliderShell.style.setProperty("--bubble-left", `clamp(22px, ${position}%, calc(100% - 22px))`);
+        input.value = formatNumber(value, mode);
+        bubble.value = `${formatNumber(value, mode)}${unit ? ` ${unit}` : ""}`;
+        if (numberKey) {
+          document.querySelectorAll(`[data-number-summary="${numberKey}"]`).forEach((summary) => { summary.textContent = formatNumber(value, mode); });
+          if (broadcast) document.dispatchEvent(new CustomEvent("bv-number-sync", { detail:{ key:numberKey, value, source:field } }));
+        }
+      };
+      slider.addEventListener("input", () => commit(slider.value));
+      slider.addEventListener("pointerdown", () => {
+        sliderShell.classList.add("is-dragging");
+        addEventListener("pointerup", () => sliderShell.classList.remove("is-dragging"), { once:true });
+      });
+      input.addEventListener("blur", () => commit(input.value));
+      input.addEventListener("keydown", (event) => { if (event.key === "Enter") { commit(input.value); input.select(); } });
+      document.addEventListener("bv-number-sync", (event) => {
+        if (event.detail.key === numberKey && event.detail.source !== field) commit(event.detail.value, false);
+      });
+      commit(slider.value, false);
+    }
+    const textInputs = [document.getElementById("adaptive-text"), document.getElementById("adaptive-text-popup")];
+    textInputs.forEach((source) => source.addEventListener("input", () => {
+      textInputs.filter((target) => target !== source).forEach((target) => { target.value = source.value; });
+      document.querySelectorAll("[data-text-summary]").forEach((summary) => { summary.textContent = source.value || "Empty"; });
+    }));
+    const textareaInputs = [document.getElementById("adaptive-textarea"), document.getElementById("adaptive-textarea-popup")];
+    textareaInputs.forEach((source) => source.addEventListener("input", () => {
+      textareaInputs.filter((target) => target !== source).forEach((target) => { target.value = source.value; });
+      const compactValue = source.value.trim() || "Empty";
+      const summaryValue = compactValue.length > 52 ? `${compactValue.slice(0,52)}…` : compactValue;
+      document.querySelectorAll("[data-textarea-summary]").forEach((summary) => { summary.textContent = summaryValue; });
+    }));
+    const cycle = (direction) => {
+      const currentIndex = variants.findIndex((entry) => entry.key === getVariant().key);
+      const nextIndex = (currentIndex + direction + variants.length) % variants.length;
+      const url = new URL(location.href);
+      url.searchParams.set("variant", variants[nextIndex].key);
+      history.replaceState({}, "", url);
+      render();
+    };
+    document.getElementById("previous").addEventListener("click", () => cycle(-1));
+    document.getElementById("next").addEventListener("click", () => cycle(1));
+    const blurWindow = document.getElementById("blur-window");
+    const blurEffects = document.getElementById("blur-effects");
+    const canvasClickStatus = document.getElementById("canvas-click-status");
+    let canvasClicks = 0;
+    document.getElementById("open-scoped-popup").addEventListener("click", () => blurWindow.classList.add("has-popup"));
+    document.getElementById("close-scoped-popup").addEventListener("click", () => blurWindow.classList.remove("has-popup"));
+    blurEffects.addEventListener("change", () => {
+      blurWindow.classList.toggle("effects-full", blurEffects.checked);
+      blurWindow.classList.toggle("effects-off", !blurEffects.checked);
+    });
+    document.getElementById("canvas-test-button").addEventListener("click", () => {
+      canvasClicks += 1;
+      canvasClickStatus.value = `Canvas test clicks: ${canvasClicks}`;
+    });
+    const dropdownTrigger = document.getElementById("rich-dropdown-trigger");
+    const dropdownMenu = document.getElementById("rich-dropdown-menu");
+    const dropdownSearch = document.getElementById("rich-dropdown-search");
+    const dropdownStatus = document.getElementById("dropdown-status");
+    const dropdownRows = [...dropdownMenu.querySelectorAll(".rich-option-row")];
+    const openDropdown = () => {
+      dropdownMenu.hidden = false;
+      dropdownTrigger.setAttribute("aria-expanded", "true");
+      dropdownSearch.focus();
+    };
+    const closeDropdown = () => {
+      dropdownMenu.hidden = true;
+      dropdownTrigger.setAttribute("aria-expanded", "false");
+    };
+    dropdownTrigger.addEventListener("click", () => dropdownMenu.hidden ? openDropdown() : closeDropdown());
+    dropdownTrigger.addEventListener("keydown", (event) => {
+      if (["ArrowDown", "Enter", " "].includes(event.key)) { event.preventDefault(); openDropdown(); }
+    });
+    dropdownSearch.addEventListener("input", () => {
+      const query = dropdownSearch.value.trim().toLowerCase();
+      dropdownRows.forEach((row) => { row.hidden = !row.textContent.toLowerCase().includes(query); });
+    });
+    dropdownSearch.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") { event.preventDefault(); dropdownRows.find((row) => !row.hidden)?.querySelector(".rich-option-select").focus(); }
+      if (event.key === "Escape") { closeDropdown(); dropdownTrigger.focus(); }
+    });
+    dropdownRows.forEach((row, rowIndex) => {
+      const selectButton = row.querySelector(".rich-option-select");
+      selectButton.addEventListener("click", () => {
+        dropdownRows.forEach((candidate) => candidate.setAttribute("aria-selected", String(candidate === row)));
+        document.getElementById("rich-selected-title").textContent = row.dataset.title;
+        document.getElementById("rich-selected-meta").textContent = row.dataset.meta;
+        dropdownTrigger.querySelector("[data-selected-icon]").innerHTML = row.querySelector(".option-icon").innerHTML;
+        dropdownStatus.value = `Selected: ${row.dataset.title}`;
+        closeDropdown();
+        dropdownTrigger.focus();
+      });
+      selectButton.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") { closeDropdown(); dropdownTrigger.focus(); return; }
+        const direction = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+        if (!direction) return;
+        event.preventDefault();
+        const visibleRows = dropdownRows.filter((candidate) => !candidate.hidden);
+        const visibleIndex = visibleRows.indexOf(row);
+        visibleRows[(visibleIndex + direction + visibleRows.length) % visibleRows.length]?.querySelector(".rich-option-select").focus();
+      });
+      row.querySelector(".option-info").addEventListener("click", (event) => {
+        event.stopPropagation();
+        dropdownStatus.value = event.currentTarget.dataset.info;
+      });
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".rich-dropdown")) closeDropdown();
+    });
+    const autocompleteData = [
+      { id:"comfy", title:"Comfy local", meta:"Local runtime · no API key", keywords:"runtime local provider", action:"Provider details", icon:'<svg viewBox="0 0 24 24"><path d="M4 7h16M6 4v6M5 14h14v6H5z"/></svg>' },
+      { id:"qwen", title:"Qwen enhancer", meta:"Local vision-language model · recommended", keywords:"vlm prompt improve", action:"Open docs", icon:'<svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 1 0 7 7M12 7v6l4 2"/></svg>' },
+      { id:"regional", title:"Regional prompt", meta:"Structured prompt and region bindings", keywords:"rgp regions conditioning", action:"Inspect schema", icon:'<svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>' },
+      { id:"face", title:"Face detector", meta:"Bounding boxes for detected faces", keywords:"bbox detection impact", action:"Detector info", icon:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9 10h.01M15 10h.01M9 15c2 1 4 1 6 0"/></svg>' },
+      { id:"segment", title:"Segmentation detector", meta:"Pixel-accurate semantic masks", keywords:"mask segs pixel", action:"Detector info", icon:'<svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 4h6v8h-6zM5 15h7v5H5zM15 15h5v5h-5z"/></svg>' },
+      { id:"remote", title:"Remote API", meta:"External provider · credentials required", keywords:"cloud external online", action:"Setup", icon:'<svg viewBox="0 0 24 24"><path d="M7 17h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 17z"/></svg>' }
+    ];
+    const autocompleteInput = document.getElementById("autocomplete-input");
+    const autocompleteMenu = document.getElementById("autocomplete-menu");
+    const autocompleteResults = document.getElementById("autocomplete-results");
+    const autocompleteMode = document.getElementById("search-mode");
+    const autocompleteStatus = document.getElementById("autocomplete-status");
+    let autocompleteMatches = [];
+    let autocompleteActiveIndex = -1;
+    const fuzzyScore = (candidate, query) => {
+      let queryIndex = 0;
+      let score = 0;
+      let previousMatch = -2;
+      for (let index = 0; index < candidate.length && queryIndex < query.length; index += 1) {
+        if (candidate[index] !== query[queryIndex]) continue;
+        score += previousMatch === index - 1 ? 3 : 1;
+        if (index === 0 || candidate[index - 1] === " ") score += 2;
+        previousMatch = index;
+        queryIndex += 1;
+      }
+      return queryIndex === query.length ? score - candidate.length * .001 : -1;
+    };
+    const getSearchMatches = () => {
+      const query = autocompleteInput.value.trim().toLowerCase();
+      if (!query) return autocompleteData.map((item) => ({ item, score:0 }));
+      return autocompleteData.map((item) => {
+        const title = item.title.toLowerCase();
+        const searchable = `${title} ${item.meta.toLowerCase()} ${item.keywords}`;
+        if (autocompleteMode.value === "exact") return { item, score:title === query ? 1 : -1 };
+        if (autocompleteMode.value === "prefix") return { item, score:title.startsWith(query) ? 1 : -1 };
+        return { item, score:fuzzyScore(searchable, query) };
+      }).filter((entry) => entry.score >= 0).sort((left,right) => right.score - left.score);
+    };
+    const closeAutocomplete = () => {
+      autocompleteMenu.hidden = true;
+      autocompleteInput.setAttribute("aria-expanded", "false");
+      autocompleteActiveIndex = -1;
+    };
+    const selectAutocompleteItem = (item) => {
+      autocompleteInput.value = item.title;
+      autocompleteStatus.value = `Selected: ${item.title}`;
+      closeAutocomplete();
+      autocompleteInput.focus();
+    };
+    const setAutocompleteActive = (index) => {
+      if (!autocompleteMatches.length) return;
+      autocompleteActiveIndex = (index + autocompleteMatches.length) % autocompleteMatches.length;
+      autocompleteResults.querySelectorAll(".search-result").forEach((row,rowIndex) => row.setAttribute("aria-selected", String(rowIndex === autocompleteActiveIndex)));
+      autocompleteResults.querySelectorAll(".search-result-select")[autocompleteActiveIndex]?.focus();
+    };
+    const renderAutocomplete = () => {
+      autocompleteMatches = getSearchMatches().map((entry) => entry.item);
+      autocompleteActiveIndex = -1;
+      autocompleteResults.replaceChildren();
+      if (!autocompleteMatches.length) {
+        const empty = document.createElement("div");
+        empty.className = "search-empty";
+        empty.textContent = "No matching results";
+        autocompleteResults.append(empty);
+      }
+      autocompleteMatches.forEach((item,index) => {
+        const row = document.createElement("div");
+        row.className = "search-result";
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", "false");
+        const selectButton = document.createElement("button");
+        selectButton.type = "button";
+        selectButton.className = "search-result-select";
+        selectButton.innerHTML = `<span class="option-icon" aria-hidden="true">${item.icon}</span><span class="rich-copy"><strong>${item.title}</strong><small>${item.meta}</small></span>`;
+        selectButton.addEventListener("click", () => selectAutocompleteItem(item));
+        selectButton.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown") { event.preventDefault(); setAutocompleteActive(index + 1); }
+          if (event.key === "ArrowUp") { event.preventDefault(); setAutocompleteActive(index - 1); }
+          if (event.key === "Escape") { closeAutocomplete(); autocompleteInput.focus(); }
+        });
+        const infoButton = document.createElement("button");
+        infoButton.type = "button";
+        infoButton.className = "search-result-info";
+        infoButton.textContent = item.action;
+        infoButton.addEventListener("click", () => { autocompleteStatus.value = `${item.action}: ${item.meta}`; });
+        row.append(selectButton,infoButton);
+        autocompleteResults.append(row);
+      });
+      autocompleteMenu.hidden = false;
+      autocompleteInput.setAttribute("aria-expanded", "true");
+      autocompleteStatus.value = `${autocompleteMode.options[autocompleteMode.selectedIndex].text} matching · ${autocompleteMatches.length} result${autocompleteMatches.length === 1 ? "" : "s"}`;
+    };
+    autocompleteInput.addEventListener("focus", renderAutocomplete);
+    autocompleteInput.addEventListener("input", renderAutocomplete);
+    autocompleteInput.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") { event.preventDefault(); setAutocompleteActive(0); }
+      if (event.key === "Escape") closeAutocomplete();
+      if (event.key === "Enter" && autocompleteMatches.length === 1) { event.preventDefault(); selectAutocompleteItem(autocompleteMatches[0]); }
+    });
+    autocompleteMode.addEventListener("change", () => { if (document.activeElement === autocompleteInput || !autocompleteMenu.hidden) renderAutocomplete(); });
+    document.getElementById("autocomplete-clear").addEventListener("click", () => { autocompleteInput.value = ""; autocompleteInput.focus(); renderAutocomplete(); });
+    document.addEventListener("pointerdown", (event) => { if (!event.target.closest(".autocomplete") && event.target !== autocompleteMode) closeAutocomplete(); });
+    const createSelectionTag = (item, onRemove) => {
+      const tag = document.createElement("span");
+      tag.className = "selection-tag";
+      const label = document.createElement("span");
+      label.textContent = item.title;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${item.title}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", onRemove);
+      tag.append(label,remove);
+      return tag;
+    };
+    const multiDropdownSelected = new Set(["comfy","qwen"]);
+    const multiDropdownTags = document.getElementById("multi-dropdown-tags");
+    const multiDropdownMenu = document.getElementById("multi-dropdown-menu");
+    const multiDropdownOptions = document.getElementById("multi-dropdown-options");
+    const multiDropdownTrigger = document.getElementById("multi-dropdown-trigger");
+    const multiDropdownStatus = document.getElementById("multi-dropdown-status");
+    const renderMultiDropdown = () => {
+      multiDropdownTags.replaceChildren();
+      autocompleteData.filter((item) => multiDropdownSelected.has(item.id)).forEach((item) => multiDropdownTags.append(createSelectionTag(item, () => { multiDropdownSelected.delete(item.id); renderMultiDropdown(); })));
+      if (!multiDropdownSelected.size) { const empty = document.createElement("span"); empty.className = "helper"; empty.textContent = "Select providers"; multiDropdownTags.append(empty); }
+      multiDropdownOptions.replaceChildren();
+      autocompleteData.slice(0,4).forEach((item) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "multi-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(multiDropdownSelected.has(item.id)));
+        option.innerHTML = `<span class="multi-check">${multiDropdownSelected.has(item.id) ? "✓" : ""}</span><span class="rich-copy"><strong>${item.title}</strong><small>${item.meta}</small></span>`;
+        option.addEventListener("click", () => { multiDropdownSelected.has(item.id) ? multiDropdownSelected.delete(item.id) : multiDropdownSelected.add(item.id); renderMultiDropdown(); });
+        multiDropdownOptions.append(option);
+      });
+      multiDropdownStatus.value = `${multiDropdownSelected.size} provider${multiDropdownSelected.size === 1 ? "" : "s"} selected`;
+    };
+    multiDropdownTrigger.addEventListener("click", () => {
+      multiDropdownMenu.hidden = !multiDropdownMenu.hidden;
+      multiDropdownTrigger.setAttribute("aria-expanded", String(!multiDropdownMenu.hidden));
+    });
+    const multiSearchSelected = new Set(["regional"]);
+    const multiSearchTags = document.getElementById("multi-search-tags");
+    const multiSearchInput = document.getElementById("multi-search-input");
+    const multiSearchMenu = document.getElementById("multi-search-menu");
+    const multiSearchResults = document.getElementById("multi-search-results");
+    const multiSearchStatus = document.getElementById("multi-search-status");
+    const renderMultiSearch = () => {
+      multiSearchTags.replaceChildren();
+      autocompleteData.filter((item) => multiSearchSelected.has(item.id)).forEach((item) => multiSearchTags.append(createSelectionTag(item, () => { multiSearchSelected.delete(item.id); renderMultiSearch(); multiSearchInput.focus(); })));
+      const query = multiSearchInput.value.trim().toLowerCase();
+      const matches = autocompleteData.map((item) => ({ item, score:query ? fuzzyScore(`${item.title} ${item.meta} ${item.keywords}`.toLowerCase(),query) : 0 })).filter((entry) => entry.score >= 0).sort((left,right) => right.score - left.score);
+      multiSearchResults.replaceChildren();
+      matches.forEach(({ item }) => {
+        const option = document.createElement("button");
+        option.type = "button";
+        option.className = "multi-option";
+        option.setAttribute("role", "option");
+        option.setAttribute("aria-selected", String(multiSearchSelected.has(item.id)));
+        option.innerHTML = `<span class="multi-check">${multiSearchSelected.has(item.id) ? "✓" : ""}</span><span class="option-icon" aria-hidden="true">${item.icon}</span><span class="rich-copy"><strong>${item.title}</strong><small>${item.meta}</small></span>`;
+        option.addEventListener("click", () => { multiSearchSelected.has(item.id) ? multiSearchSelected.delete(item.id) : multiSearchSelected.add(item.id); multiSearchInput.value = ""; renderMultiSearch(); multiSearchInput.focus(); });
+        multiSearchResults.append(option);
+      });
+      multiSearchMenu.hidden = false;
+      multiSearchInput.setAttribute("aria-expanded", "true");
+      multiSearchStatus.value = `${multiSearchSelected.size} component${multiSearchSelected.size === 1 ? "" : "s"} selected`;
+    };
+    multiSearchInput.addEventListener("focus", renderMultiSearch);
+    multiSearchInput.addEventListener("input", renderMultiSearch);
+    multiSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Backspace" && !multiSearchInput.value && multiSearchSelected.size) { const last = [...multiSearchSelected].at(-1); multiSearchSelected.delete(last); renderMultiSearch(); }
+      if (event.key === "Escape") { multiSearchMenu.hidden = true; multiSearchInput.setAttribute("aria-expanded", "false"); }
+      if (event.key === "ArrowDown") { event.preventDefault(); multiSearchResults.querySelector(".multi-option")?.focus(); }
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!event.target.closest(".multi-dropdown")) { multiDropdownMenu.hidden = true; multiDropdownTrigger.setAttribute("aria-expanded", "false"); }
+      if (!event.target.closest(".multi-search")) { multiSearchMenu.hidden = true; multiSearchInput.setAttribute("aria-expanded", "false"); }
+    });
+    renderMultiDropdown();
+    renderMultiSearch();
+    multiSearchMenu.hidden = true;
+    multiSearchInput.setAttribute("aria-expanded", "false");
+    document.querySelectorAll('.optionset-reference input[type="radio"]').forEach((input) => input.addEventListener("change", () => {
+      if (!input.checked) return;
+      document.querySelector(`[data-optionset-status="${input.name}"]`).value = `Selected: ${input.value}`;
+    }));
+    document.querySelectorAll("[data-optionset-select]").forEach((select) => select.addEventListener("change", () => { select.nextElementSibling.value = `Selected: ${select.value}`; }));
+    addEventListener("keydown", (event) => {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (event.key === "ArrowLeft") cycle(-1);
+      if (event.key === "ArrowRight") cycle(1);
+    });
+    addEventListener("popstate", render);
+    render();
+    connectSpaceDemoBoundaries(document);
+    document.querySelectorAll(".boolean-reference [data-boolean-toggle]").forEach(connectBooleanToggle);
+    document.querySelectorAll(".adaptive-reference [data-number-field], .field-popover [data-number-field]").forEach(connectNumberField);
+  </script>
+  <script src="./extended-controls.bundle.js"></script>
+</body>
+</html>

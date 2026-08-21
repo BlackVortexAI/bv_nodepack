@@ -1,10 +1,11 @@
 import { defaultConditioning, defaultDetection, defaultDetailerPlan, DetailerPlanConfig, DetailerPlanJob, DetailerPlanRegion, eligibleDetailerRegions, parseDetailerPlanConfig, serializeDetailerPlanConfig } from "./detailerPlanConfig";
+import { createBvButton, createBvDialog } from "../ui/dom";
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) => { const value = document.createElement(tag); if (text != null) value.textContent = text; return value; };
-const button = (label: string, action: () => void, primary = false) => { const value = el("button", label); value.type = "button"; value.className = primary ? "bv-detailer-button bv-detailer-button-primary" : "bv-detailer-button"; value.onclick = action; return value; };
+const button = (label: string, action: () => void, variant: "primary" | "secondary" | "ghost" | "danger" = "secondary") => { const value = createBvButton(label, variant); value.onclick = action; return value; };
 export const openDetailerPlanDialog = (regions: DetailerPlanRegion[], detectorIds: string[], stored: unknown, save: (value: string) => void) => {
     const available = eligibleDetailerRegions(regions); let config: DetailerPlanConfig = parseDetailerPlanConfig(stored, regions);
-    const dialog = el("dialog"); dialog.className = "bv-detailer-dialog";
-    const header = el("header"); header.className = "bv-detailer-dialog-header"; header.append(el("h2", "Regional Detailer Plan"), el("p", "Each job is one sequential detail pass. Combine regions when they should share a crop, prompt context, and detector."));
+    const shell = createBvDialog({ title: "Regional Detailer Plan", description: "Each job is one sequential detail pass. Combine regions when they should share a crop, prompt context, and detector.", size: "large" });
+    const dialog = shell.dialog;
     const list = el("div"); list.className = "bv-detailer-card-list";
     const numberField = (caption: string, value: number, min: number, max: number, step: number, changed: (value: number) => void) => { const input = el("input"); input.type = "number"; input.min = String(min); input.max = String(max); input.step = String(step); input.value = String(value); input.onchange = () => changed(Math.max(min, Math.min(max, Number(input.value)))); const label = el("label", caption); label.className = "bv-detailer-field"; label.append(input); return label; };
     const render = () => {
@@ -13,7 +14,7 @@ export const openDetailerPlanDialog = (regions: DetailerPlanRegion[], detectorId
         config.jobs.forEach((job, index) => {
             const card = el("section"); card.className = "bv-detailer-card";
             const head = el("div"); head.className = "bv-detailer-card-header"; const title = el("strong", `Job ${index + 1}`); title.className = "bv-detailer-card-title";
-            head.append(title, button("Move up", () => { if (index) [config.jobs[index - 1], config.jobs[index]] = [job, config.jobs[index - 1]]; render(); }), button("Move down", () => { if (index + 1 < config.jobs.length) [config.jobs[index + 1], config.jobs[index]] = [job, config.jobs[index + 1]]; render(); }), button("Remove", () => { config.jobs.splice(index, 1); render(); }));
+            head.append(title, button("Move up", () => { if (index) [config.jobs[index - 1], config.jobs[index]] = [job, config.jobs[index - 1]]; render(); }, "ghost"), button("Move down", () => { if (index + 1 < config.jobs.length) [config.jobs[index + 1], config.jobs[index]] = [job, config.jobs[index + 1]]; render(); }, "ghost"), button("Remove", () => { config.jobs.splice(index, 1); render(); }, "danger"));
             const regionGrid = el("div"); regionGrid.className = "bv-detailer-region-grid";
             for (const region of available) { const label = el("label"); label.className = "bv-detailer-region-choice"; const checkbox = el("input"); checkbox.type = "checkbox"; checkbox.checked = job.region_ids.includes(region.id); checkbox.onchange = () => { job.region_ids = checkbox.checked ? [...job.region_ids, region.id] : job.region_ids.filter(id => id !== region.id); if (!job.region_ids.includes(job.primary_region_id)) job.primary_region_id = job.region_ids[0] ?? ""; render(); }; label.append(checkbox, ` ${region.name}`); regionGrid.append(label); }
             const controls = el("div"); controls.className = "bv-detailer-control-grid";
@@ -28,6 +29,6 @@ export const openDetailerPlanDialog = (regions: DetailerPlanRegion[], detectorId
             card.append(head, el("div", "Regions"), regionGrid, controls, conditioning, detection); list.append(card);
         });
     };
-    const footer = el("footer"); footer.className = "bv-detailer-dialog-footer"; footer.append(button("Restore defaults", () => { config = defaultDetailerPlan(regions); render(); }), button("Add job", () => { const first = available[0]; if (first) { config.jobs.push({ region_ids: [first.id], primary_region_id: first.id, mask_composition: "union", prompt_composition: "context", conditioning: defaultConditioning(), detector: defaultDetection() }); render(); } }), button("Cancel", () => dialog.close()), button("Save plan", () => { if (!config.jobs.some(job => !job.region_ids.length)) { save(serializeDetailerPlanConfig(config)); dialog.close(); } }, true));
-    dialog.addEventListener("close", () => dialog.remove()); dialog.append(header, list, footer); document.body.append(dialog); render(); dialog.showModal();
+    shell.footer.append(button("Restore defaults", () => { config = defaultDetailerPlan(regions); render(); }, "ghost"), button("Add job", () => { const first = available[0]; if (first) { config.jobs.push({ region_ids: [first.id], primary_region_id: first.id, mask_composition: "union", prompt_composition: "context", conditioning: defaultConditioning(), detector: defaultDetection() }); render(); } }), button("Cancel", () => dialog.close(), "ghost"), button("Save plan", () => { if (!config.jobs.some(job => !job.region_ids.length)) { save(serializeDetailerPlanConfig(config)); dialog.close(); } }, "primary"));
+    shell.body.append(list); render(); shell.show();
 };

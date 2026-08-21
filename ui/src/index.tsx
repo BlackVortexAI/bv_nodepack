@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getApi, getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
 import styles from "./index.css?inline";
+import flexLayoutStyles from "flexlayout-react/style/combined.css?inline";
 import RegionalEditor from "./regional/RegionalEditor";
 import QuickPromptEditor from "./regional/QuickPromptEditor";
 import { emptyDocument, parseDocument } from "./regional/model";
@@ -21,6 +22,7 @@ import { parseDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
+import { applyReducedEffects, applyUiPreferences, applyUiSize, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID } from "./ui/preferences";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -477,12 +479,7 @@ function BVRoot() {
     }, []);
 
     return (<>
-        <BVPortal
-            open={portalOpen}
-    onClose={() => setPortalOpen(false)}
->
-    Hi
-    </BVPortal>
+        <BVPortal open={portalOpen} onClose={() => setPortalOpen(false)} />
         <RegionalEditor open={regionalOpen} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
         <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
     </>);
@@ -494,7 +491,7 @@ function ensureMountedOnce() {
     if (!document.getElementById(STYLE_ID)) {
         const style = document.createElement("style");
         style.id = STYLE_ID;
-        style.textContent = styles;
+        style.textContent = `${flexLayoutStyles}\n${styles}`;
         document.head.appendChild(style);
     }
     let container = document.getElementById(MOUNT_ID);
@@ -515,6 +512,7 @@ comfyApp.registerExtension({
     name: "bv_nodepack.control_rack_portal",
     setup() {
         ensureMountedOnce();
+        applyUiPreferences((comfyApp as any).ui?.settings);
         installGlobalTextareaCompletion();
         debugBridgeEnabled = Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(DEBUG_BRIDGE_SETTING_ID, false));
         setDebugBridgeSession(debugBridgeEnabled)
@@ -527,6 +525,27 @@ comfyApp.registerExtension({
 comfyApp.registerExtension({
     name: "bv_nodepack.regional_editor",
     settings: [{
+        id: UI_SIZE_SETTING_ID as any,
+        name: "BV Interface Size",
+        type: "combo",
+        defaultValue: "default",
+        options: [
+            { text: "Compact", value: "compact" },
+            { text: "Default", value: "default" },
+            { text: "Large", value: "large" },
+        ],
+        category: ["BV Node Pack", "Appearance", "Interface size"],
+        tooltip: "Scale every BV-owned interface consistently. Default is the comfortable size; Compact matches the former standard.",
+        onChange: (value: string) => applyUiSize(value),
+    }, {
+        id: UI_REDUCED_EFFECTS_SETTING_ID as any,
+        name: "Reduce BV Interface Effects",
+        type: "boolean",
+        defaultValue: false,
+        category: ["BV Node Pack", "Appearance", "Reduced effects"],
+        tooltip: "Disable BV animations, transitions, blur and visual filters without changing ComfyUI's canvas.",
+        onChange: (value: boolean) => applyReducedEffects(value),
+    }, {
         id: DEBUG_BRIDGE_SETTING_ID as any,
         name: "Enable BV Debug Bridge",
         type: "boolean",
