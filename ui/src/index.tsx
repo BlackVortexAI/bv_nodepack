@@ -14,6 +14,12 @@ import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdap
 import { watchActiveWorkflow } from "./regional/workflowLifecycle";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
+import { openDetailerPlanDialog } from "./regional/detailerPlanDialog";
+import { parseDetailerPlanConfig } from "./regional/detailerPlanConfig";
+import { openDetectorRegistryDialog } from "./regional/detectorRegistryDialog";
+import { parseDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
+import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
+import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 const comfyApp = getApp();
 const comfyApi = getApi();
@@ -98,13 +104,90 @@ const removeDetailerProjectionWidgets = (node: any) => {
 };
 
 const sourceRegionalDocument = (node: any) => {
-    const input = node.inputs?.find((item: any) => item.name === "regional");
+    const input = node.inputs?.find((item: any) => item.name === "regional" || item.name === "regional_prompt");
     const graph = node.graph ?? (comfyApp as any).graph;
     const link = input?.link == null ? null : graph?.links?.[input.link] ?? graph?._links?.get?.(input.link);
     const source = link ? graph?.getNodeById?.(link.origin_id) : null;
     if (source?.type !== "BV Regional Prompt") return null;
     const value = source.widgets?.find((widget: any) => widget.name === "regional_json")?.value;
     try { return parseDocument(value); } catch { return null; }
+};
+
+const detectorIdsForPlan = (node: any) => {
+    const graph = node.graph ?? (comfyApp as any).graph;
+    const registryInput = node.inputs?.find((input: any) => input.name === "detector_registry");
+    const registryLink = registryInput?.link == null ? null : graph?.links?.[registryInput.link] ?? graph?._links?.get?.(registryInput.link);
+    const registryNode = registryLink ? graph?.getNodeById?.(registryLink.origin_id) : null;
+    if (registryNode?.type !== "BV Detector Registry") return [];
+    const value = registryNode.widgets?.find((widget: any) => widget.name === "config_json")?.value;
+    const ids = parseDetectorRegistryConfig(value).detectors.map(entry => entry.id);
+    for (const input of registryNode.inputs ?? []) {
+        if (!String(input.name).startsWith("external_detector_") || input.link == null) continue;
+        const link = graph?.links?.[input.link] ?? graph?._links?.get?.(input.link);
+        const bindingNode = link ? graph?.getNodeById?.(link.origin_id) : null;
+        const detectorId = String(bindingNode?.widgets?.find((widget: any) => widget.name === "detector_id")?.value ?? "").trim();
+        if (detectorId) ids.push(detectorId);
+    }
+    return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+};
+
+const syncDetectorExternalInputs = (node: any) => {
+    const pattern = /^external_detector_(\d+)$/;
+    const connected = (node.inputs ?? []).flatMap((input: any) => {
+        const match = pattern.exec(String(input.name));
+        return match && input.link != null ? [Number(match[1])] : [];
+    });
+    const wanted = new Set(visibleExternalDetectorSlots(connected));
+    for (let index = (node.inputs?.length ?? 0) - 1; index >= 0; index--) {
+        const input = node.inputs[index], match = pattern.exec(String(input.name));
+        if (match && input.link == null && !wanted.has(Number(match[1]))) node.removeInput(index);
+    }
+    for (const index of [...wanted].sort((left, right) => left - right)) {
+        const name = `external_detector_${index}`;
+        if (!node.inputs?.some((input: any) => input.name === name)) node.addInput(name, "BV_DETECTOR_BINDING", { label: `external detector ${index}`, nameLocked: true });
+    }
+    node.setDirtyCanvas?.(true, true);
+};
+
+const labelDetailerUi = (node: any, nodeName: string) => {
+    for (const input of node.inputs ?? []) input.label = detailerUiLabel(nodeName, String(input.name));
+    for (const output of node.outputs ?? []) output.label = detailerUiLabel(nodeName, String(output.name));
+    for (const widget of node.widgets ?? []) {
+        if (!String(widget.name).startsWith("configure_")) widget.label = detailerUiLabel(nodeName, String(widget.name));
+    }
+    node.setDirtyCanvas?.(true, true);
+};
+
+const refreshDetailerPlanNode = (node: any) => {
+    const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
+    const action = node.widgets?.find((widget: any) => widget.name === "configure_detailer_plan");
+    if (!hidden || !action) return;
+    hideRegionalWidget(hidden);
+    const document = sourceRegionalDocument(node);
+    const count = document ? parseDetailerPlanConfig(hidden.value, document.regions).jobs.length : 0;
+    action.label = document ? `Configure Detailer Plan · ${count} Job${count === 1 ? "" : "s"}` : "Connect a BV Regional Prompt";
+    action.disabled = !document;
+    node.setDirtyCanvas?.(true, true);
+};
+
+const upgradeDetailerPlanNode = (node: any) => {
+    const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
+    if (!hidden) return;
+    hideRegionalWidget(hidden);
+    let action = node.widgets?.find((widget: any) => widget.name === "configure_detailer_plan");
+    if (!action) {
+        action = node.addWidget("button", "configure_detailer_plan", null, () => {
+            const document = sourceRegionalDocument(node);
+            if (!document) return;
+            openDetailerPlanDialog(document.regions, detectorIdsForPlan(node), hidden.value, value => {
+                hidden.value = value;
+                refreshDetailerPlanNode(node);
+                node.graph?.setDirtyCanvas?.(true, true);
+            });
+        }, { serialize: false });
+        action.serialize = false;
+    }
+    refreshDetailerPlanNode(node);
 };
 
 type DetailerContextEntry = { region_id: string; influence: number };
@@ -504,6 +587,63 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (DETAILER_UI_NODES.has(nodeData.name)) {
+            const originalCreated = nodeType.prototype.onNodeCreated, originalConfigure = nodeType.prototype.onConfigure;
+            nodeType.prototype.onNodeCreated = function () { const result = originalCreated?.apply(this, arguments); queueMicrotask(() => labelDetailerUi(this, nodeData.name)); return result; };
+            nodeType.prototype.onConfigure = function (data: any) {
+                const result = originalConfigure?.call(this, data);
+                queueMicrotask(() => labelDetailerUi(this, nodeData.name));
+                return result;
+            };
+        }
+        if (nodeData.name === "BV Detector Registry") {
+            const prepare = (node: any) => {
+                const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
+                if (!hidden) return;
+                hideRegionalWidget(hidden);
+                let action = node.widgets?.find((widget: any) => widget.name === "configure_detector_registry");
+                if (!action) {
+                    action = node.addWidget("button", "configure_detector_registry", null, () => {
+                        openDetectorRegistryDialog(comfyApi, hidden.value, value => {
+                            hidden.value = value;
+                            prepare(node);
+                            node.graph?.setDirtyCanvas?.(true, true);
+                        }).catch(error => console.error(error));
+                    }, { serialize: false });
+                    action.serialize = false;
+                }
+                const count = parseDetectorRegistryConfig(hidden.value).detectors.length;
+                action.label = `Configure Detector Registry · ${count} Detector${count === 1 ? "" : "s"}`;
+                node.setDirtyCanvas?.(true, true);
+            };
+            const originalCreated = nodeType.prototype.onNodeCreated, originalConfigure = nodeType.prototype.onConfigure;
+            const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
+            nodeType.prototype.onNodeCreated = function () { const result = originalCreated?.apply(this, arguments); queueMicrotask(() => { prepare(this); syncDetectorExternalInputs(this); }); return result; };
+            nodeType.prototype.onConfigure = function () { const result = originalConfigure?.apply(this, arguments); queueMicrotask(() => { prepare(this); syncDetectorExternalInputs(this); }); return result; };
+            nodeType.prototype.onConnectionsChange = function () { const result = originalConnectionsChange?.apply(this, arguments); queueMicrotask(() => syncDetectorExternalInputs(this)); return result; };
+            return;
+        }
+        if (nodeData.name === "BV Regional Detailer Plan") {
+            const originalCreated = nodeType.prototype.onNodeCreated;
+            const originalConfigure = nodeType.prototype.onConfigure;
+            const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
+            nodeType.prototype.onNodeCreated = function () {
+                const result = originalCreated?.apply(this, arguments);
+                queueMicrotask(() => upgradeDetailerPlanNode(this));
+                return result;
+            };
+            nodeType.prototype.onConfigure = function () {
+                const result = originalConfigure?.apply(this, arguments);
+                queueMicrotask(() => upgradeDetailerPlanNode(this));
+                return result;
+            };
+            nodeType.prototype.onConnectionsChange = function () {
+                const result = originalConnectionsChange?.apply(this, arguments);
+                queueMicrotask(() => refreshDetailerPlanNode(this));
+                return result;
+            };
+            return;
+        }
         if (nodeData.name === "BV Remote LLM Provider") {
             const originalCreated = nodeType.prototype.onNodeCreated;
             const originalConfigure = nodeType.prototype.onConfigure;

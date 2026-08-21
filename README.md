@@ -25,6 +25,7 @@ Subgraph behavior and graceful failure as first-class features.
 | Feature | What it solves |
 | --- | --- |
 | [Regional Editor](#regional-prompting) | Author named rectangle, ellipse, polygon and brush regions with additive/subtractive geometry, binary mask inspection and live tool previews |
+| [Regional Detailer Loop](#regional-detailer-loop) | Process every Detailer/Both region sequentially with its own prompts, composed masks and optional ROI-local detectors |
 | [Prompt Autocomplete](#prompt-autocomplete) | Local, optional CSV/TSV completion in BV editors and ordinary ComfyUI multiline fields |
 | [Prompt AST](#structured-prompt-ast) | Filter and reuse semantic prompt blocks without fragile string replacement |
 | [Smart Pipe](#smart-pipes) | Grow typed workflow state through wired or wireless branches while retaining stable slot identity |
@@ -260,10 +261,73 @@ rectangle. The brush region demonstrates a non-rectangular light arc.
 | BV Regional Prompt Extract | Extracts positive/negative prompt representations |
 | BV Regional Mask Render | Renders a selected mask and pixel bounding box |
 | BV Regional Detailer Mask | Renders one named region, compiles its Global + Region prompts and outputs `IMAGE`, `MASK` and an Impact-compatible `BASIC_PIPE` |
+| BV Regional Detailer Plan | Creates and visually configures ordered jobs from enabled Detailer/Both regions and owns their optional Detector Registry |
+| BV Detailer Loop Job Resolver | Resolves one Loop State into `detailer job`, `current image`, `region mask` and `basic pipe` |
+| BV Detector Registry | Configures and loads several named Ultralytics, ONNX and optional SAM models inside one node; no visible Impact provider chain is required |
+| BV Detector Binding | Optional advanced adapter for detector objects supplied by other nodes |
+| BV Detailer Loop Detect to SEGS (Impact) | Uses the detector binding already owned by the current job and emits only mask-gated `SEGS` |
+| BV Detailer Loop Start / End | Carries plan, job index and accumulated image inside one Loop State; End needs only flow plus processed image |
 | BV Comfy CLIP LLM Provider | Exposes a compatible local generative CLIP through the BV prompt-enhancer provider contract |
 | BV Remote LLM Provider | Selects an OpenAI-compatible provider and model with strict structured output and a separately stored user API key |
 | BV Regional Prompt Enhancer | Proposes and verifies prompt-only changes using regional geometry and relationship context |
 | BV Apply Regional Enhancement | Applies a verified, source-matched proposal while preserving all non-prompt document data |
+
+### Regional detailer loop
+
+The detailer loop turns the editor's enabled `detailer` and `both` regions into
+ordered jobs. Each iteration receives the image produced by the previous iteration,
+the region-aware `BASIC_PIPE`, the composed mask and the region's prompt context.
+Connect `BV Detailer Loop Detect to SEGS (Impact)` to an Impact **Detailer (SEGS)** node when
+detector refinement is required; without a registered detector, the mask is
+converted directly to `SEGS`.
+
+The tested public wiring is:
+
+```text
+BV Regional Prompt ---------> BV Regional Detailer Plan
+BV Detector Registry -------> BV Regional Detailer Plan
+BV Regional Detailer Plan --> BV Detailer Loop Start
+initial image --------------> BV Detailer Loop Start
+
+BV Detailer Loop Start.loop_state --> BV Detailer Loop Job Resolver
+model + clip + vae ----------------> BV Detailer Loop Job Resolver
+BV Detailer Loop Job Resolver.detailer_job/current_image/region_mask
+    --> BV Detailer Loop Detect to SEGS (Impact)
+
+BV Detailer Loop Job Resolver.current_image/basic_pipe
+    + BV Detailer Loop Detect to SEGS (Impact).SEGS
+    --> Impact Detailer (SEGS/pipe)
+
+BV Detailer Loop Start.flow + Impact Detailer.image
+    --> BV Detailer Loop End.final_image
+```
+
+Only the six BV nodes shown in this wiring are part of the user-authored loop.
+The recursive control nodes marked `(internal)` are implementation details and are
+created by ComfyUI during graph expansion; they should not be placed manually.
+
+`BV Detector Registry` connects to `BV Regional Detailer Plan`, which validates
+assignments and owns the registry for all jobs. The Registry provides a visual list
+of detector IDs and model names and supports several detectors in one node. It loads
+Ultralytics, ONNX and optional SAM models internally through the installed Impact
+providers, so ordinary workflows do not contain provider, binding or chained
+registry nodes. The plan dialog selects these detector IDs from a dropdown. Impact
+Pack is therefore required for detector loading and the documented `SEGS` detailer
+path, but the BV plan and regional-mask contracts remain package-neutral.
+`BV Detector Binding` remains an optional advanced input for third-party detector
+objects. It removes unusable placeholder outputs, so an Ultralytics BBOX model's
+non-functional segmentation sentinel is not treated as a connected segmentation
+detector. Detection runs only on the padded regional crop; returned coordinates are
+rebased to the full image before detailing.
+
+The default plan creates one job per eligible region. Its **Configure Detailer Plan**
+dialog groups regions, changes job order, combines masks, selects prompt composition
+and assigns detector IDs without exposing the serialized JSON contract. A job without
+a detector uses its composed regional mask directly. A detector-backed job restricts
+detection to the padded regional crop, intersects the result with the regional mask
+and sends full-image coordinates to Impact. Every completed iteration becomes the
+input image of the next job, so later jobs retain earlier detailer changes. See
+[BV Detailer Plan v1](docs/specs/bv-detailer-plan-v1.md) for the contract and wiring.
 
 ### Spatially aware regional prompt enhancement
 
@@ -1126,6 +1190,30 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-21 — v0.16.0
+
+- Add the visual `BV Regional Detailer Plan` for ordered per-region jobs with
+  grouping, mask/prompt composition, per-job conditioning and optional named
+  detector assignment.
+- Add `BV Detector Registry`, which configures several self-loaded Ultralytics,
+  ONNX and optional SAM detectors in one node while retaining an advanced binding
+  adapter for compatible third-party detector objects.
+- Add the public Detailer Loop Start, Job Resolver, Impact Detect-to-SEGS and End
+  workflow, carrying the plan, current image and job index through one loop state
+  instead of exposing recursive implementation wiring.
+- Run detector inference only inside each padded regional crop, rebase detections
+  to full-image coordinates and gate the resulting `SEGS` with the composed region
+  mask; jobs without a detector use their region mask directly.
+- Preserve each processed image as the input to the next job, allowing detector-
+  backed and mask-only Detailer/Both regions to run sequentially with their own
+  positive and negative prompt context.
+- Validate the complete seven-job Anima workflow in ComfyUI with Person, Hand and
+  Face detector assignments plus detectorless regional jobs and an Impact
+  `Detailer (SEGS/pipe)` consumer.
+- Add frontend and Python regression coverage for plan/registry configuration,
+  optional detector routing, ROI coordinate rebasing, loop-state propagation and
+  recursive graph expansion.
+
 ### 2026-08-20 — v0.15.0
 
 - Add spatially aware regional prompt enhancement that uses immutable canvas,
@@ -1376,6 +1464,10 @@ projects helped shape its product ideas, interaction patterns and technical rese
 - [ComfyUI](https://github.com/Comfy-Org/ComfyUI) and
   [ComfyUI Frontend](https://github.com/Comfy-Org/ComfyUI_frontend) provide the
   runtime, graph, Subgraph and extension foundations this pack integrates with.
+- [ComfyUI Impact Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) provides
+  the detector providers, `SEGS` contract and Detailer consumer used by the optional
+  detector-aware Regional Detailer Loop integration. BV owns its plan, registry,
+  regional crop/mask gating and loop control rather than vendoring Impact internals.
 - [rgthree-comfy](https://github.com/rgthree/rgthree-comfy) influenced the focus on
   fast workflow controls, compact graph tooling and practical seed/control UX.
 - [ComfyUI_agilly1989_motorway](https://github.com/agilly1989/ComfyUI_agilly1989_motorway)

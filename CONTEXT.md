@@ -73,3 +73,19 @@ _Avoid_: Region type, output toggle
 **Detailer-only Region**:
 An active region whose geometry is exported for downstream detail workflows but does not participate in initial generation conditioning.
 _Avoid_: Disabled region, hidden region
+
+**Detailer Plan**:
+An ordered, backend-neutral list of detail jobs derived from enabled Detailer and Both regions.
+_Avoid_: Batch, detector workflow
+
+**Detailer Job**:
+One loop iteration with stable region identity, composed mask, prompt context and an optional named detector assignment.
+_Avoid_: Crop, pass
+
+**Detector Binding**:
+A capability-validated bundle containing only detector outputs that are actually usable, optionally including BBOX, segmentation and SAM.
+_Avoid_: Detector splitter, null detector
+
+**Detector Registry**:
+A workflow-local mapping from stable detector IDs to Detector Bindings used by Detailer Jobs.
+_Avoid_: Detector list, global detectors

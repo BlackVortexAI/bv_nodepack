@@ -205,6 +205,31 @@ full artboard. It targets stable document and region IDs even though the UI show
 This makes it possible to redraw masks over the latest sampler, detailer or upscale
 result without creating a workflow cycle.
 
+## Regional detailer loop
+
+Enabled regions with usage `Detailer` or `Both` can now drive a sequential detailer
+workflow. `BV Regional Detailer Plan` creates the jobs and owns the optional Detector
+Registry. `BV Detailer Loop Start` carries plan, index and accumulated image inside one
+Loop State. `BV Detailer Loop Job Resolver` turns that state into exactly the image,
+mask, job and `BASIC_PIPE` consumed by the current iteration. `End` accepts only the
+flow link and processed image.
+
+For Impact Pack, `BV Detailer Loop Detect to SEGS (Impact)` emits full-image `SEGS`. With no named
+detector it uses the region mask. With a detector registry it crops to the region,
+runs BBOX or segmentation detection, optionally refines with SAM, restores global
+coordinates and intersects the detection with the exact region mask. This keeps
+small-object detection fast without losing editor geometry.
+
+The **Configure Detailer Plan** dialog supports grouped region masks, alternate job
+order, prompt composition and per-job selection from configured detector IDs. The
+serialized JSON contract remains hidden workflow data. The full v1 contract is documented in
+[`docs/specs/bv-detailer-plan-v1.md`](specs/bv-detailer-plan-v1.md).
+
+Each job also owns its Global, Background, primary-region and context-region
+conditioning strengths plus ROI padding, threshold, dilation, crop factor, drop
+size, optional detector query and accepted-label filter. These settings override
+the corresponding fallback widgets for that loop iteration.
+
 ## Prompt autocomplete
 
 BV Prompt Autocomplete works in the full editor, Quick Edit and ordinary ComfyUI
@@ -293,6 +318,8 @@ patch order, verified settings, A/B images, limitations and licensing boundary.
 - Regional negative isolation depends on backend capability.
 - A region is conditioning guidance, not a guaranteed object-sized bounding box,
   exact pose constraint or pixel-perfect interaction target.
+- Detailer jobs are configured from the Plan node dialog; embedding the same panel
+  directly inside the full Regional Editor remains a future convenience.
 
 For the formal schema and implementation boundaries, see
 [`docs/specs/bv-regional-v1.md`](specs/bv-regional-v1.md) and

@@ -264,3 +264,25 @@
 .brush-flyout select { grid-column: 1 / -1; }
 
 
+/* Regional detailer configuration dialogs */
+.bv-detailer-dialog { width:min(960px,94vw); max-height:90vh; padding:0; overflow:hidden; color:var(--input-text); background:var(--comfy-menu-bg); border:1px solid var(--border-color); border-radius:12px; box-shadow:0 24px 80px #0009; }
+.bv-detailer-dialog::backdrop { background:#000a; backdrop-filter:blur(3px); }
+.bv-detailer-dialog-header { padding:18px 20px 12px; border-bottom:1px solid var(--border-color); }
+.bv-detailer-dialog-header h2,.bv-detailer-dialog>h2 { margin:0; font-size:18px; }
+.bv-detailer-dialog-header p,.bv-detailer-dialog>p { margin:6px 0 0; opacity:.72; }
+.bv-detailer-dialog>h2,.bv-detailer-dialog>p { padding-left:20px; padding-right:20px; }
+.bv-detailer-card-list,.bv-detailer-dialog>div:first-of-type { display:grid; gap:12px; max-height:66vh; overflow:auto; padding:14px 20px; }
+.bv-detailer-card { padding:14px; border:1px solid var(--border-color); border-radius:9px; background:color-mix(in srgb,var(--comfy-input-bg) 88%,transparent); }
+.bv-detailer-card-header { display:flex; align-items:center; gap:7px; margin-bottom:12px; }
+.bv-detailer-card-title { flex:1; font-size:14px; }
+.bv-detailer-region-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:5px 10px; margin:7px 0 12px; }
+.bv-detailer-region-choice { padding:5px 7px; border-radius:6px; background:#ffffff08; }
+.bv-detailer-control-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.bv-detailer-field { display:grid; gap:4px; font-size:11px; opacity:.9; }
+.bv-detailer-field input,.bv-detailer-field select,.bv-detailer-control-grid input,.bv-detailer-control-grid select { min-height:30px; padding:4px 7px; color:var(--input-text); background:var(--comfy-input-bg); border:1px solid var(--border-color); border-radius:6px; }
+.bv-detailer-settings { margin-top:10px; border-top:1px solid var(--border-color); padding-top:9px; }
+.bv-detailer-settings summary { cursor:pointer; margin-bottom:9px; font-weight:600; }
+.bv-detailer-dialog-footer,.bv-detailer-dialog>div:last-child { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 16px; border-top:1px solid var(--border-color); }
+.bv-detailer-button,.bv-detailer-dialog button { min-height:30px; padding:5px 10px; color:var(--input-text); background:var(--comfy-input-bg); border:1px solid var(--border-color); border-radius:6px; cursor:pointer; }
+.bv-detailer-button:hover,.bv-detailer-dialog button:hover { filter:brightness(1.18); }
+.bv-detailer-button-primary { color:#071218; background:#59d5e8; border-color:#59d5e8; font-weight:700; }
