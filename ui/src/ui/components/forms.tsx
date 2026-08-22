@@ -19,7 +19,7 @@ export function ChoiceGrid({children,minimum=145,className=""}:{children:ReactNo
 }
 
 export function FieldFrame({ label, help, error, required, icon, className="", children }:FieldFrameProps) {
-    return <label className={`bv-control-field ${error ? "is-error" : ""} ${className}`.trim()}><span className="bv-control-label">{icon && <span className="bv-field-icon">{icon}</span>}<span>{label}</span>{required && <span aria-hidden="true"> *</span>}</span>{children}{error ? <small className="bv-control-message is-error">{error}</small> : help && <small className="bv-control-help">{help}</small>}</label>;
+    return <label className={`bv-control-field ${error ? "is-error" : ""} ${className}`.trim()}><span className="bv-control-label">{icon && <span className="bv-field-icon">{icon}</span>}<span>{label}</span>{required && <span aria-hidden="true"> *</span>}</span>{children}{error ? <small className="bv-control-message is-error">{error}</small> : help && <small className="bv-control-help bv-control-help-overlay">{help}</small>}</label>;
 }
 
 export type TextFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>,"onChange"> & { label:string; help?:ReactNode; error?:ReactNode; icon?:ReactNode; suffix?:ReactNode; onValue?:(value:string)=>void };
@@ -43,7 +43,7 @@ export function NumberField({ label,value,min,max,step,unit,icon,help,slider=tru
     const range=<div className="bv-number-slider" style={{"--bubble-left":fill} as React.CSSProperties}><output>{value}{unit??""}</output><input className="bv-number-track" type="range" min={min} max={max} step={step} value={value} style={{"--range-fill":fill} as React.CSSProperties} aria-labelledby={`${id}-label`} onChange={e=>onValue(clamp(+e.target.value))}/></div>,ticks=<div className="bv-number-ticks"><span>{min}</span><span>{max}</span></div>;
     const inline=<>{<div className="bv-number-value-row">{slider&&range}{box(id)}</div>}{slider&&ticks}</>;
     const expanded=<div className="bv-number-popup">{slider&&range}{box(`${id}-expanded`)}{slider&&ticks}</div>;
-    return <div className={`bv-number-field ${slider?"has-slider":"direct-only"} ${className}`.trim()}><label id={`${id}-label`} htmlFor={id}>{label}</label><AdaptiveFieldPopover label={label} summary={`${value}${unit??""}`} icon={icon} popover={expanded}>{inline}</AdaptiveFieldPopover>{help&&<small className="bv-control-help">{help}</small>}</div>;
+    return <div className={`bv-number-field ${slider?"has-slider":"direct-only"} ${className}`.trim()}><label id={`${id}-label`} htmlFor={id}>{label}</label><AdaptiveFieldPopover label={label} summary={`${value}${unit??""}`} icon={icon} popover={expanded}>{inline}</AdaptiveFieldPopover>{help&&<small className="bv-control-help bv-control-help-overlay">{help}</small>}</div>;
 }
 export type SelectOption={ value:string; label:string; description?:string; icon?:ReactNode; meta?:ReactNode; disabled?:boolean };
 export type SelectValueMeta = { shiftKey:boolean };

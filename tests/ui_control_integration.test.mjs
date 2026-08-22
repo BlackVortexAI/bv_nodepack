@@ -15,6 +15,7 @@ const windowChrome = readFileSync(new URL("../ui/src/ui/window.tsx", import.meta
 const windowMount = readFileSync(new URL("../ui/src/ui/mount.tsx", import.meta.url), "utf8");
 const toolbarLauncher = readFileSync(new URL("../ui/src/ui/ToolbarWindowLauncher.tsx", import.meta.url), "utf8");
 const windowActivity = readFileSync(new URL("../ui/src/ui/windowActivity.ts", import.meta.url), "utf8");
+const windowFocus = readFileSync(new URL("../ui/src/ui/windowFocus.ts", import.meta.url), "utf8");
 const uiEntry = readFileSync(new URL("../ui/src/index.tsx", import.meta.url), "utf8");
 const editorMenus = readFileSync(new URL("../ui/src/regional/EditorMenus.tsx", import.meta.url), "utf8");
 const regionalToolPalette = readFileSync(new URL("../ui/src/ui/components/RegionalToolPalette.tsx", import.meta.url), "utf8");
@@ -161,6 +162,108 @@ test("window chrome keeps title and compact context controls in one refined head
     assert.match(styles, /\.bv-window-switch-mode>span:last-child\s*\{\s*display:none/);
 });
 
+test("regional editor delegates its complete window lifecycle to the shared managed window", () => {
+    assert.match(regionalEditor, /<BvManagedWindow\b/);
+    assert.doesNotMatch(regionalEditor, /<BvWindowHeader\b|beginWindowDrag|new ResizeObserver/);
+    assert.match(regionalEditor, /bodyClassName="bv-regional-window-body"/);
+    assert.match(windowChrome, /mode\?:BvWindowMode/);
+    assert.match(windowChrome, /onModeChange\?:/);
+});
+
+test("compact window navigation progressively moves mode and node selection into overflow", () => {
+    assert.match(windowChrome, /bv-window-navigator-overflow/);
+    assert.match(windowChrome, /bv-window-mode-primary/);
+    assert.match(windowChrome, /bv-window-node-overflow/);
+    assert.match(styles, /@container bv-window-header \(max-width:900px\)/);
+    assert.match(styles, /@container bv-window-header \(max-width:700px\)/);
+});
+
+test("window navigation overflow is a complete surfaced control group", () => {
+    assert.match(windowChrome, /className="bv-window-navigator-panel"/);
+    assert.match(windowChrome, /bv-window-node-overflow/);
+    assert.match(windowChrome, /bv-window-mode-overflow/);
+    assert.match(styles, /\.bv-window-navigator-menu\s*\{[^}]*background:var\(--bv-ui-surface-raised\)[^}]*border:/s);
+    assert.match(styles, /\.bv-window-navigator-panel\s*\{[^}]*display:grid[^}]*width:/s);
+});
+
+test("managed windows share keyboard cycling, escape handling and focus restoration", () => {
+    assert.match(windowFocus, /event\.key !== "Tab" \|\| !event\.ctrlKey/);
+    assert.match(windowChrome, /opener\.current\?\.focus/);
+    assert.match(windowChrome, /event\.key==="Escape"/);
+    assert.match(windowChrome, /registerBvWindow/);
+});
+
+test("compact editors expose explanatory help as non-blocking overlays", () => {
+    assert.match(styles, /\.bv-density-compact \.bv-control-help-overlay[^}]*position:absolute[^}]*pointer-events:none/s);
+    assert.match(styles, /\.bv-density-compact \.bv-control-field:focus-within>\.bv-control-help-overlay/);
+});
+
+test("detailer and detector lists start summary-first", () => {
+    assert.match(detailerView, /bv-editor-item-compact-summary/);
+    assert.match(detailerView, /content: <div className="bv-editor-item-details"/);
+    assert.match(detectorView, /bv-detector-summary/);
+    assert.match(detectorView, /<Accordion value=\{expanded\}/);
+});
+
+test("quick edit allocates remaining height to positive and negative prompts", () => {
+    assert.match(styles, /\.bv-prompt-editor-fields \{[^}]*grid-template-rows:minmax\(120px,3fr\) minmax\(100px,2fr\)/s);
+    assert.match(styles, /\.bv-prompt-editor-fields textarea \{[^}]*height:100%/s);
+});
+
+test("managed windows separate rounded clipping from overlay escape", () => {
+    assert.match(windowChrome, /bv-managed-window-surface/);
+    assert.match(styles, /\.bv-managed-window-surface\s*\{[^}]*overflow:hidden[^}]*border-radius:inherit/s);
+    assert.match(windowChrome, /effectiveMinWidth=Math\.min\(min\.width,420,availableWidth\)/);
+    assert.match(windowChrome, /resizeMin=\{\.\.\.minSize,width:Math\.min\(minSize\.width,420\)\}/);
+});
+
+test("header overflow follows actual available controls and toggle reaches both ends", () => {
+    assert.match(windowChrome, /ResizeObserver/);
+    assert.match(windowChrome, /showNodeInOverflow/);
+    assert.match(windowChrome, /showMenusInOverflow/);
+    assert.match(styles, /\.bv-window-switch-mode\[aria-checked=true\] \.bv-toggle-track>span\s*\{[^}]*margin-left:auto/s);
+});
+
+test("header launcher supplies its actual trigger as the popup anchor", () => {
+    assert.match(windowChrome, /detail:\{anchor:/);
+    assert.match(toolbarLauncher, /CustomEvent<\{anchor\?:HTMLElement\}>/);
+    assert.match(toolbarLauncher, /positionLauncher/);
+});
+
+test("minimal controls use overlay help and compact symbolic color actions", () => {
+    assert.match(forms, /bv-control-help-overlay/);
+    assert.doesNotMatch(styles, /\.bv-density-compact \.bv-control-help[^}]*min-height/);
+    assert.match(options, /region-color-split/);
+    assert.match(options, /aria-label="Reset display color to automatic"/);
+});
+
+test("sortable jobs rely on drag reorder and grouped actions only", () => {
+    assert.doesNotMatch(dataComponents, /Move \$\{String\(item\.title\)\} up|Move \$\{String\(item\.title\)\} down/);
+    assert.match(dataComponents, /bv-segmented-actions/);
+    assert.match(styles, /\.bv-sortable-list article>header[^}]*align-items:center/s);
+});
+
+test("window footer has stacked and overflow states instead of word columns", () => {
+    assert.match(windowChrome, /BvFooterActions/);
+    assert.match(windowChrome, /stacked=\{mode==="floating"&&geometry\.width<700\}/);
+    assert.match(windowChrome, /minimal=\{mode==="floating"&&geometry\.width<470\}/);
+    assert.match(styles, /\.bv-ui-window-footer\.is-stacked/);
+    assert.match(styles, /\.bv-ui-window-footer\.is-minimal/);
+    assert.match(styles, /\.bv-ui-window-status\s*\{[^}]*min-width:0[^}]*white-space:nowrap/s);
+});
+
+test("save dialogs do not duplicate the title-bar close action in their footers", () => {
+    for (const source of [detailerView, detectorView]) {
+        assert.doesNotMatch(source, />Cancel<|label:"Cancel"/);
+    }
+});
+
+test("production chrome uses the restrained radius scale", () => {
+    assert.match(styles, /--bv-ui-radius:calc\(4px \* var\(--bv-ui-scale\)\)/);
+    assert.match(styles, /\.bv-managed-window\s*\{[^}]*border-radius:calc\(6px \* var\(--bv-ui-scale\)\)/s);
+    assert.match(styles, /\.bv-callout\s*\{[^}]*border-radius:4px/s);
+});
+
 test("managed workspace windows follow the regional editor inset chrome", () => {
     assert.match(styles, /\.bv-managed-window\.workspace\s*\{[^}]*left:24px[^}]*top:58px[^}]*width:calc\(100vw - 48px\)[^}]*height:calc\(100vh - 82px\)[^}]*border-radius:/s);
     assert.match(styles, /\.bv-managed-window\s*\{[^}]*outline:0/s);
@@ -169,7 +272,7 @@ test("managed workspace windows follow the regional editor inset chrome", () => 
 test("managed floating windows expose resize hit zones on every edge and corner", () => {
     assert.match(windowChrome, /\["n","ne","e","se","s","sw","w","nw"\]/);
     assert.match(windowChrome, /beginResize\(direction\)/);
-    assert.match(windowChrome, /resizeFloatingWindow\(active\.geometry,delta,active\.direction,minSize\)/);
+    assert.match(windowChrome, /resizeFloatingWindow\(active\.geometry,delta,active\.direction,resizeMin\)/);
     assert.match(styles, /\.bv-managed-window\.floating\s*\{\s*resize:none/);
     for (const direction of ["n","ne","e","se","s","sw","w","nw"]) assert.match(styles, new RegExp(`\\.bv-window-resize-handle(?:[^}]*|[^\\n]*)\\.${direction}\\b`));
 });

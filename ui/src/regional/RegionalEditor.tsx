@@ -7,11 +7,11 @@ import { Bounds, boundsOfLayer, Handle, hitTest, moveLayer, resizeLayer, setLaye
 import { addGeometryLayerTarget, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "./interaction";
 import { automaticRegionColor, clone, Geometry, geometryAuthoring, geometryLayerId, geometryLayers, geometryMaskGroupId, newRegion, parseDocument, Point, preserveDocumentIdentity, RegionalDocument, Region, uuid } from "./model";
 import { mergeSelectedLayers, remapMaskGroups, selectLayers } from "./layerOperations";
-import { activeWindowGeometry, applyObservedWindowSize, clampWindowGeometry, defaultEditorState, EditorViewState, loadEditorState, observedWindowSize, saveEditorState } from "./editorState";
+import { activeWindowGeometry, clampWindowGeometry, defaultEditorState, EditorViewState, loadEditorState, saveEditorState } from "./editorState";
 import { splitDisconnectedLayer } from "./disconnectedAreas";
 import { bindingSummary, bindingWarnings, createRegionalEditorSnapshot, emptyLoraBindings, NamedLoraStack, parseLoraBindings, reconcileLoraBindings, RegionalEditorSnapshot, RegionalLoraBindings } from "./loraBindings";
 import BvDockLayout from "../ui/dock";
-import { BvMinimizedWindow, BvWindowFooter, BvWindowHeader, BvWindowNavigator, ResetLayoutButton } from "../ui/window";
+import { BvManagedWindow, BvMinimizedWindow, BvWindowNavigator, ResetLayoutButton } from "../ui/window";
 import { RegionLayerTree } from "../ui/components";
 import { applyTreeMove, type TreeMove } from "./treeMoves";
 import { canRemoveGeometry } from "./operationOrder";
@@ -62,10 +62,9 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
     const [draft, setDraft] = useState<Geometry[] | null>(null), [cursor, setCursor] = useState<Point | null>(null), [error, setError] = useState("");
     const [viewState, setViewState] = useState<EditorViewState>(() => defaultEditorState());
     const [dockResetSignal, setDockResetSignal] = useState(0);
-    const [minimized, setMinimized] = useState(false);
     const [keptNodeIds, setKeptNodeIds] = useState<string[]>([]);
     const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
-    const gesture = useRef<Gesture | null>(null), shell = useRef<HTMLDivElement>(null);
+    const gesture = useRef<Gesture | null>(null);
     const previousOpen=useRef(false),previousActivation=useRef(activationToken);
     const transferredWindow=useRef<{mode:EditorViewState["mode"];geometry:{x:number;y:number;width:number;height:number}}|null>(null);
     const updateArtboardView = useCallback((artboard: EditorViewState["artboard"]) => setViewState(current => {
@@ -74,7 +73,6 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
     }), []);
     const updateOpenMenu = useCallback((openMenu: EditorViewState["openMenu"]) => setViewState(current => current.openMenu === openMenu ? current : { ...current, openMenu }), []);
 
-    useEffect(() => { if (open) setMinimized(false); }, [open]);
     useEffect(() => {
         const wasOpen=previousOpen.current,activated=previousActivation.current!==activationToken;
         previousOpen.current=open;previousActivation.current=activationToken;
@@ -82,7 +80,7 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
         const requested=initialNode??nodes[0]??null,currentId=String(node?.id??""),requestedId=String(requested?.id??"");
         if(wasOpen&&currentId&&requestedId!==currentId&&getWindowSwitchMode()==="keep")setKeptNodeIds(ids=>[...new Set([...ids,currentId])].filter(id=>id!==requestedId));
         else if(requestedId)setKeptNodeIds(ids=>ids.filter(id=>id!==requestedId));
-        transferredWindow.current={mode:viewState.mode,geometry:activeWindowGeometry(viewState,{width:window.innerWidth,height:window.innerHeight})};setNode(requested);setMinimized(false);
+        transferredWindow.current={mode:viewState.mode,geometry:activeWindowGeometry(viewState,{width:window.innerWidth,height:window.innerHeight})};setNode(requested);
     },[activationToken,initialNode,nodes,open]);
     useEffect(() => { setSelectedGeometryId(null); }, [node, open]);
     useEffect(() => {
@@ -109,20 +107,6 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
         if (!documentValue) return;
         saveEditorState(documentValue.document_id, { ...viewState, selectedRegionId, selectedLayerId, displayOpacity, backgroundOpacity, isolate, tool, brush });
     }, [backgroundOpacity, brush, displayOpacity, documentValue, isolate, selectedLayerId, selectedRegionId, tool, viewState]);
-
-    useEffect(() => {
-        if (!open || minimized || !shell.current || viewState.mode !== "floating") return;
-        const observedMode = viewState.mode;
-        const observer = new ResizeObserver(entries => {
-            const size = observedWindowSize(entries[0]);
-            setViewState(current => {
-                const active = current.windows[observedMode];
-                if (Math.abs(active.width - size.width) < 1 && Math.abs(active.height - size.height) < 1) return current;
-                return applyObservedWindowSize(current, observedMode, size);
-            });
-        });
-        observer.observe(shell.current); return () => observer.disconnect();
-    }, [minimized, open, viewState.mode]);
 
     useEffect(() => {
         if (!open) return;
@@ -229,18 +213,10 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
         const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
         window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
     };
-    const beginWindowDrag = (event: React.PointerEvent) => {
-        if (viewState.mode !== "floating" || event.button !== 0) return;
-        if ((event.target as Element).closest("button, select, input, textarea, .editor-menus")) return;
-        event.preventDefault(); const startX = event.clientX, startY = event.clientY, original = viewState.windows.floating;
-        const move = (pointer: PointerEvent) => setViewState(current => ({ ...current, windows: { ...current.windows, floating: clampWindowGeometry({ ...current.windows.floating, x: original.x + pointer.clientX - startX, y: original.y + pointer.clientY - startY }, { width: window.innerWidth, height: window.innerHeight }, "floating") } }));
-        const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-        window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
-    };
     useEffect(() => {
         if (!open) return;
         const key = (event: KeyboardEvent) => {
-            if (event.key === "Escape") { event.preventDefault(); event.stopImmediatePropagation(); cancelGesture(); return; }
+            if (event.key === "Escape" && gesture.current) { event.preventDefault(); event.stopImmediatePropagation(); cancelGesture(); return; }
             if (event.key === "Enter" && gesture.current?.mode === "draw-polygon") { event.preventDefault(); event.stopImmediatePropagation(); finalizePolygon(); return; }
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "e" && canMergeLayers) { event.preventDefault(); event.stopImmediatePropagation(); mergeLayers(); return; }
             if ((event.key === "Delete" || event.key === "Backspace") && selectedLayerId && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) { event.preventDefault(); event.stopImmediatePropagation(); deleteLayer(selectedLayerId); return; }
@@ -331,17 +307,15 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
     const navigateNode = (nextId:string, replaceCurrent:boolean, transferWindow=true) => {
         const currentId=String(node?.id??"");
         rememberBvWindowInstance("regional",nextId);
-        if(nextId===currentId){setMinimized(false);return;}
+        if(nextId===currentId)return;
         setKeptNodeIds(ids=>replaceCurrent?ids.filter(id=>id!==nextId):[...new Set([...ids,currentId])].filter(id=>id&&id!==nextId));
         if(transferWindow)transferredWindow.current={mode:viewState.mode,geometry:windowGeometry};
         setNode(nodes.find(item=>String(item.id)===nextId)??null);
-        setMinimized(false);
     };
     const loraWarnings = documentValue ? bindingWarnings(loraBindings, loraStacks, new Set(documentValue.regions.map(region => region.id))) : [];
     const loraSummary = documentValue ? bindingSummary(loraBindings, loraStacks, Object.fromEntries(documentValue.regions.map(region => [region.id, region.name]))) : "";
     const optionsPanel = (mode: "selection" | "region" | "document") => documentValue ? <OptionsPanel mode={mode} region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} loraBindings={loraBindings} loraStacks={loraStacks} onGlobalLoraStack={setGlobalLoraStack} onRegionLoraStack={setRegionLoraStack} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/> : null;
-    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>String(item.id)===id);return kept?<BvMinimizedWindow key={id} title={`Regional Editor · ${kept.title||"BV Regional Prompt"} · #${id}`} onRestore={()=>navigateNode(id,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}{minimized && <BvMinimizedWindow title={`Regional Editor · ${node?.title||"BV Regional Prompt"} · #${node?.id??"?"}`} onRestore={() => setMinimized(false)} onClose={onClose}/>}<div ref={shell} hidden={minimized} className={`bv-regional-shell ${viewState.mode}`} role="dialog" aria-modal={viewState.mode === "workspace"} style={{ inset: "auto", left: windowGeometry.x, top: windowGeometry.y, width: windowGeometry.width, height: windowGeometry.height }} onKeyDown={event => event.stopPropagation()}>
-        <BvWindowHeader title="BV Regional Editor" context={<BvWindowNavigator label="Regional prompt document" value={String(node?.id ?? "")} onNavigate={navigateNode} options={nodes.map(item => ({ value: String(item.id), label: `${item.title || "BV Regional Prompt"} · #${item.id}` }))}/>} center={<EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 2, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/>} mode={viewState.mode} onMode={() => setViewState(current => ({ ...current, mode: current.mode === "workspace" ? "floating" : "workspace" }))} onMinimize={() => setMinimized(true)} onClose={onClose} onPointerDown={beginWindowDrag}/>
+    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>String(item.id)===id);return kept?<BvMinimizedWindow key={id} title={`Regional Editor · ${kept.title||"BV Regional Prompt"} · #${id}`} onRestore={()=>navigateNode(id,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="BV Regional Editor" context={<BvWindowNavigator label="Regional prompt document" value={String(node?.id ?? "")} onNavigate={navigateNode} options={nodes.map(item => ({ value: String(item.id), label: `${item.title || "BV Regional Prompt"} · #${item.id}` }))}/>} center={<EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 2, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/>} mode={viewState.mode} initialGeometry={windowGeometry} minSize={{width:780,height:520}} className="bv-regional-shell" bodyClassName="bv-regional-window-body" onModeChange={mode=>setViewState(current=>({...current,mode}))} onGeometry={geometry=>setViewState(current=>({...current,windows:{...current.windows,floating:geometry}}))} onClose={onClose} status={documentValue?<><span>{loraWarnings[0] ? `⚠ ${loraWarnings[0]}` : `✓ ${loraSummary}`}</span><span>{documentValue.regions.length} regions · layout autosaved</span></>:null} actions={documentValue?<ResetLayoutButton onClick={() => setDockResetSignal(value => value + 1)}/>:null}>
         {error ? <div className="bv-regional-error">{error}</div> : documentValue && <>
             <main className="bv-regional-dock-host">
               <BvDockLayout storageId={`regional-editor:${documentValue.document_id}`} resetSignal={dockResetSignal} defaultModel={{ global:{ tabEnableClose:false, tabEnablePopout:false, tabEnablePopoutIcon:false, tabEnablePopoutFloatIcon:true, tabSetMinWidth:180, tabSetMinHeight:120 }, borders:[], layout:{ type:"row", children:[
@@ -364,7 +338,6 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
                 }, { id:"region", title:"Region", weight:12, minWidth:240, content:optionsPanel("region") }
               ]}/>
             </main>
-            <BvWindowFooter warning={!!loraWarnings.length} status={<><span>{loraWarnings[0] ? `⚠ ${loraWarnings[0]}` : `✓ ${loraSummary}`}</span><span>{documentValue.regions.length} regions · layout autosaved</span></>} actions={<ResetLayoutButton onClick={() => setDockResetSignal(value => value + 1)}/>}/>
         </>}
-    </div></>;
+    </BvManagedWindow></>;
 }

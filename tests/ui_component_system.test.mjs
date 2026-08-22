@@ -70,6 +70,13 @@ test("the showcase previews every component in compact and comfortable density",
     assert.match(showcase,/value:"comfortable",label:"Comfortable"/);
 });
 
+test("the showcase documents the shared responsive window contract",()=>{
+    for(const component of ["BvWindowHeader","BvWindowNavigator","BvWindowFooter","BvFooterActions"])
+        assert.match(showcase,new RegExp(`<${component}\\b`),`showcase misses ${component}`);
+    assert.match(showcase,/id="Windows"/);
+    assert.match(showcase,/nodes=\{windowNodes\}/);
+});
+
 test("complex component spacing follows the shared density tokens",()=>{
     for(const token of ["--bv-ui-field-gap","--bv-ui-content-padding","--bv-ui-row-height","--bv-ui-textarea-height","--bv-ui-check-size"])
         assert.match(styles,new RegExp(token));
