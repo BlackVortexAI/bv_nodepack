@@ -1008,8 +1008,20 @@ refer to the correct value even when labels change or an upstream slot is tempor
 - **BV Smart Pipe Merge** combines branches in explicit user-defined order.
 - Missing sources and cycles fail closed.
 
-Configure slots through **Configure Smart Pipe**. The legacy **BV Pipe Config** and
-**BV Pipe** nodes remain available only for existing workflows.
+Configure each Smart Pipe and Merge through its BV floating editor. The editor uses
+the shared window navigator, keeps draft history in memory, supports undo/redo and
+explicit Save/Discard, and absorbs compatible external node or link changes without
+losing the current draft. Draft JSON can be copied or imported for fast recovery.
+
+Smart Pipe predecessors remain directly selectable on the node for fast graph authoring;
+the native widget and floating editor stay synchronized. Local slots are required inputs,
+can be reordered by drag and drop without changing their stable IDs, and remain compatible
+with existing serialized workflows. Smart Pipe and Merge windows are hidden from the
+global window overview by default and can be made discoverable with the title-bar eye
+control. The visibility flag is stored in the workflow, not in browser preferences.
+
+The legacy **BV Pipe Config** and **BV Pipe** nodes remain available only for existing
+workflows.
 
 > Wireless routing across Subgraph boundaries relies on prompt materialization because
 > ComfyUI does not currently expose an official pre-prompt extension hook. Keep physical
@@ -1108,6 +1120,12 @@ The heading text, font size and optional divider remain configurable on the inne
 - Active conflicts resolve deterministically as `Activate > Mute > Bypass`.
 - Conflicts and unresolved groups remain visible and block unsafe execution.
 - Base node modes are restored when controls stop applying.
+- The shared Control Center window is a workflow-global singleton even when several
+  Control Center nodes exist; all instances edit the same workflow configuration.
+- Configuration changes autosave and participate in the shared bounded undo/redo history.
+- The **Controls** tab applies states immediately, while **Configuration** manages groups;
+  Configuration opens initially when no controls have been defined.
+- The dedicated toolbar action appears only while a Control Center node exists.
 
 <details>
 <summary><strong>Configure workflow states and group actions</strong></summary>
@@ -1189,6 +1207,23 @@ Technical references:
 - Wireless Smart Pipe compatibility remains sensitive to upstream prompt lifecycle changes.
 
 ## Changelog
+
+### 2026-08-22 — v0.18.0
+
+- Move Smart Pipe and Smart Pipe Merge configuration into the shared BV window
+  framework with synchronized native widgets, stable drag ordering and guarded drafts.
+- Add bounded in-memory undo/redo, Save/Discard baselines, draft JSON recovery and
+  three-way migration for compatible external graph changes.
+- Add workflow-owned window-menu visibility with Smart Pipes hidden by default,
+  recoverable hidden-node discovery and graph/subgraph-scoped node identities.
+- Integrate the workflow-global Control Center into the shared tabbed BV UI with
+  autosave, immediate control actions and conditional toolbar discovery.
+- Add editor-type layout profiles, session working layouts, timed BV toasts and
+  ComfyUI-modal-safe window layering as reusable framework services.
+- Harden Smart Pipe Merge routing across bypassed or muted sources and preserve
+  active predecessor values during prompt materialization.
+- Document the BV window lifecycle and persistence contract and extend regression
+  coverage for routing, history, discovery, lifecycle and responsive behavior.
 
 ### 2026-08-22 — v0.17.0
 
