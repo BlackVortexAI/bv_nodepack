@@ -1,5 +1,6 @@
-from pathlib import Path
+from collections import namedtuple
 import json
+from pathlib import Path
 import sys
 import unittest
 from unittest import mock
@@ -7,14 +8,11 @@ from unittest import mock
 
 ROOT = Path(__file__).parents[1]
 COMFY_ROOT = ROOT.parents[1]
-IMPACT_MODULES = COMFY_ROOT / "custom_nodes" / "comfyui-impact-pack" / "modules"
 sys.path.insert(0, str(COMFY_ROOT))
 sys.path.insert(0, str(ROOT.parent))
-sys.path.insert(0, str(IMPACT_MODULES))
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
-from impact import core as impact_core  # noqa: E402
 
 from comfy_execution.graph import DynamicPrompt  # noqa: E402
 from bv_nodepack.py.nodes.bv_regional_detailer import (  # noqa: E402
@@ -31,6 +29,24 @@ from bv_nodepack.py.nodes.bv_regional_detailer import (  # noqa: E402
 from bv_nodepack.py.util.regional.detailer import normalize_detector_binding, register_detector  # noqa: E402
 
 
+FakeSEG = namedtuple(
+    "FakeSEG",
+    "cropped_image cropped_mask confidence crop_region bbox label control_net_wrapper",
+)
+
+
+class FakeImpactCore:
+    SEG = FakeSEG
+
+    @staticmethod
+    def mask_to_segs(mask, *_args, **_kwargs):
+        return ((int(mask.shape[-2]), int(mask.shape[-1])), [])
+
+    @staticmethod
+    def segs_bitwise_and_mask(segs, _mask):
+        return segs
+
+
 class FakeBBoxDetector:
     def __init__(self):
         self.queries = []
@@ -40,11 +56,20 @@ class FakeBBoxDetector:
 
     def detect(self, image, threshold, dilation, crop_factor, drop_size):
         mask = np.ones((10, 10), dtype=np.float32)
-        segment = impact_core.SEG(None, mask, 0.9, (2, 3, 12, 13), (3, 4, 10, 11), "eye", None)
+        segment = FakeSEG(None, mask, 0.9, (2, 3, 12, 13), (3, 4, 10, 11), "eye", None)
         return ((int(image.shape[1]), int(image.shape[2])), [segment])
 
 
 class DetailerLoopTests(unittest.TestCase):
+    def setUp(self):
+        self.impact_core = mock.patch.object(
+            BVImpactDetailerDetectNode,
+            "_impact_core",
+            return_value=FakeImpactCore,
+        )
+        self.impact_core.start()
+        self.addCleanup(self.impact_core.stop)
+
     def test_public_loop_contract_is_minimal_and_state_driven(self):
         start_inputs = BVDetailerLoopStartNode.INPUT_TYPES()["required"]
         job_inputs = BVRegionalDetailerJobNode.INPUT_TYPES()["required"]
