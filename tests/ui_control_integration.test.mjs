@@ -15,6 +15,9 @@ const windowChrome = readFileSync(new URL("../ui/src/ui/window.tsx", import.meta
 const windowMount = readFileSync(new URL("../ui/src/ui/mount.tsx", import.meta.url), "utf8");
 const toolbarLauncher = readFileSync(new URL("../ui/src/ui/ToolbarWindowLauncher.tsx", import.meta.url), "utf8");
 const windowActivity = readFileSync(new URL("../ui/src/ui/windowActivity.ts", import.meta.url), "utf8");
+const windowRegistry = readFileSync(new URL("../ui/src/ui/windowRegistry.ts", import.meta.url), "utf8");
+const layoutProfiles = readFileSync(new URL("../ui/src/ui/layoutProfiles.ts", import.meta.url), "utf8");
+const dock = readFileSync(new URL("../ui/src/ui/dock.tsx", import.meta.url), "utf8");
 const windowFocus = readFileSync(new URL("../ui/src/ui/windowFocus.ts", import.meta.url), "utf8");
 const uiEntry = readFileSync(new URL("../ui/src/index.tsx", import.meta.url), "utf8");
 const editorMenus = readFileSync(new URL("../ui/src/regional/EditorMenus.tsx", import.meta.url), "utf8");
@@ -24,6 +27,10 @@ const quickPromptEditor = readFileSync(new URL("../ui/src/regional/QuickPromptEd
 const promptTextarea = readFileSync(new URL("../ui/src/completion/PromptTextarea.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../ui/src/index.css", import.meta.url), "utf8");
 const showcase = readFileSync(new URL("../ui/src/showcase.tsx", import.meta.url), "utf8");
+const smartPipeEditor = readFileSync(new URL("../ui/src/components/SmartPipeEditorWindow.tsx", import.meta.url), "utf8");
+const smartPipeBridge = readFileSync(new URL("../js/bv_smart_pipe.js", import.meta.url), "utf8");
+const historyController = readFileSync(new URL("../ui/src/ui/history.ts", import.meta.url), "utf8");
+const toastStore = readFileSync(new URL("../ui/src/ui/toastStore.tsx", import.meta.url), "utf8");
 
 test("regional inspector composes shared production controls instead of restyling raw widgets", () => {
     for (const component of ["BvSelect", "BvNumberField", "FieldFrame", "PromptTextarea"]) assert.match(options, new RegExp(`<${component}\\b`));
@@ -47,13 +54,14 @@ test("node-owned windows reactivate by type and node id instead of mounting dupl
     assert.match(windowMount, /geometry:box\?\{x:box\.left,y:box\.top,width:box\.width,height:box\.height\}/);
     assert.match(windowChrome, /bv-ui-set-window-state/);
     assert.match(windowChrome, /addEventListener\("bv-ui-activate"/);
-    assert.match(uiEntry, /`detailer-plan:\$\{node\.id\}`/);
-    assert.match(uiEntry, /`detector-registry:\$\{node\.id\}`/);
+    assert.match(uiEntry, /`detailer-plan:\$\{scopedNodeKey\(node\)\}`/);
+    assert.match(uiEntry, /`detector-registry:\$\{scopedNodeKey\(node\)\}`/);
 });
 
 test("every node editor uses the conditional shared window navigator", () => {
     for (const source of [regionalEditor, quickPromptEditor, detailerView, detectorView]) assert.match(source, /BvWindowNavigator/);
-    assert.match(windowChrome, /if\(options\.length<=1\)return null/);
+    assert.match(windowChrome, /options\.filter\(option=>option\.value!==value\)/);
+    assert.match(windowChrome, /if\(!targets\.length\)return null/);
     assert.match(windowChrome, /meta\.shiftKey\?keep:!keep/);
     assert.match(windowChrome, /bv-window-switch-mode/);
     assert.match(styles, /\.bv-window-navigator\s*\{[^}]*display:flex/s);
@@ -81,13 +89,14 @@ test("toolbar and node-button activation use the same keep-mode lifecycle", () =
 
 test("ComfyUI toolbar exposes a node-aware multi-column window launcher", () => {
     assert.match(uiEntry, /<ToolbarWindowLauncher\s+getColumns=\{launcherColumns\}/);
-    for (const label of ["Regional Editor", "Quick Edit", "Detailer Plan", "Detector Registry"]) assert.match(uiEntry, new RegExp(`label:\"${label}\"`));
+    for (const label of ["Regional Prompts", "Detailer Plan", "Detector Registry"]) assert.match(uiEntry, new RegExp(`label:\"${label}\"`));
+    assert.match(uiEntry,/secondary:\{label:`Quick edit/);
     assert.match(toolbarLauncher, /filter\(column=>column\.items\.length\)/);
     assert.match(toolbarLauncher, /\.bv-regional-action/);
     assert.match(toolbarLauncher, /pointerenter/);
-    assert.match(toolbarLauncher, /addEventListener\("focus"/);
+    assert.doesNotMatch(toolbarLauncher, /addEventListener\("focus"/);
     assert.match(toolbarLauncher, /event\.key===\"Escape\"/);
-    assert.match(styles, /\.bv-toolbar-window-launcher\s*\{[^}]*grid-template-columns:repeat\(var\(--bv-launcher-columns\)/s);
+    assert.match(styles, /\.bv-toolbar-window-launcher__body\s*\{[^}]*grid-template-columns:repeat\(var\(--bv-launcher-columns\)/s);
     assert.match(styles, /\.bv-toolbar-window-launcher \.bv-button\s*\{[^}]*grid-template-columns:minmax\(0,1fr\) auto[^}]*min-height:26px/s);
 });
 
@@ -97,8 +106,8 @@ test("toolbar primary actions restore the last active node per editor type", () 
     assert.match(uiEntry, /lastBvWindowInstance\("regional"\)/);
     assert.match(quickPromptEditor, /rememberBvWindowInstance\("quick",nextId\)/);
     assert.match(regionalEditor, /rememberBvWindowInstance\("regional",nextId\)/);
-    assert.match(uiEntry, /rememberBvWindowInstance\("detailer",node\.id\)/);
-    assert.match(uiEntry, /rememberBvWindowInstance\("detector",node\.id\)/);
+    assert.match(uiEntry, /rememberBvWindowInstance\("detailer",scopedNodeKey\(node\)\)/);
+    assert.match(uiEntry, /rememberBvWindowInstance\("detector",scopedNodeKey\(node\)\)/);
 });
 
 test("detector and detailer editors use shared compact collection and grid modules", () => {
@@ -355,6 +364,107 @@ test("selection inspector orders appearance before layer geometry and uses a two
     assert.ok(selection.indexOf("<RegionMaskAppearance") < selection.indexOf("<section className=\"bv-inspector-section\"><h3>Layer"));
     assert.match(selection, /className="bv-layer-bounds-grid"/);
     assert.match(styles, /\.bv-layer-bounds-grid\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/s);
+});
+
+test("toolbar capabilities refresh when the last supported node is removed", () => {
+    assert.match(uiEntry, /"BV Control Center","BV Regional Prompt"/);
+    assert.match(uiEntry, /nodeType\.prototype\.onRemoved=function\(\)\{const result=removed/);
+    assert.match(uiEntry, /queueMicrotask\(refreshBvToolbarCapabilities\)/);
+});
+
+test("window menu visibility is workflow-owned, type-defaulted and recoverable",()=>{
+    assert.match(windowRegistry,/bvWindowMenuVisible/);
+    assert.match(windowRegistry,/BV Smart Pipe/);
+    assert.match(windowRegistry,/BV Smart Pipe Merge/);
+    assert.match(windowRegistry,/setDirtyCanvas/);
+    assert.match(toolbarLauncher,/Show hidden nodes/);
+    assert.match(toolbarLauncher,/preserveLauncherFooter/);
+    assert.match(toolbarLauncher,/before\.bottom-after\.bottom/);
+    assert.match(toolbarLauncher,/suppressHideUntil/);
+    assert.match(toolbarLauncher,/matches\(":hover"\)/);
+    assert.match(toolbarLauncher,/No visible BV windows/);
+    assert.match(toolbarLauncher,/onReveal/);
+});
+
+test("FlexLayout profiles separate explicit user saves from session working drafts",()=>{
+    assert.match(layoutProfiles,/BV_LAYOUT_PROFILE_LIMIT=20/);
+    assert.match(layoutProfiles,/localStorage\.setItem/);
+    assert.match(layoutProfiles,/sessionDrafts=new Map/);
+    assert.match(layoutProfiles,/editorType/);
+    assert.match(layoutProfiles,/library/);
+    assert.match(layoutProfiles,/signature/);
+    assert.doesNotMatch(dock,/localStorage\.setItem/);
+    assert.match(dock,/"modified"/);
+    assert.match(dock,/"adjusted"/);
+    assert.match(windowChrome,/Save as new layout/);
+    assert.match(windowChrome,/isCompatibleLayoutProfile/);
+    assert.match(windowChrome,/Layout could not be loaded/);
+    assert.match(dock,/draft\?\.profileId/);
+});
+
+test("Smart Pipe editor synchronizes native predecessor state and validates required local inputs",()=>{
+    assert.match(smartPipeEditor,/label="Pipe predecessor"/);
+    assert.match(smartPipeEditor,/setPredecessor/);
+    assert.match(smartPipeEditor,/Required Smart Pipe inputs are missing/);
+    assert.doesNotMatch(smartPipeEditor,/disabled=\{validationIssues\.length>0\}/);
+    assert.match(smartPipeBridge,/predecessor\(node\)/);
+    assert.match(smartPipeBridge,/setPredecessor\(node, value\)/);
+    assert.match(smartPipeBridge,/localSlots \?\? \[\]\)\.filter\(\(slot\) => !slotHasInputConnection/);
+});
+
+test("Smart Pipe Merge keeps its wireless source picker usable across window widths",()=>{
+    assert.match(smartPipeEditor,/bv-ui-inline-footer bv-smart-pipe-merge-source/);
+    assert.match(styles,/\.bv-smart-pipe-merge-source>\.bv-control-field\s*\{[^}]*flex:1 1 260px[^}]*min-width:min\(260px,100%\)/s);
+    assert.match(smartPipeEditor,/disabled=\{!candidate\}/);
+    assert.match(smartPipeEditor,/setSelected\(""\)/);
+});
+
+test("BV history shortcuts consume both keyboard phases before ComfyUI can mutate the graph",()=>{
+    const history = readFileSync(new URL("../ui/src/ui/history.ts", import.meta.url), "utf8");
+    assert.match(history,/addEventListener\("keydown",keydown,\{capture:true\}\)/);
+    assert.match(history,/addEventListener\("keyup",keyup,\{capture:true\}\)/);
+    assert.match(history,/event\.stopImmediatePropagation\(\)/);
+});
+
+test("Smart Pipe sessions survive host graph history by remapping their scoped node identity",()=>{
+    assert.match(smartPipeEditor,/const keyFor=\(target:Target\)=>`\$\{target\.kind\}:\$\{scopedNodeKey\(/);
+    assert.match(smartPipeEditor,/item\.key===targetKey/);
+    assert.match(smartPipeEditor,/onRemap\(currentTarget\.node\)/);
+});
+
+test("Smart Pipe navigation preserves per-node sessions and honors keep or replace",()=>{
+    assert.match(smartPipeEditor,/sessions\.filter\(session=>session\.key!==activeKey\)\.map\(session=><BvMinimizedWindow/);
+    assert.match(smartPipeEditor,/getWindowSwitchMode\(\)==="replace"/);
+    assert.match(smartPipeEditor,/onNavigate=\{\(key,replace\)=>/);
+    assert.match(smartPipeEditor,/structuredClone\(current\[currentKey\]\)/);
+    assert.match(smartPipeEditor,/sessionActions\.current\.get\(key\)\?\.dirty\?setPending/);
+    assert.match(smartPipeEditor,/<UnsavedChangesDialog[^>]+editorName="Smart Pipe editor"/);
+});
+
+test("Smart Pipe sessions absorb external links when their local draft is clean",()=>{
+    assert.match(smartPipeEditor,/applyingSave\.current/);
+    assert.match(smartPipeEditor,/if\(!history\.canUndo\)\{baseline\.current=structuredClone\(current\);history\.replace\(current,true\);setConflict\(null\);return\}/);
+    assert.match(smartPipeEditor,/history\.replace\(saved,true\)/);
+});
+
+test("BV histories and fallback messages remain bounded and non-persistent",()=>{
+    assert.match(historyController,/BV_HISTORY_LIMIT\s*=\s*100/);
+    assert.doesNotMatch(historyController,/localStorage|sessionStorage/);
+    assert.match(toastStore,/slice\(-3\)/);
+    assert.match(toastStore,/--bv-toast-bottom/);
+    assert.match(overlays,/UnsavedChangesDialog/);
+    assert.match(toastStore,/addEventListener\("bv-show-toast",show\)/);
+    assert.match(toastStore,/#graph-canvas-container \[role='toolbar'\]/);
+    assert.match(toastStore,/className="bv-ui bv-density-compact bv-toast-stack bv-global-toast-stack"/);
+    assert.match(styles,/\.bv-toast\s*\{[^}]*width:min\(360px,calc\(100vw - 24px\)\)[^}]*min-width:0/s);
+    assert.match(styles,/\.bv-toast p\s*\{[^}]*overflow-wrap:anywhere/s);
+});
+
+test("BV layers remain below host ComfyUI modal dialogs",()=>{
+    for(const token of ["--bv-layer-window:1400","--bv-layer-shelf:1410","--bv-layer-flyout:1500","--bv-layer-modal:1550","--bv-layer-toast:1600"]) assert.match(styles,new RegExp(token));
+    assert.doesNotMatch(styles,/z-index:\s*214748364[67]/);
+    assert.match(styles,/\.bv-managed-window\s*\{[^}]*z-index:var\(--bv-layer-window\)/s);
+    assert.match(styles,/\.bv-dialog-layer\s*\{[^}]*z-index:var\(--bv-layer-modal\)/s);
 });
 
 test("layer bounds present normalized geometry as editable canvas pixels", () => {

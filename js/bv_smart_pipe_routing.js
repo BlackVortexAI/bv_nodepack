@@ -216,9 +216,15 @@ export function predecessorChoiceRoutes(routes, destinationId) {
 
 export function promptModeState(descriptors = []) {
   const muted = descriptors.filter((descriptor) => descriptor?.node?.mode === 2);
+  const bypassed = descriptors.filter((descriptor) => descriptor?.kind === "pipe" && descriptor?.node?.mode === 4);
   return {
-    bypassedAddresses: new Set(descriptors.filter((descriptor) => descriptor?.kind === "pipe" && descriptor?.node?.mode === 4)
-      .map((descriptor) => descriptor.address)),
+    bypassedAddresses: new Set(bypassed.map((descriptor) => descriptor.address)),
+    bypassPredecessorAddresses: new Map(bypassed.map((descriptor) => {
+      const predecessor = descriptors.find((candidate) => candidate?.kind === "pipe"
+        && executionScope(candidate.executionId) === executionScope(descriptor.executionId)
+        && candidate.route?.nodeId === descriptor.route?.predecessorId);
+      return predecessor ? [descriptor.address, predecessor.address] : null;
+    }).filter(Boolean)),
     mutedAddresses: new Set(muted.map((descriptor) => descriptor.address)),
     prunedExecutionIds: new Set(muted.map((descriptor) => descriptor.executionId)),
   };
@@ -298,28 +304,46 @@ export function materializeAddressedPipeLinks(apiPrompt, addressByExecutionId, r
 
 export function materializeSmartPipeMergeSources(apiPrompt, addressByExecutionId, routeRegistry = {}, modeState = {}) {
   const executionByAddress = new Map(Object.entries(addressByExecutionId || {}).map(([executionId, address]) => [address, executionId]));
+  const bypassedAddresses = modeState.bypassedAddresses || new Set();
   const mutedAddresses = modeState.mutedAddresses || new Set();
+  const resolveSourceAddress = (destinationAddress, sourceAddress, visited = new Set()) => {
+    if (mutedAddresses.has(sourceAddress)) return null;
+    if (!bypassedAddresses.has(sourceAddress)) return sourceAddress;
+    if (visited.has(sourceAddress)) {
+      throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Bypass cycle detected at "${sourceAddress}".`);
+    }
+    visited.add(sourceAddress);
+    const predecessorAddress = routeRegistry?.[sourceAddress]?.predecessorAddress
+      || modeState.bypassPredecessorAddresses?.get(sourceAddress);
+    if (!predecessorAddress) {
+      throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Bypassed source "${sourceAddress}" has no predecessor to pass through.`);
+    }
+    return resolveSourceAddress(destinationAddress, predecessorAddress, visited);
+  };
   for (const [destinationAddress, route] of Object.entries(routeRegistry || {})) {
     if (route?.kind !== "merge" || !Array.isArray(route.sources)) continue;
     const destinationId = executionByAddress.get(destinationAddress);
     const destination = apiPrompt?.[destinationId];
     if (!destination || destination.class_type !== "BV Smart Pipe Merge") continue;
+    const activeSources = [];
     for (const source of route.sources) {
       if (!source?.key) continue;
-      if (mutedAddresses.has(source.address)) {
+      const resolvedAddress = resolveSourceAddress(destinationAddress, source.address);
+      if (!resolvedAddress) {
         delete destination.inputs[source.key];
         continue;
       }
-      if (source.mode !== "wireless") continue;
+      activeSources.push(source);
       if (destination.inputs?.[source.key] != null) continue;
-      const predecessorId = executionByAddress.get(source.address);
+      if (source.mode !== "wireless" && resolvedAddress === source.address) continue;
+      const predecessorId = executionByAddress.get(resolvedAddress);
       if (!predecessorId || !["BV Smart Pipe", "BV Smart Pipe Merge"].includes(apiPrompt?.[predecessorId]?.class_type)) {
-        throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Wireless source "${source.address || source.label || source.key}" is missing.`);
+        throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Source "${resolvedAddress || source.label || source.key}" is missing.`);
       }
       destination.inputs[source.key] = [predecessorId, 0];
     }
-    destination.inputs.bv_smart_pipe_merge_json = JSON.stringify(route.sources.filter((source) => !mutedAddresses.has(source.address)));
-    if (route.sources.length && route.sources.every((source) => mutedAddresses.has(source.address))) {
+    destination.inputs.bv_smart_pipe_merge_json = JSON.stringify(activeSources);
+    if (route.sources.length && activeSources.length === 0) {
       modeState.prunedExecutionIds?.add(destinationId);
     }
   }

@@ -165,6 +165,12 @@ function convertAddSource(node, index, linkInfo) {
   const origin = routing.descriptors.find((descriptor) => descriptor.node === originNode && (!destination || descriptor.hostPath.join("/") === destination.hostPath.join("/")));
   const candidate = { mode: "wired", address: origin?.address || null };
   if (hasMergeSource(sources, candidate)) {
+    window.dispatchEvent(new CustomEvent("bv-show-toast", { detail: {
+      title: "Merge source already exists",
+      message: "This Smart Pipe is already configured as a wireless merge source. Remove the wireless source before connecting it physically.",
+      tone: "warning",
+      duration: 5000,
+    } }));
     requestAnimationFrame(() => {
       const duplicateInput = node.inputs?.[index];
       if (duplicateInput?.link != null) node.graph?.removeLink?.(duplicateInput.link);
@@ -196,96 +202,23 @@ function removeSource(node, source) {
 }
 
 function openEditor(node) {
-  const routing = collectExpandedPipeAddresses(app.graph);
-  const current = activeDescriptorFor(node, routing);
-  const { sources } = activeSources(node, routing);
-  const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;z-index:100000;background:#000a;backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center";
-  const panel = document.createElement("div");
-  panel.className = "bv-smart-pipe-editor bv-smart-pipe-merge-editor";
-  panel.style.cssText = "width:min(760px,92vw);max-height:86vh;overflow:auto;background:var(--comfy-menu-bg,#202020);color:var(--input-text,#eee);border:1px solid var(--border-color,#555);border-radius:12px;padding:20px;box-shadow:0 18px 60px #000a;font:14px sans-serif";
-  overlay.append(panel);
-  const heading = document.createElement("h2");
-  heading.textContent = "BV Smart Pipe Merge konfigurieren";
-  heading.style.marginTop = "0";
-  panel.append(heading);
-  const hint = document.createElement("p");
-  hint.textContent = "Die Reihenfolge gilt von oben nach unten. Bei gleicher Slot-ID gewinnt die spätere Quelle.";
-  hint.style.color = "var(--descrip-text,#bbb)";
-  panel.append(hint);
-  const list = document.createElement("div");
-  list.style.cssText = "display:grid;gap:7px";
-  panel.append(list);
-
-  let refreshDropdown = () => {};
-  const render = () => {
-    list.replaceChildren();
-    sources.forEach((source, index) => {
-      const row = document.createElement("div");
-      row.style.cssText = "display:grid;grid-template-columns:34px 1fr auto auto auto;gap:6px;align-items:center;padding:7px;border:1px solid var(--border-color,#555);border-radius:8px;background:var(--comfy-menu-secondary-bg,#292929)";
-      const number = document.createElement("span");
-      number.textContent = `${index + 1}.`;
-      const label = document.createElement("span");
-      label.textContent = `${source.mode === "wired" ? "🔗" : "⌁"} ${source.label || source.key}`;
-      const up = document.createElement("button"); up.textContent = "↑"; up.disabled = index === 0;
-      up.onclick = () => { [sources[index - 1], sources[index]] = [sources[index], sources[index - 1]]; render(); };
-      const down = document.createElement("button"); down.textContent = "↓"; down.disabled = index === sources.length - 1;
-      down.onclick = () => { [sources[index + 1], sources[index]] = [sources[index], sources[index + 1]]; render(); };
-      const remove = document.createElement("button"); remove.textContent = "Entfernen";
-      remove.onclick = () => { removeSource(node, source); render(); };
-      row.append(number, label, up, down, remove);
-      list.append(row);
-    });
-    refreshDropdown();
-  };
-  render();
-
-  const addRow = document.createElement("div");
-  addRow.style.cssText = "display:flex;gap:8px;margin-top:14px";
-  const select = document.createElement("select");
-  select.style.cssText = "flex:1;color:var(--input-text,#eee);background:var(--comfy-input-bg,#181818);border:1px solid var(--border-color,#555);border-radius:6px;padding:7px";
-  let candidates = [];
-  const addWireless = document.createElement("button");
-  addWireless.textContent = "Wireless hinzufügen";
-  refreshDropdown = () => {
-    const previousAddress = select.value;
-    candidates = routing.descriptors.filter((descriptor) => descriptor.address !== current?.address && !hasMergeSource(sources, { address: descriptor.address }));
-    select.replaceChildren();
-    for (const descriptor of candidates) {
-      const option = document.createElement("option");
-      option.value = descriptor.address;
-      option.textContent = `${descriptor.hostNames.length ? `${descriptor.hostNames.join(" › ")} › ` : ""}${descriptor.route.name || descriptor.node.title || "Pipe"}`;
-      select.append(option);
-    }
-    if (candidates.some((candidate) => candidate.address === previousAddress)) select.value = previousAddress;
-    select.disabled = !candidates.length;
-    addWireless.disabled = !candidates.length || sources.length >= MAX_SOURCES;
-  };
-  addWireless.onclick = () => {
-    const descriptor = candidates.find((candidate) => candidate.address === select.value);
-    if (!descriptor || sources.length >= MAX_SOURCES || hasMergeSource(sources, { address: descriptor.address })) return;
-    const state = stateFor(node);
-    let ordinal = state.nextOrdinal;
-    const used = new Set(sources.map((source) => source.key));
-    while (used.has(`pipe_${String(ordinal).padStart(3, "0")}`)) ordinal++;
-    state.nextOrdinal = ordinal + 1;
-    sources.push({ key: `pipe_${String(ordinal).padStart(3, "0")}`, mode: "wireless", address: descriptor.address, label: descriptor.route.name || descriptor.node.title || "Pipe" });
-    render();
-  };
-  addRow.append(select, addWireless);
-  panel.append(addRow);
-  refreshDropdown();
-
-  const actions = document.createElement("div");
-  actions.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:16px";
-  const cancel = document.createElement("button"); cancel.textContent = "Schließen"; cancel.onclick = () => overlay.remove();
-  const save = document.createElement("button"); save.textContent = "Speichern";
-  save.onclick = () => { reconcileInputs(node); overlay.remove(); };
-  actions.append(cancel, save);
-  panel.append(actions);
-  overlay.onclick = (event) => { if (event.target === overlay) overlay.remove(); };
-  document.body.append(overlay);
+  window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor", { detail: { node, kind: "merge" } }));
 }
+globalThis.__bvSmartPipeEditorBridge ??= {};
+globalThis.__bvSmartPipeEditorBridge.merge = {
+  read(node) {
+    const routing = collectExpandedPipeAddresses(app.graph), current = activeDescriptorFor(node, routing), { sources } = activeSources(node, routing);
+    const candidates = routing.descriptors.filter((descriptor) => descriptor.address !== current?.address && !hasMergeSource(sources, { address: descriptor.address })).map((descriptor) => ({ address: descriptor.address, label: `${descriptor.hostNames.length ? `${descriptor.hostNames.join(" › ")} › ` : ""}${descriptor.route.name || descriptor.node.title || "Pipe"}` }));
+    return structuredClone({ sources, candidates });
+  },
+  save(node, draft) {
+    const active = activeSources(node), state = stateFor(node);
+    active.sources.splice(0, active.sources.length, ...structuredClone(draft.sources ?? []));
+    state.sources = structuredClone(active.sources);
+    reconcileInputs(node);
+    node.graph?.setDirtyCanvas?.(true, true);
+  },
+};
 
 function setupNode(node) {
   if (node.__bvSmartPipeMergeReady) return;

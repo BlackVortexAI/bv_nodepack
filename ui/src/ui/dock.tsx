@@ -1,32 +1,22 @@
 import React, { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Actions, Layout, Model, TabNode, type Action, type IJsonModel } from "flexlayout-react";
+import { BV_LAYOUT_SESSION_CHANGED_EVENT, clearSessionLayoutDraft, getSessionLayoutDraft, setSessionLayoutDraft, type BvLayoutStatus } from "./layoutProfiles";
 
-const LIBRARY = "flexlayout-react@0.10.5";
-const PREFIX = "bv-nodepack:dock-layout:v1:";
+export const BV_FLEXLAYOUT_LIBRARY="flexlayout-react@0.10.5";
 export type BvDockPanel = { id:string; title:string; content:ReactNode; weight:number; minWidth?:number };
 
-function defaultLayout(panels:BvDockPanel[]):IJsonModel {
-    return { global:{ tabEnableClose:false, tabEnablePopout:false, tabEnablePopoutIcon:false, tabEnablePopoutFloatIcon:true, tabSetMinWidth:180, tabSetMinHeight:130 }, borders:[], layout:{ type:"row", children:panels.map(panel => ({ type:"tabset", weight:panel.weight, minWidth:panel.minWidth, children:[{ type:"tab", id:panel.id, name:panel.title, component:panel.id, enablePopoutFloatIcon:true }] })) } };
-}
-function loadModel(storageId:string, signature:string, fallback:IJsonModel) {
-    try {
-        const stored = localStorage.getItem(`${PREFIX}${storageId}`), envelope = stored ? JSON.parse(stored) : null;
-        if (envelope?.schemaVersion !== 1 || envelope?.library !== LIBRARY || envelope?.panels !== signature) throw new Error("Unsupported layout state");
-        return Model.fromJson(envelope.layout);
-    } catch { return Model.fromJson(fallback); }
-}
-export function resetBvDockLayout(storageId:string) { try { localStorage.removeItem(`${PREFIX}${storageId}`); } catch {} }
+function defaultLayout(panels:BvDockPanel[]):IJsonModel{return{global:{tabEnableClose:false,tabEnablePopout:false,tabEnablePopoutIcon:false,tabEnablePopoutFloatIcon:true,tabSetMinWidth:180,tabSetMinHeight:130},borders:[],layout:{type:"row",children:panels.map(panel=>({type:"tabset",weight:panel.weight,minWidth:panel.minWidth,children:[{type:"tab",id:panel.id,name:panel.title,component:panel.id,enablePopoutFloatIcon:true}]}))}}}
+const structuralActions=new Set<string>([Actions.MOVE_NODE,Actions.DELETE_TAB,Actions.DELETE_TABSET,Actions.RENAME_TAB]);
+const statusForAction=(action:Action):BvLayoutStatus=>structuralActions.has(action.type)?"modified":"adjusted";
+export function resetBvDockLayout(storageId:string){clearSessionLayoutDraft(storageId)}
 
-export default function BvDockLayout({ storageId, panels, resetSignal=0, defaultModel }:{ storageId:string; panels:BvDockPanel[]; resetSignal?:number; defaultModel?:IJsonModel }) {
-    const signature = JSON.stringify({ panels:panels.map(panel => `${panel.id}:${panel.weight}`), defaultModel });
-    const fallback = useMemo(() => defaultModel ?? defaultLayout(panels), [signature]);
-    const [model, setModel] = useState(() => loadModel(storageId, signature, fallback));
-    const content = useMemo(() => new Map(panels.map(panel => [panel.id, panel.content])), [panels]);
-    useEffect(() => setModel(loadModel(storageId, signature, fallback)), [fallback, signature, storageId]);
-    useEffect(() => { if (resetSignal) { resetBvDockLayout(storageId); setModel(Model.fromJson(fallback)); } }, [fallback, resetSignal, storageId]);
-    const guard = (action:Action) => {
-        if (action.type === Actions.POPOUT_TAB && action.data.type === "float" && model.getNodeById(action.data.node)?.getLayoutId() !== Model.MAIN_LAYOUT_ID) return undefined;
-        return action;
-    };
-    return <div className="bv-ui-dock flexlayout__theme_dark"><Layout model={model} factory={(node:TabNode) => content.get(node.getComponent() ?? "") ?? null} constrainFloatPanels onAction={guard} onModelChange={next => { setModel(next); try { localStorage.setItem(`${PREFIX}${storageId}`, JSON.stringify({ schemaVersion:1, library:LIBRARY, panels:signature, layout:next.toJson() })); } catch {} }}/></div>;
+export default function BvDockLayout({storageId,panels,resetSignal=0,defaultModel,onStatus}:{storageId:string;panels:BvDockPanel[];resetSignal?:number;defaultModel?:IJsonModel;onStatus?:(status:BvLayoutStatus)=>void}){
+    const signature=JSON.stringify({panels:panels.map(panel=>`${panel.id}:${panel.weight}`),defaultModel}),fallback=useMemo(()=>defaultModel??defaultLayout(panels),[signature]);
+    const [model,setModel]=useState(()=>Model.fromJson((getSessionLayoutDraft(storageId)?.layout as IJsonModel|undefined)??fallback));
+    const content=useMemo(()=>new Map(panels.map(panel=>[panel.id,panel.content])),[panels]);
+    useEffect(()=>{const draft=getSessionLayoutDraft(storageId);setModel(Model.fromJson((draft?.layout as IJsonModel|undefined)??fallback));onStatus?.(draft?.status??"saved")},[fallback,signature,storageId]);
+    useEffect(()=>{if(resetSignal){resetBvDockLayout(storageId);setModel(Model.fromJson(fallback));onStatus?.("saved")}},[fallback,resetSignal,storageId]);
+    useEffect(()=>{const load=(event:Event)=>{if((event as CustomEvent).detail?.key!==storageId)return;const draft=getSessionLayoutDraft(storageId);if(draft){setModel(Model.fromJson(draft.layout as IJsonModel));onStatus?.(draft.status)}};window.addEventListener(BV_LAYOUT_SESSION_CHANGED_EVENT,load);return()=>window.removeEventListener(BV_LAYOUT_SESSION_CHANGED_EVENT,load)},[onStatus,storageId]);
+    const guard=(action:Action)=>action.type===Actions.POPOUT_TAB&&action.data.type==="float"&&model.getNodeById(action.data.node)?.getLayoutId()!==Model.MAIN_LAYOUT_ID?undefined:action;
+    return <div className="bv-ui-dock flexlayout__theme_dark"><Layout model={model} factory={(node:TabNode)=>content.get(node.getComponent()??"")??null} constrainFloatPanels onAction={guard} onModelChange={(next,action)=>{setModel(next);const draft=getSessionLayoutDraft(storageId),status=draft?.status==="modified"?"modified":statusForAction(action);setSessionLayoutDraft(storageId,next.toJson(),status,draft?.profileId,false);onStatus?.(status)}}/></div>;
 }

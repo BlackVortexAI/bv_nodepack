@@ -397,6 +397,25 @@ test("merge sources materialize in configured order and preserve physical links"
   assert.deepEqual(prompt["3"].inputs.pipe_002, ["9", 0]);
 });
 
+test("a wired merge source bypasses through to its active predecessor", () => {
+  const prompt = {
+    "1": pipe("Base", "base"),
+    "3": { class_type: "BV Smart Pipe Merge", inputs: {} },
+  };
+  const modeState = promptModeState([
+    { kind: "pipe", address: "root/base", executionId: "1", route: { nodeId: "base" }, node: { mode: 0 } },
+    { kind: "pipe", address: "root/bypassed", executionId: "2", route: { nodeId: "bypassed", predecessorId: "base" }, node: { mode: 4 } },
+  ]);
+  materializeSmartPipeMergeSources(prompt, {
+    "1": "root/base", "2": "root/bypassed", "3": "root/merge",
+  }, {
+    "root/merge": { kind: "merge", sources: [
+      { key: "pipe_001", mode: "wired", address: "root/bypassed" },
+    ] },
+  }, modeState);
+  assert.deepEqual(prompt["3"].inputs.pipe_001, ["1", 0]);
+});
+
 test("a merge omits one muted source but keeps the remaining source", () => {
   const prompt = {
     "2": pipe("Active", "active"),

@@ -10,3 +10,6 @@ ui/dist/
 .idea/
 .vscode/
 *.log
+
+# Local documentation planning (not published)
+BV_DOCS_PLAN.local.md

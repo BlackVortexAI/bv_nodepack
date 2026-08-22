@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getApi, getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
+import SmartPipeEditorWindow from "./components/SmartPipeEditorWindow";
 import styles from "./index.css?inline";
 import flexLayoutStyles from "flexlayout-react/style/combined.css?inline";
 import RegionalEditor from "./regional/RegionalEditor";
@@ -23,7 +24,7 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
-import { BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, lastBvWindowInstance, rememberBvWindowInstance, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn } from "./ui";
+import { BvGlobalToastStack, BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -183,16 +184,16 @@ const upgradeDetailerPlanNode = (node: any) => {
         action = node.addWidget("button", "configure_detailer_plan", null, () => {
             const document = sourceRegionalDocument(node);
             if (!document) return;
-            rememberBvWindowInstance("detailer",node.id);
+            rememberBvWindowInstance("detailer",scopedNodeKey(node));
             openDetailerPlanDialog(document.regions, detectorIdsForPlan(node), hidden.value, value => {
                 hidden.value = value;
                 refreshDetailerPlanNode(node);
                 node.graph?.setDirtyCanvas?.(true, true);
-            }, `detailer-plan:${node.id}`, workflowNodesOfType("BV Regional Detailer Plan").map(item=>({id:String(item.id),label:`${item.title||"BV Regional Detailer Plan"} · #${item.id}`})), (targetId,replaceCurrent)=>{
-                const target=workflowNodesOfType("BV Regional Detailer Plan").find(item=>String(item.id)===targetId);
+            }, `detailer-plan:${scopedNodeKey(node)}`, workflowNodesOfType("BV Regional Detailer Plan").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV Regional Detailer Plan"} · #${item.id}`})), (targetId,replaceCurrent)=>{
+                const target=workflowNodesOfType("BV Regional Detailer Plan").find(item=>scopedNodeKey(item)===targetId);
                 const targetAction=target?.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan");
-                if(targetAction)switchBvView(`detailer-plan:${node.id}`,`detailer-plan:${target.id}`,()=>targetAction.callback?.(),replaceCurrent);
-            });
+                if(targetAction)switchBvView(`detailer-plan:${scopedNodeKey(node)}`,`detailer-plan:${scopedNodeKey(target)}`,()=>targetAction.callback?.(),replaceCurrent);
+            },node);
         }, { serialize: false });
         action.serialize = false;
     }
@@ -344,14 +345,28 @@ const regionalNodes = (): RegionalNode[] => {
     visit(graph);
     return found;
 };
-const nodeLauncherLabel = (node:any, fallback:string) => ({ label:String(node.title||fallback), meta:`#${node.id}` });
+const refreshBvToolbarCapabilities=()=>{
+    const control=workflowNodesOfType("BV Control Center").length>0,quick=regionalNodes().length>0,full=quick||["BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].some(type=>workflowNodesOfType(type).length>0),overview=full||quick;
+    document.body.classList.toggle("bv-toolbar-no-control",!control);document.body.classList.toggle("bv-toolbar-no-editor",!full);document.body.classList.toggle("bv-toolbar-no-quick",!quick);document.body.classList.toggle("bv-toolbar-no-overview",!overview);
+    window.dispatchEvent(new CustomEvent("bv-toolbar-capabilities-changed",{detail:{control,quick,full,overview}}));
+};
+const scopedNodeInfo=(node:any)=>collectScopedNodes((comfyApp as any).rootGraph??(comfyApp as any).graph,candidate=>candidate===node)[0];
+const scopedNodeKey=(node:any)=>scopedNodeInfo(node)?.key??String(node.id);
+const nodeLauncherLabel = (node:any, fallback:string) => {const scoped=scopedNodeInfo(node);return{label:String(node.title||fallback),meta:`${scoped?.breadcrumb?`${scoped.breadcrumb} · `:""}#${node.id}`}};
 const activateManagedLauncherNode = (type:"detailer"|"detector", prefix:string, widgetName:string, node:any) => {
     const action=node.widgets?.find((widget:any)=>widget.name===widgetName);
     if(!action||action.disabled)return;
-    const targetId=String(node.id),currentId=lastBvWindowInstance(type),openTarget=()=>action.callback?.();
+    const targetId=scopedNodeKey(node),currentId=lastBvWindowInstance(type),openTarget=()=>action.callback?.();
     if(currentId&&currentId!==targetId)switchBvView(`${prefix}:${currentId}`,`${prefix}:${targetId}`,openTarget,getWindowSwitchMode()==="replace");
     else openTarget();
     rememberBvWindowInstance(type,targetId);
+};
+const openFullEditorNode=(type:string,node:any)=>{if(type==="regional")window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}}));else if(type==="detailer")activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node);else if(type==="detector")activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node);else window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind:type}}))};
+const openLastFullBvEditor=()=>{
+    const definitions=[{type:"regional",nodes:regionalNodes()},{type:"detailer",nodes:workflowNodesOfType("BV Regional Detailer Plan")},{type:"detector",nodes:workflowNodesOfType("BV Detector Registry")},{type:"pipe",nodes:workflowNodesOfType("BV Smart Pipe")},{type:"merge",nodes:workflowNodesOfType("BV Smart Pipe Merge")}],lastType=lastBvFullWindowType(),lastId=lastType&&lastBvWindowInstance(lastType),last=definitions.find(item=>item.type===lastType)?.nodes.find(node=>scopedNodeKey(node)===lastId);
+    if(last){openFullEditorNode(lastType!,last);return}
+    const fallback=definitions.flatMap(item=>item.nodes.map(node=>({type:item.type,node}))).sort((left,right)=>(Number(left.node.id)||Number.MAX_SAFE_INTEGER)-(Number(right.node.id)||Number.MAX_SAFE_INTEGER))[0];
+    if(!fallback)return;openFullEditorNode(fallback.type,fallback.node);if(lastType)showBvToast({title:"Previous editor unavailable",message:"Opened the first available BV editor instead.",tone:"warning",duration:4000});
 };
 const namedLoraStacks = (): NamedLoraStack[] => {
     const graph = (comfyApp as any).graph, found: NamedLoraStack[] = [];
@@ -438,6 +453,7 @@ const ensureUniqueDocument = (node: any, forceNew = false) => {
 
 function BVRoot() {
     const [portalOpen, setPortalOpen] = useState(false);
+    const [hasControlNodes,setHasControlNodes]=useState(false);
     const [regionalOpen, setRegionalOpen] = useState(false);
     const [regionalActivation,setRegionalActivation]=useState(0);
     const [quickEditOpen, setQuickEditOpen] = useState(false);
@@ -446,14 +462,15 @@ function BVRoot() {
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
-    const launcherColumns=useCallback(():ToolbarLauncherColumn[]=>{
-        const regional=regionalNodes(),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry");
-        const regionalItems=(type:"regional"|"quick",eventName:string)=>regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance(type)===String(node.id);return{id:String(node.id),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>window.dispatchEvent(new CustomEvent(eventName,{detail:{node}}))}});
+    const launcherColumns=useCallback((includeHidden=false):ToolbarLauncherColumn[]=>{
+        const regional=regionalNodes(),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry"),pipes=[...workflowNodesOfType("BV Smart Pipe"),...workflowNodesOfType("BV Smart Pipe Merge")];
+        const decorate=(node:any,item:any)=>{const hidden=!windowMenuVisible(node);return hidden&&!includeHidden?null:{...item,hidden,onReveal:hidden?()=>setWindowMenuVisible(node,true):undefined}};
+        const regionalItems=regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance("regional")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}})),secondary:{label:`Quick edit ${copy.label}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT,{detail:{node}}))}})}).filter(Boolean) as any[];
         return [
-            {id:"regional",label:"Regional Editor",items:regionalItems("regional",OPEN_REGIONAL_EDITOR_EVENT)},
-            {id:"quick",label:"Quick Edit",items:regionalItems("quick",OPEN_REGIONAL_QUICK_EDIT_EVENT)},
-            {id:"detailer",label:"Detailer Plan",items:detailers.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Detailer Plan"),action=node.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan"),last=lastBvWindowInstance("detailer")===String(node.id);return{id:String(node.id),...copy,disabled:!action||action.disabled,meta:`${copy.meta}${action?.disabled?" · Connect Regional Prompt":last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node)}})},
-            {id:"detector",label:"Detector Registry",items:detectors.map(node=>{const copy=nodeLauncherLabel(node,"BV Detector Registry"),last=lastBvWindowInstance("detector")===String(node.id);return{id:String(node.id),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node)}})},
+            {id:"regional",label:"Regional Prompts",items:regionalItems},
+            {id:"detailer",label:"Detailer Plan",items:detailers.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Detailer Plan"),action=node.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan"),last=lastBvWindowInstance("detailer")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,disabled:!action||action.disabled,meta:`${copy.meta}${action?.disabled?" · Connect Regional Prompt":last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node)})}).filter(Boolean) as any[]},
+            {id:"detector",label:"Detector Registry",items:detectors.map(node=>{const copy=nodeLauncherLabel(node,"BV Detector Registry"),last=lastBvWindowInstance("detector")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node)})}).filter(Boolean) as any[]},
+            {id:"smart-pipe",label:"Smart Pipes",items:pipes.map(node=>{const kind=String(node.type??node.comfyClass)==="BV Smart Pipe Merge"?"merge":"pipe",copy=nodeLauncherLabel(node,kind==="merge"?"Smart Pipe Merge":"Smart Pipe");return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta} · ${kind==="merge"?"Merge":"Pipe"}`,onSelect:()=>window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind}}))})}).filter(Boolean) as any[]},
         ];
     },[]);
 
@@ -470,6 +487,7 @@ function BVRoot() {
         window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
         return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
     }, []);
+    useEffect(()=>{const update=(event:Event)=>setHasControlNodes(Boolean((event as CustomEvent).detail?.control));window.addEventListener("bv-toolbar-capabilities-changed",update);refreshBvToolbarCapabilities();return()=>window.removeEventListener("bv-toolbar-capabilities-changed",update)},[]);
 
     useEffect(() => {
         const open = (event: Event) => {
@@ -477,8 +495,8 @@ function BVRoot() {
             const available = regionalNodes();
             setLoraStacks(namedLoraStacks());
             setNodes(available);
-            const target=requested??available.find(node=>String(node.id)===lastBvWindowInstance("quick"))??available[0]??null;
-            if(target)rememberBvWindowInstance("quick",target.id);
+            const target=requested??available.find(node=>scopedNodeKey(node)===lastBvWindowInstance("quick"))??available[0]??null;
+            if(target)rememberBvWindowInstance("quick",scopedNodeKey(target));
             setRegionalNode(target);
             setRegionalOpen(false);
             setQuickEditOpen(true);
@@ -507,21 +525,24 @@ function BVRoot() {
             const available = regionalNodes();
             setLoraStacks(namedLoraStacks());
             setNodes(available);
-            const target=requested??available.find(node=>String(node.id)===lastBvWindowInstance("regional"))??available[0]??null;
-            if(target)rememberBvWindowInstance("regional",target.id);
+            const target=requested??available.find(node=>scopedNodeKey(node)===lastBvWindowInstance("regional"))??available[0]??null;
+            if(target)rememberBvWindowInstance("regional",scopedNodeKey(target));
             setRegionalNode(target);
+            if(target&&quickEditOpen&&String(regionalNode?.id)===String(target.id))setQuickEditOpen(false);
             setRegionalOpen(true);
             setRegionalActivation(value=>value+1);
         };
         window.addEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
         return () => window.removeEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
-    }, []);
+    }, [quickEditOpen,regionalNode]);
 
     return (<>
+        <BvGlobalToastStack/>
         <ToolbarWindowLauncher getColumns={launcherColumns}/>
-        <BVPortal open={portalOpen} onClose={() => setPortalOpen(false)} />
+        <SmartPipeEditorWindow/>
+        <BVPortal open={portalOpen} hasControlNodes={hasControlNodes} onClose={() => setPortalOpen(false)} />
         <RegionalEditor open={regionalOpen} activationToken={regionalActivation} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
-        <QuickPromptEditor open={quickEditOpen} activationToken={quickEditActivation} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",node.id); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); setRegionalActivation(value=>value+1); }} />
+        <QuickPromptEditor open={quickEditOpen} activationToken={quickEditActivation} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",scopedNodeKey(node)); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); setRegionalActivation(value=>value+1); }} />
     </>);
 }
 
@@ -559,6 +580,7 @@ comfyApp.registerExtension({
             .then(() => { if (debugBridgeEnabled) scheduleDebugSnapshot(); })
             .catch(error => console.error(error));
         comfyApi.addEventListener("graphChanged", scheduleDebugSnapshot);
+        comfyApi.addEventListener("graphChanged", refreshBvToolbarCapabilities);
     },
 });
 
@@ -647,10 +669,15 @@ comfyApp.registerExtension({
         function: () => publishDebugSnapshot().catch(error => console.error(error)),
     }],
     actionBarButtons: [{
+        icon: "icon-[lucide--sliders-horizontal]",
+        class: "bv-regional-action bv-regional-action-control",
+        tooltip: "Open BV Control Center",
+        onClick: () => window.dispatchEvent(new Event(OPEN_CONTROL_RACK_EVENT)),
+    }, {
         icon: "icon-[lucide--scan-search]",
         class: "bv-regional-action bv-regional-action-editor",
-        tooltip: "Open BV Regional Editor",
-        onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT)),
+        tooltip: "Open last BV editor",
+        onClick: openLastFullBvEditor,
     }, {
         icon: "icon-[lucide--layers]",
         class: "bv-regional-action bv-regional-action-quick",
@@ -663,6 +690,11 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){
+            const created=nodeType.prototype.onNodeCreated,removed=nodeType.prototype.onRemoved;
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(nodeData.name!=="BV Control Center"){this.properties??={};if(typeof this.properties.bvWindowMenuVisible!=="boolean")this.properties.bvWindowMenuVisible=!['BV Smart Pipe','BV Smart Pipe Merge'].includes(nodeData.name)}queueMicrotask(refreshBvToolbarCapabilities);return result};
+            nodeType.prototype.onRemoved=function(){const result=removed?.apply(this,arguments);queueMicrotask(refreshBvToolbarCapabilities);return result};
+        }
         if (DETAILER_UI_NODES.has(nodeData.name)) {
             const originalCreated = nodeType.prototype.onNodeCreated, originalConfigure = nodeType.prototype.onConfigure;
             nodeType.prototype.onNodeCreated = function () { const result = originalCreated?.apply(this, arguments); queueMicrotask(() => labelDetailerUi(this, nodeData.name)); return result; };
@@ -680,16 +712,16 @@ comfyApp.registerExtension({
                 let action = node.widgets?.find((widget: any) => widget.name === "configure_detector_registry");
                 if (!action) {
                     action = node.addWidget("button", "configure_detector_registry", null, () => {
-                        rememberBvWindowInstance("detector",node.id);
+                        rememberBvWindowInstance("detector",scopedNodeKey(node));
                         openDetectorRegistryDialog(comfyApi, hidden.value, value => {
                             hidden.value = value;
                             prepare(node);
                             node.graph?.setDirtyCanvas?.(true, true);
-                        }, `detector-registry:${node.id}`, workflowNodesOfType("BV Detector Registry").map(item=>({id:String(item.id),label:`${item.title||"BV Detector Registry"} · #${item.id}`})), (targetId,replaceCurrent)=>{
-                            const target=workflowNodesOfType("BV Detector Registry").find(item=>String(item.id)===targetId);
+                        }, `detector-registry:${scopedNodeKey(node)}`, workflowNodesOfType("BV Detector Registry").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV Detector Registry"} · #${item.id}`})), (targetId,replaceCurrent)=>{
+                            const target=workflowNodesOfType("BV Detector Registry").find(item=>scopedNodeKey(item)===targetId);
                             const targetAction=target?.widgets?.find((widget:any)=>widget.name==="configure_detector_registry");
-                            if(targetAction)switchBvView(`detector-registry:${node.id}`,`detector-registry:${target.id}`,()=>targetAction.callback?.(),replaceCurrent);
-                        }).catch(error => console.error(error));
+                            if(targetAction)switchBvView(`detector-registry:${scopedNodeKey(node)}`,`detector-registry:${scopedNodeKey(target)}`,()=>targetAction.callback?.(),replaceCurrent);
+                        },node).catch(error => console.error(error));
                     }, { serialize: false });
                     action.serialize = false;
                 }
@@ -863,5 +895,6 @@ comfyApp.registerExtension({
     },
     afterConfigureGraph() {
         scheduleDebugSnapshot();
+        queueMicrotask(refreshBvToolbarCapabilities);
     },
 });

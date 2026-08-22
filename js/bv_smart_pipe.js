@@ -730,137 +730,38 @@ function validateSlots(node) {
 }
 
 function openEditor(node) {
-  const { definition: state, projection } = schemaProjectionFor(node);
-  const overlay = document.createElement("div");
-  overlay.style.cssText = "position:fixed;inset:0;z-index:100000;background:rgb(0 0 0 / 65%);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center";
-  const panel = document.createElement("div");
-  panel.className = "bv-smart-pipe-editor";
-  panel.style.cssText = "width:min(900px,92vw);max-height:86vh;overflow:auto;background:var(--comfy-menu-bg,#202020);color:var(--input-text,#eee);border:1px solid var(--border-color,#555);border-radius:12px;padding:20px;box-shadow:0 18px 60px #000a;font:14px sans-serif";
-  overlay.append(panel);
-  const title = document.createElement("h2");
-  title.textContent = "BV Smart Pipe konfigurieren";
-  title.style.marginTop = "0";
-  panel.append(title);
-  const error = document.createElement("div");
-  error.style.cssText = "color:#ff8c8c;min-height:20px";
-  panel.append(error);
-  if (state.renameNotices?.length) {
-    const notice = document.createElement("div");
-    notice.style.cssText = "color:var(--descrip-text,#bbb);margin:0 0 10px";
-    notice.textContent = `Namenskonflikt automatisch aufgelöst: ${state.renameNotices.map((item) => `${item.from} → ${item.to}`).join(", ")}`;
-    panel.append(notice);
-  }
-  const table = document.createElement("table");
-  table.style.cssText = "width:100%;border-collapse:collapse";
-  panel.append(table);
-
-  const render = () => {
-    table.replaceChildren();
-    const head = table.insertRow();
-    for (const label of ["Status", "Name", "Typ", "Input", "Output", "Aktion"]) {
-      const cell = document.createElement("th");
-      cell.textContent = label;
-      cell.style.textAlign = "left";
-      head.append(cell);
-    }
-    for (const slot of resolveSchema(node)) {
-      const local = state.localSlots.find((item) => item.id === slot.id);
-      const row = table.insertRow();
-      row.insertCell().textContent = slot.missing ? "⚠ Fehlt" : local ? "Lokal" : "Geerbt";
-      const nameCell = row.insertCell();
-      const name = document.createElement("input");
-      name.value = slot.name;
-      name.disabled = !local;
-      name.oninput = () => { if (local) local.name = name.value; };
-      nameCell.append(name);
-      const typeCell = row.insertCell();
-      const type = document.createElement("input");
-      type.value = slot.type || "*";
-      type.disabled = !local;
-      type.oninput = () => { if (local) local.type = type.value.trim() || "*"; };
-      typeCell.append(type);
-      for (const field of ["showInput", "showOutput"]) {
-        const cell = row.insertCell();
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = field === "showInput" && local ? true : slot[field] ?? false;
-        checkbox.disabled = field === "showInput" && Boolean(local);
-        if (checkbox.disabled) checkbox.title = "Lokale Slots benötigen einen Input, weil hier ihr Wert erzeugt wird.";
-        checkbox.onchange = () => {
-          const target = local || projection.inheritedSlots.find((item) => item.id === slot.id);
-          if (target) target[field] = checkbox.checked;
-        };
-        cell.append(checkbox);
-      }
-      const action = row.insertCell();
-      if (local || slot.missing) {
-        const remove = document.createElement("button");
-        remove.textContent = "Entfernen";
-        remove.onclick = () => {
-          state.localSlots = state.localSlots.filter((item) => item.id !== slot.id);
-          projection.inheritedSlots = projection.inheritedSlots.filter((item) => item.id !== slot.id);
-          render();
-        };
-        action.append(remove);
-      }
-    }
-  };
-  render();
-
-  const paste = document.createElement("textarea");
-  paste.placeholder = "Mehrere neue Slots – ein Name pro Zeile";
-  paste.style.cssText = "width:100%;height:80px;margin-top:14px;box-sizing:border-box;resize:vertical";
-  panel.append(paste);
-  const actions = document.createElement("div");
-  actions.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:12px";
-  panel.append(actions);
-  const add = document.createElement("button");
-  add.textContent = "Slots hinzufügen";
-  add.onclick = () => {
-    const names = paste.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
-    const additions = names.length ? names : ["new_slot"];
-    if (state.localSlots.length + (projection.inheritedSlots?.length || 0) + additions.length > MAX_SLOTS) {
-      error.textContent = `Maximal ${MAX_SLOTS} Slots sind erlaubt.`;
-      return;
-    }
-    const usedOrdinals = new Set(resolveSchema(node).map((slot) => slot.ordinal));
-    const planned = [];
-    let nextOrdinal = state.nextOrdinal;
-    for (const name of additions) {
-      const ordinal = nextFreeOrdinal(usedOrdinals, nextOrdinal, MAX_SLOTS);
-      if (!ordinal) {
-        error.textContent = `Keine freie Slotposition bis zum Limit ${MAX_SLOTS} verfügbar.`;
-        return;
-      }
-      planned.push({ id: newId(), name, ordinal, type: "*", showInput: true, showOutput: false });
-      usedOrdinals.add(ordinal);
-      nextOrdinal = ordinal + 1;
-    }
-    state.localSlots.push(...planned);
-    state.nextOrdinal = nextOrdinal;
-    paste.value = "";
-    render();
-  };
-  actions.append(add);
-  const cancel = document.createElement("button");
-  cancel.textContent = "Abbrechen";
-  cancel.onclick = () => overlay.remove();
-  actions.append(cancel);
-  const save = document.createElement("button");
-  save.textContent = "Speichern";
-  save.onclick = () => {
-    try {
-      validateSlots(node);
-      propagate(node);
-      overlay.remove();
-    } catch (caught) {
-      error.textContent = caught.message;
-    }
-  };
-  actions.append(save);
-  overlay.onclick = (event) => { if (event.target === overlay) overlay.remove(); };
-  document.body.append(overlay);
+  window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor", { detail: { node, kind: "pipe" } }));
 }
+globalThis.__bvSmartPipeEditorBridge ??= {};
+globalThis.__bvSmartPipeEditorBridge.pipe = {
+  read(node) {
+    const { definition, projection } = schemaProjectionFor(node);
+    return structuredClone({ definition, projection, slots: resolveSchema(node) });
+  },
+  predecessor(node) {
+    const widget = node.__bvPredecessorWidget;
+    return { value: String(widget?.value ?? "Start new pipe"), options: (widget?.__bvChoices ?? []).map((choice) => ({ value: choice.label, label: choice.label })) };
+  },
+  validation(node, draft) {
+    return (draft.definition?.localSlots ?? []).filter((slot) => !slotHasInputConnection(node, slot.id)).map((slot) => ({ id: slot.id, message: `Local slot “${slot.name || slot.id}” requires a connected input.` }));
+  },
+  setPredecessor(node, value) {
+    const widget = node.__bvPredecessorWidget;
+    if (!widget || widget.__bvWired) return;
+    widget.value = value;
+    widget.callback?.(value);
+    node.graph?.setDirtyCanvas?.(true, true);
+  },
+  save(node, draft) {
+    const { definition, projection } = schemaProjectionFor(node);
+    definition.localSlots = structuredClone(draft.definition?.localSlots ?? []);
+    definition.nextOrdinal = Number(draft.definition?.nextOrdinal ?? definition.nextOrdinal);
+    projection.inheritedSlots = structuredClone(draft.projection?.inheritedSlots ?? []);
+    validateSlots(node);
+    propagate(node);
+    node.graph?.setDirtyCanvas?.(true, true);
+  },
+};
 
 function setupNode(node) {
   if (node.__bvSmartPipeReady) return;
@@ -1078,14 +979,6 @@ app.registerExtension({
     style.id = "bv-internal-widget-style";
     style.textContent = `
       .dom-widget:has(textarea[placeholder="bv_smart_pipe_schema_json"]), .dom-widget:has(textarea[placeholder="bv_smart_pipe_route_json"]), .dom-widget:has(textarea[placeholder="bv_control_config_json"]) { display: none !important; }
-      .bv-smart-pipe-editor h2 { font-size: 1.2rem; font-weight: 650; margin-bottom: 12px; }
-      .bv-smart-pipe-editor table { border-spacing: 0; overflow: hidden; border: 1px solid var(--border-color, #555); border-radius: 8px; }
-      .bv-smart-pipe-editor th { color: var(--descrip-text, #bbb); font-size: 12px; font-weight: 600; padding: 8px 10px; background: var(--comfy-menu-secondary-bg, #292929); }
-      .bv-smart-pipe-editor td { padding: 7px 10px; border-top: 1px solid var(--border-color, #444); }
-      .bv-smart-pipe-editor input[type="text"], .bv-smart-pipe-editor input:not([type]), .bv-smart-pipe-editor textarea { color: var(--input-text, #eee); background: var(--comfy-input-bg, #181818); border: 1px solid var(--border-color, #555); border-radius: 6px; padding: 7px 9px; }
-      .bv-smart-pipe-editor button { color: var(--input-text, #eee); background: var(--comfy-menu-secondary-bg, #333); border: 1px solid var(--border-color, #555); border-radius: 6px; padding: 7px 11px; cursor: pointer; }
-      .bv-smart-pipe-editor button:hover { background: var(--content-hover-bg, #444); }
-      .bv-smart-pipe-editor input:disabled { opacity: .55; cursor: not-allowed; }
     `;
     document.head.append(style);
   },
