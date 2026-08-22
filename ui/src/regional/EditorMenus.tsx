@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import type { EditorMenu } from "./editorState";
 import { setCompletionEnabled, setCompletionPlacement, useCompletionEnabled, useCompletionPlacement } from "../completion/settings";
 import DatasetPicker from "../completion/DatasetPicker";
 import { Button, CheckboxField, DefinitionList, NumberField, Popover, SelectField } from "../ui/components";
+import { useBvWindowHeaderLayout } from "../ui/window";
 
 type Props = {
     displayOpacity: number;
@@ -33,13 +34,12 @@ type Props = {
 export default function EditorMenus(props: Props) {
     const autocomplete = useCompletionEnabled();
     const completionPlacement = useCompletionPlacement();
-    const menu = props.openMenu, root = useRef<HTMLDivElement>(null),[showMenusInOverflow,setShowMenusInOverflow]=useState(false);
+    const menu = props.openMenu, root = useRef<HTMLDivElement>(null),{menuOverflow:showMenusInOverflow}=useBvWindowHeaderLayout();
     const documentInput = useRef<HTMLInputElement>(null), regionsInput = useRef<HTMLInputElement>(null);
     useEffect(() => {
         const close = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) props.onOpenMenu(null); };
         window.addEventListener("pointerdown", close); return () => window.removeEventListener("pointerdown", close);
     }, [props.onOpenMenu]);
-    useEffect(()=>{const header=root.current?.closest<HTMLElement>(".bv-ui-window-header");if(!header)return;const measure=()=>setShowMenusInOverflow(header.clientWidth<520),observer=new ResizeObserver(measure);observer.observe(header);measure();return()=>observer.disconnect()},[]);
     const toggle = (value: EditorMenu) => props.onOpenMenu(menu === value ? null : value);
     const controlled=(id:Exclude<EditorMenu,null>,label:string,content:React.ReactNode)=><Popover open={menu===id} onOpen={open=>props.onOpenMenu(open?id:null)} trigger={({toggle})=><Button intent="ghost" density="compact" aria-label={label} title={label} aria-expanded={menu===id} onClick={toggle}><span className="editor-menu-label-full">{label}</span><span className="editor-menu-label-short" aria-hidden="true">{label==="?"?label:label[0]}</span></Button>}>{content}</Popover>;
     const buttons=<>

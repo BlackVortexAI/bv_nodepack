@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { clone, parseDocument, PromptPair, RegionalDocument } from "./model";
-import { clampQuickPromptPosition, loadEditorState, saveEditorState } from "./editorState";
+import { clampQuickPromptGeometry, loadEditorState, saveEditorState, type WindowGeometry } from "./editorState";
 import PromptTextarea from "../completion/PromptTextarea";
 import { emptyLoraBindings, NamedLoraStack, parseLoraBindings, reconcileLoraBindings, RegionalLoraBindings } from "./loraBindings";
-import { Badge, Button, BvManagedWindow, BvMinimizedWindow, BvWindowNavigator, Callout, FieldFrame, rememberBvWindowInstance, SelectField } from "../ui";
+import { Badge, Button, BvManagedWindow, BvMinimizedWindow, BvWindowNavigator, Callout, FieldFrame, getWindowSwitchMode, rememberBvWindowInstance, SelectField } from "../ui";
 
 export type RegionalNodeRef = {
     id: number | string;
@@ -14,6 +14,7 @@ export type RegionalNodeRef = {
 
 type Props = {
     open: boolean;
+    activationToken?:number;
     nodes: RegionalNodeRef[];
     initialNode: RegionalNodeRef | null;
     loraStacks: NamedLoraStack[];
@@ -30,20 +31,27 @@ const promptsFor = (document: RegionalDocument, target: string): PromptPair => t
         ? document.prompts.background
         : document.regions.find(region => region.id === target)?.prompts ?? document.prompts.global;
 
-export default function QuickPromptEditor({ open, nodes, initialNode, loraStacks, onClose, onOpenEditor }: Props) {
+export default function QuickPromptEditor({ open, activationToken=0, nodes, initialNode, loraStacks, onClose, onOpenEditor }: Props) {
     const [node, setNode] = useState<RegionalNodeRef | null>(initialNode);
     const [documentValue, setDocumentValue] = useState<RegionalDocument | null>(null);
     const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
     const [target, setTarget] = useState("global");
-    const [position, setPosition] = useState({ x: Math.max(16, window.innerWidth - 544), y: 84 });
+    const [geometry, setGeometry] = useState<WindowGeometry>(()=>clampQuickPromptGeometry({x:window.innerWidth-544,y:84,width:520,height:640},{width:window.innerWidth,height:window.innerHeight}));
     const [error, setError] = useState("");
     const [keptNodeIds, setKeptNodeIds] = useState<string[]>([]);
-    const transferredPosition=useRef<{x:number;y:number}|null>(null);
+    const transferredGeometry=useRef<WindowGeometry|null>(null);
+    const previousOpen=useRef(false),previousActivation=useRef(activationToken);
 
     useEffect(() => {
-        if (initialNode) setNode(initialNode);
-        else if (!node && nodes[0]) setNode(nodes[0]);
-    }, [initialNode, nodes]);
+        const wasOpen=previousOpen.current,activated=previousActivation.current!==activationToken;
+        previousOpen.current=open;previousActivation.current=activationToken;
+        if(!open||!activated)return;
+        const requested=initialNode??nodes[0]??null,currentId=String(node?.id??""),requestedId=String(requested?.id??"");
+        if(wasOpen&&currentId&&requestedId!==currentId&&getWindowSwitchMode()==="keep")setKeptNodeIds(ids=>[...new Set([...ids,currentId])].filter(id=>id!==requestedId));
+        else if(requestedId)setKeptNodeIds(ids=>ids.filter(id=>id!==requestedId));
+        transferredGeometry.current=wasOpen?geometry:null;
+        setNode(requested);
+    }, [activationToken,initialNode,nodes,open]);
 
     useEffect(() => {
         if (!node) return;
@@ -62,7 +70,7 @@ export default function QuickPromptEditor({ open, nodes, initialNode, loraStacks
             setDocumentValue(next);
             setLoraBindings(nextBindings);
             setTarget(nextTarget);
-            setPosition(transferredPosition.current??clampQuickPromptPosition(stored.quickPromptWindow, { width: window.innerWidth, height: window.innerHeight }));transferredPosition.current=null;
+            setGeometry(transferredGeometry.current??stored.quickPromptWindow);transferredGeometry.current=null;
             setError("");
         } catch (reason) {
             setDocumentValue(null);
@@ -77,10 +85,10 @@ export default function QuickPromptEditor({ open, nodes, initialNode, loraStacks
         const state = loadEditorState(documentValue.document_id);
         saveEditorState(documentValue.document_id, { ...state, quickPromptTarget: nextTarget });
     };
-    const persistPosition = (nextPosition: { x: number; y: number }) => {
+    const persistGeometry = (nextGeometry: WindowGeometry) => {
         if (!documentValue) return;
         const state = loadEditorState(documentValue.document_id);
-        saveEditorState(documentValue.document_id, { ...state, quickPromptWindow: nextPosition });
+        saveEditorState(documentValue.document_id, { ...state, quickPromptWindow: nextGeometry });
     };
     const updatePrompts = (nextPrompts: PromptPair) => {
         if (!documentValue || !node) return;
@@ -115,9 +123,9 @@ export default function QuickPromptEditor({ open, nodes, initialNode, loraStacks
         node.graph?.setDirtyCanvas?.(true, true);
     };
     const selectedStack = target === "global" || target === "background" ? loraBindings.global_stack_id ?? "" : loraBindings.regions[target] ?? "";
-    const navigateNode=(nextId:string,replaceCurrent:boolean)=>{const currentId=String(node?.id??"");rememberBvWindowInstance("quick",nextId);if(nextId===currentId)return;setKeptNodeIds(ids=>replaceCurrent?ids.filter(id=>id!==nextId):[...new Set([...ids,currentId])].filter(id=>id&&id!==nextId));transferredPosition.current=position;setNode(nodes.find(item=>String(item.id)===nextId)??null)};
+    const navigateNode=(nextId:string,replaceCurrent:boolean,transferWindow=true)=>{const currentId=String(node?.id??"");rememberBvWindowInstance("quick",nextId);if(nextId===currentId)return;setKeptNodeIds(ids=>replaceCurrent?ids.filter(id=>id!==nextId):[...new Set([...ids,currentId])].filter(id=>id&&id!==nextId));transferredGeometry.current=transferWindow?geometry:null;setNode(nodes.find(item=>String(item.id)===nextId)??null)};
 
-    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>String(item.id)===id);return kept?<BvMinimizedWindow key={id} title={`Quick Edit · ${kept.title||"BV Regional Prompt"} · #${id}`} onRestore={()=>navigateNode(id,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} title="Regional Quick Edit" context={<BvWindowNavigator label="Regional Prompt Node" value={String(node?.id??"")} options={nodes.map(item=>({value:String(item.id),label:`${item.title||"BV Regional Prompt"} · #${item.id}`}))} onNavigate={navigateNode}/>} allowWorkspace={false} initialGeometry={{x:position.x,y:position.y,width:520,height:640}} minSize={{width:360,height:320}} className="bv-quick-prompt-window bv-density-compact" onClose={onClose} onGeometry={geometry=>{const next=clampQuickPromptPosition({x:geometry.x,y:geometry.y},{width:window.innerWidth,height:window.innerHeight},{width:geometry.width,height:geometry.height});setPosition(next);persistPosition(next)}} status={<Badge tone="success" dot>Autosaved</Badge>} actions={<Button intent="primary" disabled={!node||!documentValue} onClick={() => node && onOpenEditor(node)}>Open Full Editor</Button>}>
+    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>String(item.id)===id);return kept?<BvMinimizedWindow key={id} title={`Quick Edit · ${kept.title||"BV Regional Prompt"} · #${id}`} onRestore={()=>navigateNode(id,false,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="Regional Quick Edit" context={<BvWindowNavigator label="Regional Prompt Node" value={String(node?.id??"")} options={nodes.map(item=>({value:String(item.id),label:`${item.title||"BV Regional Prompt"} · #${item.id}`}))} onNavigate={navigateNode}/>} allowWorkspace={false} initialGeometry={geometry} minSize={{width:360,height:320}} className="bv-quick-prompt-window bv-density-compact" onClose={onClose} onGeometry={nextGeometry=>{const next=clampQuickPromptGeometry(nextGeometry,{width:window.innerWidth,height:window.innerHeight});setGeometry(next);persistGeometry(next)}} status={<Badge tone="success" dot>Autosaved</Badge>} actions={<Button intent="primary" disabled={!node||!documentValue} onClick={() => node && onOpenEditor(node)}>Open Full Editor</Button>}>
         <div className="bv-quick-prompt-body">
             {error ? <Callout tone="danger" title="Prompt document unavailable">{error}</Callout> : documentValue && prompts && <>
                 <SelectField label="Prompt Target" value={target} onValue={selectTarget} options={[{value:"global",label:"Global"},{value:"background",label:"Background"},...documentValue.regions.map(region=>({value:region.id,label:region.name}))]}/>

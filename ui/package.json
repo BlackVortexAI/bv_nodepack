@@ -1,13 +1,11 @@
 {
     "name": "bv_nodepack",
     "private": true,
-    "version": "0.16.0",
+    "version": "0.17.0",
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "prototype:text-input": "vite --host 127.0.0.1 --open /prototypes/text-input/index.html",
-        "prototype:docking": "vite --host 127.0.0.1 --open /prototypes/docking-layout/index.html",
-        "prototype:mask-composition": "vite --host 127.0.0.1 --open /prototypes/mask-composition/index.html",
+        "showcase": "vite --host 127.0.0.1 --open /showcase/index.html",
         "test": "tsx --test ../tests/*.test.mjs",
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },

@@ -48,11 +48,11 @@ test("imperative Comfy adapters mount React instead of maintaining a second cont
 });
 
 test("the reference showcase has no legacy static implementation",()=>{
-    const html=readFileSync(new URL("../ui/prototypes/text-input/index.html",import.meta.url),"utf8");
+    const html=readFileSync(new URL("../ui/showcase/index.html",import.meta.url),"utf8");
     assert.match(html,/src="\.\.\/\.\.\/src\/showcase\.tsx"/);
     assert.doesNotMatch(html,/<(?:button|input|select|textarea)\b/);
     for(const name of ["extended-controls.js","extended-controls.css","extended-controls.bundle.js"])
-        assert.equal(existsSync(new URL(`../ui/prototypes/text-input/${name}`,import.meta.url)),false);
+        assert.equal(existsSync(new URL(`../ui/showcase/${name}`,import.meta.url)),false);
 });
 
 test("density is inherited by default and can still be overridden locally",()=>{

@@ -1190,6 +1190,19 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-22 — v0.17.0
+
+- Add the shared BV UI module and offline component showcase as the canonical
+  implementation and visual reference for BV-owned controls, dialogs and windows.
+- Unify Regional Editor, Quick Edit, Detailer Plan and Detector Registry window
+  chrome, multi-node navigation, persistent switch preference and minimized shelf.
+- Add node-owned window state, full edge/corner resizing, responsive header and
+  footer overflow, compact contextual help and a restrained shared radius scale.
+- Refine the Regional Editor dock, layer ordering, compact inspectors, Detailer
+  Plan jobs and Detector Registry summaries using reusable production controls.
+- Add frontend regression coverage for shared UI integration, window lifecycle,
+  responsive behavior, preferences, geometry and regional interaction ordering.
+
 ### 2026-08-21 — v0.16.0
 
 - Add the visual `BV Regional Detailer Plan` for ordered per-region jobs with

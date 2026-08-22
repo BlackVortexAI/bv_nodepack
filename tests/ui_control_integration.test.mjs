@@ -23,6 +23,7 @@ const regionalEditor = readFileSync(new URL("../ui/src/regional/RegionalEditor.t
 const quickPromptEditor = readFileSync(new URL("../ui/src/regional/QuickPromptEditor.tsx", import.meta.url), "utf8");
 const promptTextarea = readFileSync(new URL("../ui/src/completion/PromptTextarea.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../ui/src/index.css", import.meta.url), "utf8");
+const showcase = readFileSync(new URL("../ui/src/showcase.tsx", import.meta.url), "utf8");
 
 test("regional inspector composes shared production controls instead of restyling raw widgets", () => {
     for (const component of ["BvSelect", "BvNumberField", "FieldFrame", "PromptTextarea"]) assert.match(options, new RegExp(`<${component}\\b`));
@@ -59,6 +60,23 @@ test("every node editor uses the conditional shared window navigator", () => {
     assert.match(styles, /\.bv-ui-window-shelf-close/);
     assert.match(regionalEditor, /activationToken/);
     assert.match(regionalEditor, /transferredWindow/);
+});
+
+test("shelf restore uses node-owned geometry while navigator switches transfer the active workspace", () => {
+    for(const source of [regionalEditor,quickPromptEditor]) assert.match(source,/onRestore=\{\(\)=>navigateNode\(id,false,false\)\}/);
+    assert.match(quickPromptEditor,/transferredGeometry\.current=transferWindow\?geometry:null/);
+    assert.match(quickPromptEditor,/quickPromptWindow: nextGeometry/);
+    assert.match(quickPromptEditor,/initialGeometry=\{geometry\}/);
+});
+
+test("toolbar and node-button activation use the same keep-mode lifecycle", () => {
+    assert.match(uiEntry,/quickEditActivation/);
+    assert.match(uiEntry,/<QuickPromptEditor[^>]*activationToken=\{quickEditActivation\}/);
+    for(const source of [regionalEditor,quickPromptEditor]){
+        assert.match(source,/previousActivation/);
+        assert.match(source,/getWindowSwitchMode\(\)==="keep"/);
+        assert.match(source,/transferred(?:Window|Geometry)\.current=wasOpen\?/);
+    }
 });
 
 test("ComfyUI toolbar exposes a node-aware multi-column window launcher", () => {
@@ -172,16 +190,18 @@ test("regional editor delegates its complete window lifecycle to the shared mana
 
 test("compact window navigation progressively moves mode and node selection into overflow", () => {
     assert.match(windowChrome, /bv-window-navigator-overflow/);
-    assert.match(windowChrome, /bv-window-mode-primary/);
-    assert.match(windowChrome, /bv-window-node-overflow/);
-    assert.match(styles, /@container bv-window-header \(max-width:900px\)/);
-    assert.match(styles, /@container bv-window-header \(max-width:700px\)/);
+    assert.match(windowChrome, /nodeInOverflow=layout\.minimal,modeInOverflow=layout\.narrow/);
+    assert.match(windowChrome, /!nodeInOverflow&&select/);
+    assert.match(windowChrome, /!modeInOverflow&&toggle/);
+    assert.match(windowChrome, /modeInOverflow&&<div ref=\{overflow\}/);
 });
 
 test("window navigation overflow is a complete surfaced control group", () => {
     assert.match(windowChrome, /className="bv-window-navigator-panel"/);
-    assert.match(windowChrome, /bv-window-node-overflow/);
-    assert.match(windowChrome, /bv-window-mode-overflow/);
+    assert.match(windowChrome, /nodeInOverflow&&<div className="bv-window-navigator-panel-row is-node">\{select\}/);
+    assert.match(windowChrome, /className="bv-window-navigator-panel-row is-mode"/);
+    assert.equal((windowChrome.match(/<CompactSelect/g)??[]).length,1);
+    assert.equal((windowChrome.match(/role="switch"/g)??[]).length,1);
     assert.match(styles, /\.bv-window-navigator-menu\s*\{[^}]*background:var\(--bv-ui-surface-raised\)[^}]*border:/s);
     assert.match(styles, /\.bv-window-navigator-panel\s*\{[^}]*display:grid[^}]*width:/s);
 });
@@ -219,8 +239,9 @@ test("managed windows separate rounded clipping from overlay escape", () => {
 
 test("header overflow follows actual available controls and toggle reaches both ends", () => {
     assert.match(windowChrome, /ResizeObserver/);
-    assert.match(windowChrome, /showNodeInOverflow/);
-    assert.match(windowChrome, /showMenusInOverflow/);
+    assert.match(windowChrome, /BvWindowHeaderLayoutContext\.Provider/);
+    assert.match(editorMenus, /useBvWindowHeaderLayout/);
+    assert.doesNotMatch(editorMenus, /new ResizeObserver/);
     assert.match(styles, /\.bv-window-switch-mode\[aria-checked=true\] \.bv-toggle-track>span\s*\{[^}]*margin-left:auto/s);
 });
 
@@ -252,6 +273,14 @@ test("window footer has stacked and overflow states instead of word columns", ()
     assert.match(styles, /\.bv-ui-window-status\s*\{[^}]*min-width:0[^}]*white-space:nowrap/s);
 });
 
+test("showcase window reference measures and demonstrates real responsive states", () => {
+    assert.match(showcase,/function WindowContractDemo/);
+    assert.match(showcase,/new ResizeObserver/);
+    assert.match(showcase,/stacked=\{width<700\}/);
+    assert.match(showcase,/minimal=\{width<470\}/);
+    assert.doesNotMatch(showcase,/stacked=\{false\}|minimal=\{false\}/);
+});
+
 test("save dialogs do not duplicate the title-bar close action in their footers", () => {
     for (const source of [detailerView, detectorView]) {
         assert.doesNotMatch(source, />Cancel<|label:"Cancel"/);
@@ -259,9 +288,11 @@ test("save dialogs do not duplicate the title-bar close action in their footers"
 });
 
 test("production chrome uses the restrained radius scale", () => {
+    assert.match(styles, /--bv-ui-radius-sm:calc\(2px \* var\(--bv-ui-scale\)\)/);
     assert.match(styles, /--bv-ui-radius:calc\(4px \* var\(--bv-ui-scale\)\)/);
-    assert.match(styles, /\.bv-managed-window\s*\{[^}]*border-radius:calc\(6px \* var\(--bv-ui-scale\)\)/s);
-    assert.match(styles, /\.bv-callout\s*\{[^}]*border-radius:4px/s);
+    assert.match(styles, /--bv-ui-radius-lg:calc\(6px \* var\(--bv-ui-scale\)\)/);
+    assert.match(styles, /\.bv-managed-window\s*\{[^}]*border-radius:var\(--bv-ui-radius\)/s);
+    assert.match(styles, /\.bv-callout\s*\{[^}]*border-radius:var\(--bv-ui-radius-sm\)/s);
 });
 
 test("managed workspace windows follow the regional editor inset chrome", () => {

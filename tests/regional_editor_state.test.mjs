@@ -99,7 +99,14 @@ test("quick edit remembers its last prompt target per document", () => {
 test("quick edit starts below the ComfyUI toolbar and remains recoverable", () => {
     assert.deepEqual(clampQuickPromptPosition({ x: 5000, y: 10 }, viewport), { x: 1548, y: 72 });
     const storage = memoryStorage(), state = defaultEditorState(viewport);
-    state.quickPromptWindow = { x: 320, y: 180 };
+    state.quickPromptWindow = { x: 320, y: 180, width: 610, height: 480 };
     saveEditorState("doc", state, storage);
-    assert.deepEqual(loadEditorState("doc", storage, viewport).quickPromptWindow, { x: 320, y: 180 });
+    assert.deepEqual(loadEditorState("doc", storage, viewport).quickPromptWindow, { x: 320, y: 180, width: 610, height: 480 });
+});
+
+test("legacy quick edit positions migrate to complete node-owned geometry", () => {
+    const storage=memoryStorage(),state=defaultEditorState(viewport);
+    state.quickPromptWindow={x:280,y:140};
+    saveEditorState("legacy",state,storage);
+    assert.deepEqual(loadEditorState("legacy",storage,viewport).quickPromptWindow,{x:280,y:140,width:520,height:640});
 });

@@ -441,6 +441,7 @@ function BVRoot() {
     const [regionalOpen, setRegionalOpen] = useState(false);
     const [regionalActivation,setRegionalActivation]=useState(0);
     const [quickEditOpen, setQuickEditOpen] = useState(false);
+    const [quickEditActivation,setQuickEditActivation]=useState(0);
     const [regionalNode, setRegionalNode] = useState<RegionalNode | null>(null);
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
@@ -480,8 +481,8 @@ function BVRoot() {
             if(target)rememberBvWindowInstance("quick",target.id);
             setRegionalNode(target);
             setRegionalOpen(false);
-            setQuickEditOpen(false);
-            requestAnimationFrame(() => setQuickEditOpen(true));
+            setQuickEditOpen(true);
+            setQuickEditActivation(value=>value+1);
         };
         window.addEventListener(OPEN_REGIONAL_QUICK_EDIT_EVENT, open);
         return () => window.removeEventListener(OPEN_REGIONAL_QUICK_EDIT_EVENT, open);
@@ -520,7 +521,7 @@ function BVRoot() {
         <ToolbarWindowLauncher getColumns={launcherColumns}/>
         <BVPortal open={portalOpen} onClose={() => setPortalOpen(false)} />
         <RegionalEditor open={regionalOpen} activationToken={regionalActivation} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
-        <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",node.id); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
+        <QuickPromptEditor open={quickEditOpen} activationToken={quickEditActivation} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",node.id); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); setRegionalActivation(value=>value+1); }} />
     </>);
 }
 

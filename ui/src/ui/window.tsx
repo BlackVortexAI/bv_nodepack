@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEventHandler, type ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEventHandler, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mergeChangedInitialGeometry, resizeFloatingWindow, type ResizeDirection, windowShelfPosition } from "./workspaceGeometry";
 import { AnchoredPopover, CompactSelect, MenuButton, type MenuAction, type SelectOption } from "./components";
@@ -10,10 +10,15 @@ export type BvWindowMode = "workspace" | "floating";
 
 const Icon = ({ children, className = "" }: { children: ReactNode; className?: string }) => <svg className={className} viewBox="0 0 24 24" aria-hidden="true">{children}</svg>;
 
+export type BvWindowHeaderLayout = { narrow:boolean; minimal:boolean; menuOverflow:boolean };
+const BvWindowHeaderLayoutContext=createContext<BvWindowHeaderLayout>({narrow:false,minimal:false,menuOverflow:false});
+export const useBvWindowHeaderLayout=()=>useContext(BvWindowHeaderLayoutContext);
+
 export function BvWindowHeader(props: { title: string; shortTitle?: string; context?: ReactNode; center?: ReactNode; mode: BvWindowMode; allowWorkspace?: boolean; onMode?: () => void; onMinimize: () => void; onClose: () => void; onPointerDown?: PointerEventHandler<HTMLElement> }) {
     const workspace = props.mode === "workspace",header=useRef<HTMLElement>(null),[width,setWidth]=useState(Infinity);
     useEffect(()=>{const node=header.current;if(!node)return;const observer=new ResizeObserver(entries=>setWidth(entries[0]?.contentRect.width??node.clientWidth));observer.observe(node);return()=>observer.disconnect()},[]);
-    return <header ref={header} className={`bv-ui-window-header bv-density-compact ${width<760?"is-narrow":""} ${width<620?"is-minimal":""} ${width<520?"is-menu-overflow":""}`.trim()} onPointerDown={props.onPointerDown}>
+    const layout=useMemo<BvWindowHeaderLayout>(()=>({narrow:width<760,minimal:width<620,menuOverflow:width<520}),[width]);
+    return <BvWindowHeaderLayoutContext.Provider value={layout}><header ref={header} className={`bv-ui-window-header bv-density-compact ${layout.narrow?"is-narrow":""} ${layout.minimal?"is-minimal":""} ${layout.menuOverflow?"is-menu-overflow":""}`.trim()} onPointerDown={props.onPointerDown}>
         <div className="bv-ui-window-identity">
             <span className="bv-ui-window-icon"><Icon><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5c0-3.2-2.1-5.7-5.1-5.7-2.4 0-4.1 1.7-4.1 3.8 0 1.7 1.2 2.9 2.8 2.9 1.4 0 2.4-.9 2.4-2.1"/></Icon></span>
             <strong className="bv-ui-window-title"><span className="bv-ui-window-title-full">{props.title}</span>{props.shortTitle&&<span className="bv-ui-window-title-short">{props.shortTitle}</span>}</strong>
@@ -26,7 +31,7 @@ export function BvWindowHeader(props: { title: string; shortTitle?: string; cont
             {props.allowWorkspace !== false && <button type="button" className="bv-ui-window-control" title={workspace ? "Restore floating window" : "Maximize to workspace"} aria-label={workspace ? "Restore floating window" : "Maximize to workspace"} onClick={props.onMode}>{workspace ? <Icon><rect x="4.5" y="7.5" width="12" height="12" rx="1.5"/><path d="M7.5 7.5v-3h12v12h-3"/></Icon> : <Icon><rect x="5" y="5" width="14" height="14" rx="1.5"/></Icon>}</button>}
             <button type="button" className="bv-ui-window-control bv-ui-window-control--close" title="Close" aria-label="Close window" onClick={props.onClose}><Icon><path d="m7 7 10 10M17 7 7 17"/></Icon></button>
         </div>
-    </header>;
+    </header></BvWindowHeaderLayoutContext.Provider>;
 }
 
 export type BvWindowGeometry = { x:number; y:number; width:number; height:number };
@@ -107,11 +112,13 @@ export function BvMinimizedWindow({ title, onRestore, onClose }: { title: string
 
 export function BvWindowNavigator({label,value,options,onNavigate}:{label:string;value:string;options:SelectOption[];onNavigate:(value:string,replaceCurrent:boolean)=>void}) {
     const mode=useSyncExternalStore(subscribeWindowSwitchMode,getWindowSwitchMode,getWindowSwitchMode),keep=mode==="keep";
-    const [overflowOpen,setOverflowOpen]=useState(false),overflow=useRef<HTMLDivElement>(null),showNodeInOverflow=true,showMenusInOverflow=false;
+    const layout=useBvWindowHeaderLayout(),[overflowOpen,setOverflowOpen]=useState(false),overflow=useRef<HTMLDivElement>(null);
     if(options.length<=1)return null;
     const switchLabel=keep?"Keep current window when switching. Hold Shift to replace once.":"Replace current window when switching. Hold Shift to keep once.";
-    const select=(className:string)=><CompactSelect className={className} label={label} value={value} options={options} onValue={(next,meta)=>onNavigate(next,meta.shiftKey?keep:!keep)}/>,toggle=(className:string)=><button type="button" role="switch" aria-label={switchLabel} aria-checked={keep} className={`bv-window-switch-mode ${className}`} title={switchLabel} onClick={()=>setWindowSwitchMode(keep?"replace":"keep")}><span className="bv-toggle-track"><span/></span><span aria-hidden="true">{keep?"Keep":"Replace"}</span></button>;
-    return <div className="bv-window-navigator">{select("bv-window-node-primary")}{toggle("bv-window-mode-primary")}<div ref={overflow} className="bv-window-navigator-overflow"><button type="button" aria-label="More window navigation options" aria-expanded={overflowOpen} onClick={()=>setOverflowOpen(open=>!open)}>•••</button><AnchoredPopover open={overflowOpen} anchor={overflow} onClose={()=>setOverflowOpen(false)} className="bv-window-navigator-menu"><div className="bv-window-navigator-panel">{showNodeInOverflow&&<div className="bv-window-navigator-panel-row is-node">{select("bv-window-node-overflow")}</div>}<div className="bv-window-navigator-panel-row is-mode"><span>Keep current window</span>{toggle("bv-window-mode-overflow")}</div>{showMenusInOverflow&&null}</div></AnchoredPopover></div></div>;
+    const nodeInOverflow=layout.minimal,modeInOverflow=layout.narrow;
+    const select=<CompactSelect className="bv-window-node-select" label={label} value={value} options={options} onValue={(next,meta)=>onNavigate(next,meta.shiftKey?keep:!keep)}/>;
+    const toggle=<button type="button" role="switch" aria-label={switchLabel} aria-checked={keep} className="bv-window-switch-mode" title={switchLabel} onClick={()=>setWindowSwitchMode(keep?"replace":"keep")}><span className="bv-toggle-track"><span/></span><span aria-hidden="true">{keep?"Keep":"Replace"}</span></button>;
+    return <div className="bv-window-navigator">{!nodeInOverflow&&select}{!modeInOverflow&&toggle}{modeInOverflow&&<div ref={overflow} className="bv-window-navigator-overflow"><button type="button" aria-label="More window navigation options" aria-expanded={overflowOpen} onClick={()=>setOverflowOpen(open=>!open)}>•••</button><AnchoredPopover open={overflowOpen} anchor={overflow} onClose={()=>setOverflowOpen(false)} className="bv-window-navigator-menu"><div className="bv-window-navigator-panel">{nodeInOverflow&&<div className="bv-window-navigator-panel-row is-node">{select}</div>}<div className="bv-window-navigator-panel-row is-mode"><span>Keep current window</span>{toggle}</div></div></AnchoredPopover></div>}</div>;
 }
 
 export function ResetLayoutButton({ onClick }: { onClick: () => void }) {

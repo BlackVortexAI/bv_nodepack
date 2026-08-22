@@ -21,7 +21,7 @@ export type EditorViewState = {
     openMenu: EditorMenu;
     promptSections: { region: boolean; global: boolean; background: boolean };
     quickPromptTarget: string;
-    quickPromptWindow: { x: number; y: number };
+    quickPromptWindow: WindowGeometry;
 };
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
@@ -38,6 +38,12 @@ export function clampQuickPromptPosition(value: { x: number; y: number }, viewpo
         x: clamp(finite(value.x, viewport.width - panel.width - 24), -panel.width + visibleHeader, viewport.width - visibleHeader),
         y: clamp(finite(value.y, 84), 72, Math.max(72, viewport.height - visibleHeader)),
     };
+}
+
+export function clampQuickPromptGeometry(value: Partial<WindowGeometry>, viewport: { width:number; height:number }):WindowGeometry {
+    const width=clamp(finite(value.width,520),Math.min(360,viewport.width),Math.max(360,viewport.width-32));
+    const height=clamp(finite(value.height,640),Math.min(320,viewport.height),Math.max(320,viewport.height-32));
+    return {...clampQuickPromptPosition({x:finite(value.x,viewport.width-width-24),y:finite(value.y,84)},viewport,{width,height}),width,height};
 }
 
 export function activeWindowGeometry(state: EditorViewState, viewport: { width: number; height: number }) {
@@ -93,7 +99,7 @@ export function defaultEditorState(viewport = { width: window.innerWidth, height
         openMenu: null,
         promptSections: { region: false, global: false, background: false },
         quickPromptTarget: "global",
-        quickPromptWindow: clampQuickPromptPosition({ x: viewport.width - 544, y: 84 }, viewport),
+        quickPromptWindow: clampQuickPromptGeometry({ x: viewport.width - 544, y: 84, width:520, height:640 }, viewport),
     };
 }
 
@@ -139,7 +145,7 @@ export function normalizeEditorState(value: unknown, viewport = { width: window.
             background: input.promptSections?.background === true,
         },
         quickPromptTarget: typeof input.quickPromptTarget === "string" && input.quickPromptTarget ? input.quickPromptTarget : "global",
-        quickPromptWindow: clampQuickPromptPosition(input.quickPromptWindow ?? defaults.quickPromptWindow, viewport),
+        quickPromptWindow: clampQuickPromptGeometry(input.quickPromptWindow ?? defaults.quickPromptWindow, viewport),
     };
 }
 
