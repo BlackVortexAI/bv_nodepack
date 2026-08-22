@@ -17,9 +17,9 @@ function loadModel(storageId:string, signature:string, fallback:IJsonModel) {
 }
 export function resetBvDockLayout(storageId:string) { try { localStorage.removeItem(`${PREFIX}${storageId}`); } catch {} }
 
-export default function BvDockLayout({ storageId, panels, resetSignal=0 }:{ storageId:string; panels:BvDockPanel[]; resetSignal?:number }) {
-    const signature = panels.map(panel => `${panel.id}:${panel.weight}`).join("|");
-    const fallback = useMemo(() => defaultLayout(panels), [signature]);
+export default function BvDockLayout({ storageId, panels, resetSignal=0, defaultModel }:{ storageId:string; panels:BvDockPanel[]; resetSignal?:number; defaultModel?:IJsonModel }) {
+    const signature = JSON.stringify({ panels:panels.map(panel => `${panel.id}:${panel.weight}`), defaultModel });
+    const fallback = useMemo(() => defaultModel ?? defaultLayout(panels), [signature]);
     const [model, setModel] = useState(() => loadModel(storageId, signature, fallback));
     const content = useMemo(() => new Map(panels.map(panel => [panel.id, panel.content])), [panels]);
     useEffect(() => setModel(loadModel(storageId, signature, fallback)), [fallback, signature, storageId]);

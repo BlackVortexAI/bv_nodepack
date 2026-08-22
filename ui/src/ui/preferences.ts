@@ -1,7 +1,24 @@
 export const UI_SIZE_SETTING_ID = "BV.NodePack.UI.Size";
 export const UI_REDUCED_EFFECTS_SETTING_ID = "BV.NodePack.UI.ReducedEffects";
+export const UI_WINDOW_SWITCH_MODE_SETTING_ID = "BV.NodePack.UI.WindowSwitchMode";
 
 export type BvUiSize = "compact" | "default" | "large";
+export type BvWindowSwitchMode = "keep" | "replace";
+
+let windowSwitchMode: BvWindowSwitchMode = "keep";
+let persistWindowSwitchMode: ((value: BvWindowSwitchMode) => void) | undefined;
+const windowSwitchListeners = new Set<(value: BvWindowSwitchMode) => void>();
+
+export const normalizeWindowSwitchMode = (value: unknown): BvWindowSwitchMode => value === "replace" ? "replace" : "keep";
+export const getWindowSwitchMode = () => windowSwitchMode;
+export const bindWindowSwitchModePersistence = (persist: (value: BvWindowSwitchMode) => void) => { persistWindowSwitchMode = persist; };
+export const subscribeWindowSwitchMode = (listener: (value: BvWindowSwitchMode) => void) => { windowSwitchListeners.add(listener); return () => windowSwitchListeners.delete(listener); };
+export function setWindowSwitchMode(value: unknown, persist = true) {
+    windowSwitchMode = normalizeWindowSwitchMode(value);
+    if (persist) persistWindowSwitchMode?.(windowSwitchMode);
+    windowSwitchListeners.forEach(listener => listener(windowSwitchMode));
+    return windowSwitchMode;
+}
 
 const SIZE_CLASSES = ["bv-ui-size-compact", "bv-ui-size-default", "bv-ui-size-large"];
 
@@ -24,4 +41,5 @@ export function applyReducedEffects(value: unknown, root: HTMLElement = document
 export function applyUiPreferences(settings: { getSettingValue?: (id: string, fallback: unknown) => unknown } | undefined) {
     applyUiSize(settings?.getSettingValue?.(UI_SIZE_SETTING_ID, "default"));
     applyReducedEffects(settings?.getSettingValue?.(UI_REDUCED_EFFECTS_SETTING_ID, false));
+    setWindowSwitchMode(settings?.getSettingValue?.(UI_WINDOW_SWITCH_MODE_SETTING_ID, "keep"), false);
 }

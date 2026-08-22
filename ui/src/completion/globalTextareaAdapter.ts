@@ -2,6 +2,9 @@ import { collectSuggestions, completionRequest, insertSuggestion, type Completio
 import { localCompletionProvider } from "./localProvider";
 import { COMPLETION_CHANGE_EVENT, COMPLETION_PLACEMENT_CHANGE_EVENT, completionEnabled, completionPlacement } from "./settings";
 import { completionPopupPosition } from "./position";
+import { createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { CompletionPopup } from "./CompletionPopup";
 
 type Attached = { close: () => void; destroy: () => void };
 const attached = new Map<HTMLTextAreaElement, Attached>();
@@ -21,42 +24,28 @@ function attach(textarea: HTMLTextAreaElement) {
     let abort: AbortController | null = null;
     let timer: number | null = null;
     let popup: HTMLDivElement | null = null;
+    let popupRoot: Root | null = null;
 
     const close = () => {
         abort?.abort();
         abort = null;
         suggestions = [];
         request = null;
+        popupRoot?.unmount();
+        popupRoot = null;
         popup?.remove();
         popup = null;
     };
     const position = () => {
         if (!popup) return;
         const next = completionPopupPosition(textarea, completionPlacement(), popup.offsetHeight || 210);
-        popup.style.left = `${next.left}px`;
-        popup.style.top = `${next.top}px`;
-        popup.style.width = `${next.width}px`;
+        renderPopup(next);
     };
-    const render = () => {
-        popup?.remove();
-        popup = document.createElement("div");
-        popup.className = "bv-completion-popup bv-global-completion-popup";
-        popup.setAttribute("role", "listbox");
-        suggestions.forEach((item, index) => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.classList.toggle("active", index === selected);
-            const label = document.createElement("span");
-            label.textContent = item.label;
-            const detail = document.createElement("small");
-            detail.textContent = [item.category, item.detail, item.source].filter(Boolean).join(" · ");
-            button.append(label, detail);
-            button.addEventListener("pointerdown", event => { event.preventDefault(); accept(index); });
-            popup!.append(button);
-        });
-        document.body.append(popup);
-        position();
+    const renderPopup = (coordinates = completionPopupPosition(textarea, completionPlacement(), popup?.offsetHeight || 210)) => {
+        if (!popup) { popup = document.createElement("div"); popup.className = "bv-ui bv-ui-portal"; document.body.append(popup); popupRoot = createRoot(popup); }
+        popupRoot!.render(createElement(CompletionPopup, { suggestions, selected, position: coordinates, onAccept: accept }));
     };
+    const render = () => renderPopup();
     const accept = (index = selected) => {
         const item = suggestions[index];
         if (!request || !item) return;

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "../ui/components";
 import { Bounds, Handle } from "./geometry";
 import { Geometry, geometryAuthoring, geometryLayerId, geometryMaskGroups, Point, RegionalDocument, Region } from "./model";
 import { regionsInPaintOrder } from "./interaction";
-import ToolPalette, { BrushSettings, Tool } from "./ToolPalette";
+import { RegionalToolPalette, type BrushSettings, type Tool } from "../ui/components";
 import type { ArtboardView } from "./editorState";
 
 type Props = {
@@ -119,8 +120,9 @@ export default function Artboard(props: Props) {
     const movePan = (event: React.PointerEvent<HTMLDivElement>) => { if (!panGesture.current) return; event.preventDefault(); event.stopPropagation(); setPan({ x: panGesture.current.panX + event.clientX - panGesture.current.x, y: panGesture.current.panY + event.clientY - panGesture.current.y }); };
     const endPan = (event: React.PointerEvent<HTMLDivElement>) => { if (!panGesture.current) return; event.preventDefault(); event.stopPropagation(); panGesture.current = null; };
     const stageLeft = viewportSize.width / 2 - document.canvas.width * zoom / 2 + pan.x, stageTop = viewportSize.height / 2 - document.canvas.height * zoom / 2 + pan.y;
+    const handleSize = 10 / zoom, handleHitSize = 24 / zoom;
     return <section className="bv-regional-work"><div ref={viewport} className={`artboard-viewport ${spacePressed ? "pan-ready" : ""}`} onWheel={onWheel} onPointerDownCapture={beginPan} onPointerMoveCapture={movePan} onPointerUpCapture={endPan} onPointerCancelCapture={endPan}>
-        <ToolPalette tool={props.tool} brush={props.brush} canSubtract={props.canSubtract} canvas={document.canvas} onTool={props.onTool} onBrush={props.onBrush}/>
+        <RegionalToolPalette tool={props.tool} brush={props.brush} canSubtract={props.canSubtract} canvas={document.canvas} onTool={props.onTool} onBrush={props.onBrush}/>
         <div className="artboard-stage" style={{ width: document.canvas.width, height: document.canvas.height, transform: `translate(${stageLeft}px, ${stageTop}px) scale(${zoom})` }}><div
         className={`bv-regional-canvas tool-${props.tool}`}
         style={{ width: document.canvas.width, height: document.canvas.height }}
@@ -139,11 +141,11 @@ export default function Artboard(props: Props) {
         {!props.binaryMaskPreview && props.draft && <svg className="bv-tool-preview" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">{props.draft.map(geometry => <PreviewShape key={geometry.id} geometry={geometry} canvas={document.canvas} cursor={props.cursor} activePolygon={props.tool.startsWith("polygon")}/>)}</svg>}
         {!props.binaryMaskPreview && props.selectionBounds && <svg className="bv-selection-overlay" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">
             <rect className="brush-bounds" x={props.selectionBounds.x * document.canvas.width} y={props.selectionBounds.y * document.canvas.height} width={props.selectionBounds.width * document.canvas.width} height={props.selectionBounds.height * document.canvas.height}/>
-            {HANDLES.map(handle => <rect key={handle.id} data-handle={handle.id} className="resize-handle" x={(props.selectionBounds!.x + props.selectionBounds!.width * handle.x) * document.canvas.width - 6} y={(props.selectionBounds!.y + props.selectionBounds!.height * handle.y) * document.canvas.height - 6} width="12" height="12"/>)}
+            {HANDLES.map(handle => { const x = (props.selectionBounds!.x + props.selectionBounds!.width * handle.x) * document.canvas.width, y = (props.selectionBounds!.y + props.selectionBounds!.height * handle.y) * document.canvas.height; return <g key={handle.id} data-handle={handle.id} className={`resize-handle resize-handle-${handle.id}`}><rect className="resize-handle-hit" x={x - handleHitSize / 2} y={y - handleHitSize / 2} width={handleHitSize} height={handleHitSize}/><rect className="resize-handle-visible" x={x - handleSize / 2} y={y - handleSize / 2} width={handleSize} height={handleSize} rx={2 / zoom}/></g>; })}
             {props.draft && <text className="tool-preview-size" style={{ fontSize: 12 / zoom }} x={(props.selectionBounds.x + props.selectionBounds.width) * document.canvas.width - 4 / zoom} y={(props.selectionBounds.y + props.selectionBounds.height) * document.canvas.height - 7 / zoom}>{Math.round(props.selectionBounds.width * document.canvas.width)} × {Math.round(props.selectionBounds.height * document.canvas.height)} px</text>}
         </svg>}
         {!props.binaryMaskPreview && props.cursor && props.tool.startsWith("brush") && <div className={`brush-cursor ${props.brush.shape}`} style={{ left: `${props.cursor.x * 100}%`, top: `${props.cursor.y * 100}%`, width: `${cursorWidth}%`, aspectRatio: "1" }}><i style={{ width: `${props.brush.hardness * 100}%`, height: `${props.brush.hardness * 100}%` }}/></div>}
         </div></div>
-        <div className="zoom-controls" onWheel={event => event.stopPropagation()}><button title="Zoom out" onClick={() => { setZoom(value => Math.max(.02, value / 1.25)); setFitMode(false); }}>−</button><button title="100%" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFitMode(false); }}>{Math.round(zoom * 100)} %</button><button title="Zoom in" onClick={() => { setZoom(value => Math.min(8, value * 1.25)); setFitMode(false); }}>+</button><button title="Fit to view" onClick={fit}>Fit</button></div>
+        <div className="zoom-controls" onWheel={event => event.stopPropagation()}><Button intent="ghost" title="Zoom out" onClick={() => { setZoom(value => Math.max(.02, value / 1.25)); setFitMode(false); }}>−</Button><Button intent="ghost" title="100%" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFitMode(false); }}>{Math.round(zoom * 100)} %</Button><Button intent="ghost" title="Zoom in" onClick={() => { setZoom(value => Math.min(8, value * 1.25)); setFitMode(false); }}>+</Button><Button intent="ghost" title="Fit to view" onClick={fit}>Fit</Button></div>
     </div></section>;
 }

@@ -1,4 +1,6 @@
-import { createBvButton, createBvDialog, createBvField } from "./ui/dom";
+import { createElement } from "react";
+import { mountBvView } from "./ui";
+import { RemoteLlmApiKeyDialog } from "./remoteLLMDialog";
 
 type ProviderProfile = {
     id: string;
@@ -68,43 +70,24 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
     if (!selected) return;
     if (selected.auth_mode === "none") return;
-    const shell = createBvDialog({ title: `${selected.label} API Key`, description: "Credentials are stored by the local BV Nodepack backend and are never written into the workflow.", size: "small" });
-    const status = document.createElement("div");
-    status.textContent = selected.configured ? "A key is configured. Enter a new key to replace it." : "No key is configured.";
-    status.className = "bv-ui-status";
-    const input = document.createElement("input");
-    input.type = "password";
-    input.autocomplete = "off";
-    input.placeholder = "Paste API key";
-    const error = document.createElement("div");
-    error.className = "bv-ui-status bv-ui-status--error";
-    const close = createBvButton("Cancel"), remove = createBvButton("Delete key", "danger"), save = createBvButton("Save key", "primary");
-    remove.disabled = !selected.configured;
-    close.onclick = shell.close;
-    save.onclick = async () => {
-        error.textContent = "";
+    mountBvView(close => createElement(RemoteLlmApiKeyDialog, { label: selected.label, configured: selected.configured, close,
+      onSave: async (apiKey: string) => {
         const response = await fetch(api.apiURL("/bv_nodepack/remote_llm/api_key"), {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ profile_id: selected.id, api_key: input.value }),
+            body: JSON.stringify({ profile_id: selected.id, api_key: apiKey }),
         });
-        if (!response.ok) { error.textContent = (await response.json().catch(() => null))?.error ?? "Could not save API key."; return; }
+        if (!response.ok) return (await response.json().catch(() => null))?.error ?? "Could not save API key.";
         selected.configured = true;
         applyProfile(node, profiles);
-        shell.close();
         loadProfiles(api, true);
-    };
-    remove.onclick = async () => {
+      }, onDelete: async () => {
         const response = await fetch(api.apiURL(`/bv_nodepack/remote_llm/api_key/${encodeURIComponent(selected.id)}`), { method: "DELETE" });
-        if (!response.ok) { error.textContent = "Could not delete API key."; return; }
+        if (!response.ok) return "Could not delete API key.";
         selected.configured = false;
         applyProfile(node, profiles);
-        shell.close();
         loadProfiles(api, true);
-    };
-    shell.body.append(status, createBvField("API key", input), error);
-    shell.footer.append(remove, close, save);
-    shell.show();
-    input.focus();
+      }
+    }));
 };
 
 export const upgradeRemoteLLMProvider = (node: any, api: any) => {

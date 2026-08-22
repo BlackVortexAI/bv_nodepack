@@ -1,4 +1,4 @@
-import type { BrushSettings, Tool } from "./ToolPalette";
+import type { BrushSettings, Tool } from "../ui/components";
 
 export type EditorMode = "workspace" | "floating";
 export type EditorMenu = "file" | "edit" | "view" | "artboard" | "layers" | "help" | null;

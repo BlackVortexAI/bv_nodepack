@@ -5,6 +5,7 @@ import { collectAllGroups } from "../../util/control/collector";
 import { BVControl, BVControlConfig, readConfig, writeConfig } from "../../util/control/configHandler";
 import { findActiveControlConflicts } from "../../util/control/controlCenterModel.js";
 import BVControlRowComponent from "./BVControlRowComponent";
+import { Button, CheckboxField } from "../../ui/components";
 
 function id() {
     return globalThis.crypto?.randomUUID?.() ?? `bv-control-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -50,9 +51,9 @@ const BVControlComponent: FC = () => {
     };
 
     return <div className="bv-ui-stack">
-        <label className="bv-force"><input type="checkbox" checked={config.forceActive} onChange={(event) => setConfig({ ...config, forceActive: event.target.checked })} /> Force active after releasing restrictions</label>
+        <CheckboxField label="Force active after releasing restrictions" checked={config.forceActive} onValue={forceActive=>setConfig({...config,forceActive})}/>
         <div className="bv-controls">{config.controls.map((control, index) => <BVControlRowComponent key={control.id} control={control} groups={groups} conflicts={conflicts} onChange={(value) => updateControl(index, value)} />)}</div>
-        <footer className="bv-ui-inline-footer"><button className="bv-ui-button bv-ui-button--secondary" onClick={addControl}>Add Control</button><button className="bv-ui-button bv-ui-button--primary" onClick={save}>Save Configuration</button></footer>
+        <footer className="bv-ui-inline-footer"><Button onClick={addControl}>Add Control</Button><Button intent="primary" onClick={save}>Save Configuration</Button></footer>
     </div>;
 };
 

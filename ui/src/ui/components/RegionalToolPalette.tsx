@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { Button, Toolbar } from "./actions";
+import { NumberField, SelectField } from "./forms";
 
 export type Tool = "select" | "rect-add" | "rect-subtract" | "ellipse-add" | "ellipse-subtract" | "polygon-add" | "polygon-subtract" | "brush-add" | "brush-subtract";
 export type BrushSettings = { size: number; hardness: number; opacity: number; shape: "round" | "square"; pressureMode: "constant" | "stylus" };
@@ -22,7 +24,7 @@ type Props = {
     onBrush: (settings: BrushSettings) => void;
 };
 
-export default function ToolPalette({ tool, brush, canSubtract, canvas, onTool, onBrush }: Props) {
+export default function RegionalToolPalette({ tool, brush, canSubtract, canvas, onTool, onBrush }: Props) {
     const [options, setOptions] = useState(false), brushActive = tool.startsWith("brush");
     const tools: Array<{ id: Tool; title: string }> = [
         { id: "select", title: "Select and transform" },
@@ -33,14 +35,14 @@ export default function ToolPalette({ tool, brush, canSubtract, canvas, onTool, 
         { id: "brush-subtract", title: "Subtract from selected layer" },
     ];
     return <div className="artboard-tools" onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()} onWheel={event => event.stopPropagation()}>
-        <div className="tool-palette">{tools.map(item => <button key={item.id} title={item.title} disabled={item.id.endsWith("subtract") && !canSubtract} className={tool === item.id ? "active" : ""} onClick={() => { onTool(item.id); if (!item.id.startsWith("brush")) setOptions(false); }}><Icon name={item.id}/></button>)}{brushActive && <button title="Brush settings" className={options ? "active" : ""} onClick={() => setOptions(value => !value)}><Icon name="settings"/></button>}</div>
+        <Toolbar orientation="vertical" density="compact" label="Regional drawing tools" items={[...tools.map(item => ({ id:item.id,label:item.title,icon:<Icon name={item.id}/>,active:tool===item.id,disabled:item.id.endsWith("subtract")&&!canSubtract,onSelect:()=>{onTool(item.id);if(!item.id.startsWith("brush"))setOptions(false);},group:item.id.split("-")[0] })),...(brushActive?[{id:"brush-settings",label:"Brush settings",icon:<Icon name="settings"/>,active:options,onSelect:()=>setOptions(value=>!value),group:"settings"}]:[])]}/>
         {brushActive && options && <div className="brush-flyout">
-            <header><strong>Brush</strong><button onClick={() => setOptions(false)}>×</button></header>
-            <label>Brush Size <output>{Math.round(brush.size * Math.min(canvas.width, canvas.height))} px</output><input type="range" min=".005" max=".25" step=".005" value={brush.size} onChange={event => onBrush({ ...brush, size: +event.target.value })}/></label>
-            <label>Hardness <output>{Math.round(brush.hardness * 100)} %</output><input type="range" min="0" max="1" step=".05" value={brush.hardness} onChange={event => onBrush({ ...brush, hardness: +event.target.value })}/></label>
-            <label>Opacity <output>{Math.round(brush.opacity * 100)} %</output><input type="range" min=".05" max="1" step=".05" value={brush.opacity} onChange={event => onBrush({ ...brush, opacity: +event.target.value })}/></label>
-            <label>Shape<select value={brush.shape} onChange={event => onBrush({ ...brush, shape: event.target.value as BrushSettings["shape"] })}><option value="round">Round</option><option value="square">Square</option></select></label>
-            <label>Pressure<select value={brush.pressureMode} onChange={event => onBrush({ ...brush, pressureMode: event.target.value as BrushSettings["pressureMode"] })}><option value="constant">Constant</option><option value="stylus">Stylus</option></select></label>
+            <header><strong>Brush</strong><Button intent="ghost" iconOnly aria-label="Close brush settings" onClick={() => setOptions(false)}>×</Button></header>
+            <NumberField label="Brush size" value={brush.size} min={.005} max={.25} step={.005} unit={`${Math.round(brush.size * Math.min(canvas.width, canvas.height))} px`} onValue={size=>onBrush({...brush,size})}/>
+            <NumberField label="Hardness" value={brush.hardness} min={0} max={1} step={.05} unit="×" onValue={hardness=>onBrush({...brush,hardness})}/>
+            <NumberField label="Opacity" value={brush.opacity} min={.05} max={1} step={.05} unit="×" onValue={opacity=>onBrush({...brush,opacity})}/>
+            <SelectField label="Shape" value={brush.shape} onValue={shape=>onBrush({...brush,shape:shape as BrushSettings["shape"]})} options={[{value:"round",label:"Round"},{value:"square",label:"Square"}]}/>
+            <SelectField label="Pressure" value={brush.pressureMode} onValue={pressureMode=>onBrush({...brush,pressureMode:pressureMode as BrushSettings["pressureMode"]})} options={[{value:"constant",label:"Constant"},{value:"stylus",label:"Stylus"}]}/>
         </div>}
     </div>;
 }

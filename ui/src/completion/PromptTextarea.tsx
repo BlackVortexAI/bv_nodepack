@@ -3,6 +3,8 @@ import { collectSuggestions, completionRequest, CompletionContext, CompletionSug
 import { localCompletionProvider } from "./localProvider";
 import { useCompletionEnabled, useCompletionPlacement } from "./settings";
 import { completionPopupPosition } from "./position";
+import { TextareaControl } from "../ui/components";
+import { CompletionPopup } from "./CompletionPopup";
 
 type Props = React.TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string; onValue: (value: string) => void; completionContext: CompletionContext };
 
@@ -47,16 +49,14 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     useEffect(() => { if (popup && textarea.current) setPopup(completionPopupPosition(textarea.current, placement)); }, [placement]);
     useEffect(() => () => { abortRef.current?.abort(); if (timerRef.current != null) window.clearTimeout(timerRef.current); }, []);
     return <>
-        <textarea {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart, event.target.selectionEnd); }} onSelect={event => { search(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); onSelect?.(event); }} onKeyDown={event => {
+        <span className="bv-textarea-shell resize-vertical"><TextareaControl {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart, event.target.selectionEnd); }} onSelect={event => { search(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); onSelect?.(event); }} onKeyDown={event => {
             if (suggestions.length) {
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); event.stopPropagation(); setSelected(current => (current + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length); return; }
                 if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); accept(); return; }
                 if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); return; }
             }
             onKeyDown?.(event);
-        }} onBlur={event => { window.setTimeout(close, 120); onBlur?.(event); }}/>
-        {enabled && popup && <div className="bv-completion-popup" style={{ left: popup.left, top: popup.top, width: popup.width }} role="listbox">
-            {suggestions.map((item, index) => <button type="button" key={item.id} className={index === selected ? "active" : ""} onMouseDown={event => { event.preventDefault(); accept(index); }}><span>{item.label}</span><small>{[item.category, item.detail, item.source].filter(Boolean).join(" · ")}</small></button>)}
-        </div>}
+        }} onBlur={event => { window.setTimeout(close, 120); onBlur?.(event); }}/></span>
+        {enabled && popup && <CompletionPopup suggestions={suggestions} selected={selected} position={popup} onAccept={accept}/>}
     </>;
 }

@@ -1,14 +1,14 @@
 export type ScreenPoint = { x: number; y: number };
-type BrushLayerCandidate = {
+type GeometryLayerCandidate = {
     id: string;
     enabled: boolean;
     authoring: { locked: boolean };
     geometries: Array<{ type: string }>;
 };
 
-export function brushAddLayerTarget(layer: BrushLayerCandidate | null) {
+export function addGeometryLayerTarget(layer: GeometryLayerCandidate | null) {
     if (!layer || !layer.enabled || layer.authoring.locked) return null;
-    return layer.geometries.some(geometry => geometry.type === "brush_stroke") ? layer.id : null;
+    return layer.id;
 }
 
 export function shouldStartSelectionMove(start: ScreenPoint, current: ScreenPoint, threshold = 3) {

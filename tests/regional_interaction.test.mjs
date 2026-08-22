@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { brushAddLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
+import { addGeometryLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
 import { mergeSelectedLayers, selectLayers, splitCompoundLayer } from "../ui/src/regional/layerOperations.ts";
 import { connectedAreas } from "../ui/src/regional/connectedComponents.ts";
 
@@ -31,16 +31,16 @@ test("only drawing appends the pointer-up point to a brush stroke", () => {
     assert.equal(shouldAppendFinalBrushPoint("resize"), false);
 });
 
-test("brush add extends the selected editable brush layer", () => {
+test("add geometry extends the selected editable layer regardless of its existing geometry type", () => {
     const layer = { id: "brush-layer", enabled: true, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] };
-    assert.equal(brushAddLayerTarget(layer), "brush-layer");
+    assert.equal(addGeometryLayerTarget(layer), "brush-layer");
+    assert.equal(addGeometryLayerTarget({ id: "rectangle-layer", enabled: true, authoring: { locked: false }, geometries: [{ type: "rect" }] }), "rectangle-layer");
 });
 
-test("brush add creates a layer when the selection cannot be extended", () => {
-    assert.equal(brushAddLayerTarget(null), null);
-    assert.equal(brushAddLayerTarget({ id: "rectangle", enabled: true, authoring: { locked: false }, geometries: [{ type: "rect" }] }), null);
-    assert.equal(brushAddLayerTarget({ id: "locked", enabled: true, authoring: { locked: true }, geometries: [{ type: "brush_stroke" }] }), null);
-    assert.equal(brushAddLayerTarget({ id: "disabled", enabled: false, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] }), null);
+test("add geometry creates a layer when the selection cannot be extended", () => {
+    assert.equal(addGeometryLayerTarget(null), null);
+    assert.equal(addGeometryLayerTarget({ id: "locked", enabled: true, authoring: { locked: true }, geometries: [{ type: "brush_stroke" }] }), null);
+    assert.equal(addGeometryLayerTarget({ id: "disabled", enabled: false, authoring: { locked: false }, geometries: [{ type: "brush_stroke" }] }), null);
 });
 
 test("layer selection supports toggle and visual range selection", () => {

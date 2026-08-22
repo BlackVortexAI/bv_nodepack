@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getApi, getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
@@ -22,12 +22,14 @@ import { parseDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
-import { applyReducedEffects, applyUiPreferences, applyUiSize, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID } from "./ui/preferences";
+import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
+import { BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, lastBvWindowInstance, rememberBvWindowInstance, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn } from "./ui";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
 bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
 bindCompletionPlacementPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_PLACEMENT_SETTING_ID, value));
+bindWindowSwitchModePersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(UI_WINDOW_SWITCH_MODE_SETTING_ID, value));
 import "./components/control/bv_control_center";
 
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
@@ -181,10 +183,15 @@ const upgradeDetailerPlanNode = (node: any) => {
         action = node.addWidget("button", "configure_detailer_plan", null, () => {
             const document = sourceRegionalDocument(node);
             if (!document) return;
+            rememberBvWindowInstance("detailer",node.id);
             openDetailerPlanDialog(document.regions, detectorIdsForPlan(node), hidden.value, value => {
                 hidden.value = value;
                 refreshDetailerPlanNode(node);
                 node.graph?.setDirtyCanvas?.(true, true);
+            }, `detailer-plan:${node.id}`, workflowNodesOfType("BV Regional Detailer Plan").map(item=>({id:String(item.id),label:`${item.title||"BV Regional Detailer Plan"} · #${item.id}`})), (targetId,replaceCurrent)=>{
+                const target=workflowNodesOfType("BV Regional Detailer Plan").find(item=>String(item.id)===targetId);
+                const targetAction=target?.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan");
+                if(targetAction)switchBvView(`detailer-plan:${node.id}`,`detailer-plan:${target.id}`,()=>targetAction.callback?.(),replaceCurrent);
             });
         }, { serialize: false });
         action.serialize = false;
@@ -320,6 +327,11 @@ const upgradeRegionSelector = (node: any) => {
 };
 
 type RegionalNode = { id: number | string; type?: string; title?: string; widgets?: Array<{ name: string; value: unknown }>; graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } };
+const workflowNodesOfType = (type:string): any[] => {
+    const found:any[]=[];
+    const visit=(candidate:any)=>{for(const node of candidate?._nodes??[]){if(node.type===type)found.push(node);if(node.subgraph)visit(node.subgraph)}};
+    visit((comfyApp as any).graph);return found;
+};
 const regionalNodes = (): RegionalNode[] => {
     const graph = (comfyApp as any).graph;
     const found: RegionalNode[] = [];
@@ -331,6 +343,15 @@ const regionalNodes = (): RegionalNode[] => {
     };
     visit(graph);
     return found;
+};
+const nodeLauncherLabel = (node:any, fallback:string) => ({ label:String(node.title||fallback), meta:`#${node.id}` });
+const activateManagedLauncherNode = (type:"detailer"|"detector", prefix:string, widgetName:string, node:any) => {
+    const action=node.widgets?.find((widget:any)=>widget.name===widgetName);
+    if(!action||action.disabled)return;
+    const targetId=String(node.id),currentId=lastBvWindowInstance(type),openTarget=()=>action.callback?.();
+    if(currentId&&currentId!==targetId)switchBvView(`${prefix}:${currentId}`,`${prefix}:${targetId}`,openTarget,getWindowSwitchMode()==="replace");
+    else openTarget();
+    rememberBvWindowInstance(type,targetId);
 };
 const namedLoraStacks = (): NamedLoraStack[] => {
     const graph = (comfyApp as any).graph, found: NamedLoraStack[] = [];
@@ -418,11 +439,22 @@ const ensureUniqueDocument = (node: any, forceNew = false) => {
 function BVRoot() {
     const [portalOpen, setPortalOpen] = useState(false);
     const [regionalOpen, setRegionalOpen] = useState(false);
+    const [regionalActivation,setRegionalActivation]=useState(0);
     const [quickEditOpen, setQuickEditOpen] = useState(false);
     const [regionalNode, setRegionalNode] = useState<RegionalNode | null>(null);
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
+    const launcherColumns=useCallback(():ToolbarLauncherColumn[]=>{
+        const regional=regionalNodes(),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry");
+        const regionalItems=(type:"regional"|"quick",eventName:string)=>regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance(type)===String(node.id);return{id:String(node.id),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>window.dispatchEvent(new CustomEvent(eventName,{detail:{node}}))}});
+        return [
+            {id:"regional",label:"Regional Editor",items:regionalItems("regional",OPEN_REGIONAL_EDITOR_EVENT)},
+            {id:"quick",label:"Quick Edit",items:regionalItems("quick",OPEN_REGIONAL_QUICK_EDIT_EVENT)},
+            {id:"detailer",label:"Detailer Plan",items:detailers.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Detailer Plan"),action=node.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan"),last=lastBvWindowInstance("detailer")===String(node.id);return{id:String(node.id),...copy,disabled:!action||action.disabled,meta:`${copy.meta}${action?.disabled?" · Connect Regional Prompt":last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node)}})},
+            {id:"detector",label:"Detector Registry",items:detectors.map(node=>{const copy=nodeLauncherLabel(node,"BV Detector Registry"),last=lastBvWindowInstance("detector")===String(node.id);return{id:String(node.id),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node)}})},
+        ];
+    },[]);
 
     useEffect(() => {
         if (!regionalOpen && !quickEditOpen) return;
@@ -444,9 +476,12 @@ function BVRoot() {
             const available = regionalNodes();
             setLoraStacks(namedLoraStacks());
             setNodes(available);
-            setRegionalNode(requested ?? available[0] ?? null);
+            const target=requested??available.find(node=>String(node.id)===lastBvWindowInstance("quick"))??available[0]??null;
+            if(target)rememberBvWindowInstance("quick",target.id);
+            setRegionalNode(target);
             setRegionalOpen(false);
-            setQuickEditOpen(true);
+            setQuickEditOpen(false);
+            requestAnimationFrame(() => setQuickEditOpen(true));
         };
         window.addEventListener(OPEN_REGIONAL_QUICK_EDIT_EVENT, open);
         return () => window.removeEventListener(OPEN_REGIONAL_QUICK_EDIT_EVENT, open);
@@ -471,17 +506,21 @@ function BVRoot() {
             const available = regionalNodes();
             setLoraStacks(namedLoraStacks());
             setNodes(available);
-            setRegionalNode(requested ?? available[0] ?? null);
+            const target=requested??available.find(node=>String(node.id)===lastBvWindowInstance("regional"))??available[0]??null;
+            if(target)rememberBvWindowInstance("regional",target.id);
+            setRegionalNode(target);
             setRegionalOpen(true);
+            setRegionalActivation(value=>value+1);
         };
         window.addEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
         return () => window.removeEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
     }, []);
 
     return (<>
+        <ToolbarWindowLauncher getColumns={launcherColumns}/>
         <BVPortal open={portalOpen} onClose={() => setPortalOpen(false)} />
-        <RegionalEditor open={regionalOpen} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
-        <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
+        <RegionalEditor open={regionalOpen} activationToken={regionalActivation} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
+        <QuickPromptEditor open={quickEditOpen} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",node.id); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); }} />
     </>);
 }
 
@@ -546,6 +585,18 @@ comfyApp.registerExtension({
         tooltip: "Disable BV animations, transitions, blur and visual filters without changing ComfyUI's canvas.",
         onChange: (value: boolean) => applyReducedEffects(value),
     }, {
+        id: UI_WINDOW_SWITCH_MODE_SETTING_ID as any,
+        name: "BV Window Switch Mode",
+        type: "combo",
+        defaultValue: "keep",
+        options: [
+            { text: "Keep current window", value: "keep" },
+            { text: "Replace current window", value: "replace" },
+        ],
+        category: ["BV Node Pack", "Appearance", "Window switching"],
+        tooltip: "Choose whether changing the node in a BV editor minimizes or closes the current window. Hold Shift to invert the mode once.",
+        onChange: (value: string) => setWindowSwitchMode(value, false),
+    }, {
         id: DEBUG_BRIDGE_SETTING_ID as any,
         name: "Enable BV Debug Bridge",
         type: "boolean",
@@ -604,6 +655,11 @@ comfyApp.registerExtension({
         class: "bv-regional-action bv-regional-action-quick",
         tooltip: "Quick edit BV Regional prompts",
         onClick: () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT)),
+    }, {
+        icon: "icon-[lucide--chevron-down]",
+        class: "bv-regional-action bv-regional-action-menu",
+        tooltip: "Choose BV window",
+        onClick: () => window.dispatchEvent(new CustomEvent(BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         if (DETAILER_UI_NODES.has(nodeData.name)) {
@@ -623,10 +679,15 @@ comfyApp.registerExtension({
                 let action = node.widgets?.find((widget: any) => widget.name === "configure_detector_registry");
                 if (!action) {
                     action = node.addWidget("button", "configure_detector_registry", null, () => {
+                        rememberBvWindowInstance("detector",node.id);
                         openDetectorRegistryDialog(comfyApi, hidden.value, value => {
                             hidden.value = value;
                             prepare(node);
                             node.graph?.setDirtyCanvas?.(true, true);
+                        }, `detector-registry:${node.id}`, workflowNodesOfType("BV Detector Registry").map(item=>({id:String(item.id),label:`${item.title||"BV Detector Registry"} · #${item.id}`})), (targetId,replaceCurrent)=>{
+                            const target=workflowNodesOfType("BV Detector Registry").find(item=>String(item.id)===targetId);
+                            const targetAction=target?.widgets?.find((widget:any)=>widget.name==="configure_detector_registry");
+                            if(targetAction)switchBvView(`detector-registry:${node.id}`,`detector-registry:${target.id}`,()=>targetAction.callback?.(),replaceCurrent);
                         }).catch(error => console.error(error));
                     }, { serialize: false });
                     action.serialize = false;

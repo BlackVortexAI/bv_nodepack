@@ -3,6 +3,7 @@ import { FC } from "react";
 import { CollectedGroup } from "../../util/control/collector";
 import { BVControl, BVControlAction } from "../../util/control/configHandler";
 import type { BVControlConflict } from "../../util/control/controlCenterModel.js";
+import { Button, SelectField, TextField } from "../../ui/components";
 
 const BVControlRowComponent: FC<{ control: BVControl; groups: CollectedGroup[]; conflicts: BVControlConflict[]; onChange(value: BVControl | null): void }> = ({ control, groups, conflicts, onChange }) => {
     const actionLabel = (action: string) => action.charAt(0).toUpperCase() + action.slice(1);
@@ -12,7 +13,7 @@ const BVControlRowComponent: FC<{ control: BVControl; groups: CollectedGroup[]; 
         onChange({ ...control, assignments: [...control.assignments, { groupId, groupPath: group.pathLabel, groupTitle: String(group.group.title || ""), action: "bypass" }] });
     };
     return <section className="bv-control-card">
-        <div className="bv-control-title"><input value={control.name} onChange={(event) => onChange({ ...control, name: event.target.value })} /><span>{control.assignments.length} groups</span><button onClick={() => onChange(null)}>Delete</button></div>
+        <div className="bv-control-title"><TextField label="Control name" value={control.name} onValue={name=>onChange({...control,name})}/><span>{control.assignments.length} groups</span><Button intent="danger" onClick={() => onChange(null)}>Delete</Button></div>
         <div className="bv-assignments">{control.assignments.map((assignment, index) => {
             const conflict = conflicts.find((item) => item.groupId === assignment.groupId);
             const winnerNames = conflict?.entries.filter((entry) => entry.action === conflict.winnerAction).map((entry) => entry.controlName).join(", ");
@@ -23,11 +24,11 @@ const BVControlRowComponent: FC<{ control: BVControl; groups: CollectedGroup[]; 
                 : "";
             return <div className={assignment.unresolved ? "unresolved" : conflict ? "conflict" : ""} key={assignment.groupId}>
                 <span>{assignment.unresolved ? "⚠ " : ""}{assignment.groupPath}{conflictText && <small>⚠ {conflictText}</small>}</span>
-                <select value={assignment.action} onChange={(event) => onChange({ ...control, assignments: control.assignments.map((item, itemIndex) => itemIndex === index ? { ...item, action: event.target.value as BVControlAction } : item) })}><option value="activate">Activate</option><option value="mute">Mute</option><option value="bypass">Bypass</option></select>
-                <button onClick={() => onChange({ ...control, assignments: control.assignments.filter((_, itemIndex) => itemIndex !== index) })}>×</button>
+                <SelectField label="Action" value={assignment.action} options={[{value:"activate",label:"Activate"},{value:"mute",label:"Mute"},{value:"bypass",label:"Bypass"}]} onValue={action=>onChange({...control,assignments:control.assignments.map((item,itemIndex)=>itemIndex===index?{...item,action:action as BVControlAction}:item)})}/>
+                <Button intent="ghost" iconOnly aria-label="Remove assignment" onClick={() => onChange({ ...control, assignments: control.assignments.filter((_, itemIndex) => itemIndex !== index) })}>×</Button>
             </div>;
         })}</div>
-        <select value="" onChange={(event) => addAssignment(event.target.value)}><option value="">Add group…</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.pathLabel}</option>)}</select>
+        <SelectField label="Add group" value="" onValue={addAssignment} options={[{value:"",label:"Choose group…"},...groups.map(group=>({value:group.id,label:group.pathLabel}))]}/>
     </section>;
 };
 
