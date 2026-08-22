@@ -14,7 +14,13 @@ sys.path.insert(0, str(ROOT.parent))
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
-from comfy_execution.graph import DynamicPrompt  # noqa: E402
+try:  # noqa: E402
+    from comfy_execution.graph import DynamicPrompt
+except ModuleNotFoundError:  # CI validates the node pack without a full ComfyUI checkout.
+    from fixtures.fake_comfy_execution import install as install_fake_comfy_execution
+
+    install_fake_comfy_execution()
+    from comfy_execution.graph import DynamicPrompt
 from bv_nodepack.py.nodes.bv_regional_detailer import (  # noqa: E402
     BVDetectorBindingNode,
     BVDetectorRegistryNode,
