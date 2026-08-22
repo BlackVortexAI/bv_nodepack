@@ -356,3 +356,13 @@ test("selection inspector orders appearance before layer geometry and uses a two
     assert.match(selection, /className="bv-layer-bounds-grid"/);
     assert.match(styles, /\.bv-layer-bounds-grid\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/s);
 });
+
+test("layer bounds present normalized geometry as editable canvas pixels", () => {
+    assert.match(options,/const axisSize=key==="x"\|\|key==="width"\?props\.canvas\.width:props\.canvas\.height/);
+    assert.match(options,/value=\{Math\.round\(props\.bounds!\[key\]\*axisSize\)\}/);
+    assert.match(options,/max=\{axisSize\}/);
+    assert.match(options,/step=\{1\}/);
+    assert.match(options,/unit="px"/);
+    assert.match(options,/\[key\]: value\/axisSize/);
+    assert.doesNotMatch(options,/label=\{key\.toUpperCase\(\)\}[^>]*slider=\{false\}/);
+});
