@@ -330,6 +330,61 @@ class RegionalNodeTests(unittest.TestCase):
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
 
+    def test_attention_consumers_expose_v3_lora_providers_and_apply_hook_passes(self):
+        cases = (
+            (self.module.BVRegionalSDXLAttentionNode, "compile_sdxl_attention", "apply_sdxl_attention_patch", (1.0,)),
+            (self.module.BVRegionalZImageAttentionNode, "compile_zimage_attention", "apply_zimage_attention_patch", (1.0,)),
+            (self.module.BVRegionalFlux2KleinAttentionNode, "compile_flux2_klein_attention", "apply_flux2_klein_attention_patch", (1.0,)),
+        )
+        regional = self.module.normalize_context(fixture()).with_capability(
+            self.module.LORA_CAPABILITY,
+            {
+                "version": 2,
+                "entries": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "source": {
+                        "kind": "external",
+                        "collector_id": "22222222-2222-4222-8222-222222222222",
+                        "resource_id": "skin",
+                    },
+                    "targets": [{"scope": "global"}],
+                }],
+            },
+        ).to_dict()
+        provider = self.module.build_lora_provider(
+            "22222222-2222-4222-8222-222222222222",
+            {"skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", 0.8, 0.6]]}},
+        )
+
+        for node_type, compiler_name, patcher_name, compiler_tail in cases:
+            with self.subTest(node=node_type.__name__):
+                optional = node_type.INPUT_TYPES()["optional"]
+                self.assertEqual(
+                    set(optional),
+                    {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()},
+                )
+                compiler_result = (["positive"], ["negative"], ["slot"], *compiler_tail)
+                with (
+                    unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"global": [["skin.safetensors", 0.8, 0.6]]}),
+                    unittest.mock.patch.object(self.module, "create_hook_groups", return_value={"global": "hooks"}),
+                    unittest.mock.patch.object(self.module, compiler_name, return_value=compiler_result),
+                    unittest.mock.patch.object(
+                        self.module, "apply_attention_hook_passes",
+                        return_value=(["hooked-positive"], ["hooked-negative"]),
+                    ) as hook_passes,
+                    unittest.mock.patch.object(self.module, patcher_name, return_value="patched-model"),
+                ):
+                    result = node_type().apply(
+                        "model", "clip", regional, 1.0, 0.0, 0.5,
+                        resource_provider=provider,
+                    )
+
+                hook_passes.assert_called_once_with(
+                    ["positive"], ["negative"], unittest.mock.ANY,
+                    {"global": [["skin.safetensors", 0.8, 0.6]]}, {"global": "hooks"},
+                )
+                self.assertEqual(result, ("patched-model", ["hooked-positive"], ["hooked-negative"]))
+
     def test_krea2_attention_node_is_registered_with_standard_sampler_outputs(self):
         self.assertIs(
             self.module.NODE_CLASS_MAPPINGS["BV Regional Krea 2 Attention"],

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { getApi, getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
@@ -13,7 +13,8 @@ import { documentTargetChoices, resolveDocumentTarget } from "./regional/documen
 import { applyCompletionDatasetSetting, bindCompletionDatasetPersistence, bindCompletionPlacementPersistence, bindCompletionSettingPersistence, COMPLETION_DATASETS_SETTING_ID, COMPLETION_PLACEMENT_SETTING_ID, COMPLETION_SETTING_ID, setCompletionEnabled, setCompletionPlacement } from "./completion/settings";
 import { renderCompletionDatasetSetting } from "./completion/settingsRenderer";
 import { installGlobalTextareaCompletion } from "./completion/globalTextareaAdapter";
-import { watchActiveWorkflow } from "./regional/workflowLifecycle";
+import { activeWorkflowIdentity, watchActiveWorkflow } from "./regional/workflowLifecycle";
+import { requestRegionalWindow } from "./regional/windowRequests";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
 import { openDetailerPlanDialog } from "./regional/detailerPlanDialog";
@@ -28,7 +29,7 @@ import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, i
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
-import { BvGlobalToastStack, BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
+import { BvGlobalToastStack, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -332,13 +333,14 @@ const upgradeRegionSelector = (node: any) => {
 };
 
 type RegionalNode = { id: number | string; type?: string; title?: string; widgets?: Array<{ name: string; value: unknown }>; graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } };
+const activeGraph=()=> (comfyApp as any).canvas?.graph??(comfyApp as any).graph;
 const workflowNodesOfType = (type:string): any[] => {
     const found:any[]=[];
     const visit=(candidate:any)=>{for(const node of candidate?._nodes??[]){if(node.type===type)found.push(node);if(node.subgraph)visit(node.subgraph)}};
-    visit((comfyApp as any).graph);return found;
+    visit(activeGraph());return found;
 };
 const regionalNodes = (): RegionalNode[] => {
-    const graph = (comfyApp as any).graph;
+    const graph = activeGraph();
     const found: RegionalNode[] = [];
     const visit = (candidate: any) => {
         for (const node of candidate?._nodes ?? []) {
@@ -354,7 +356,7 @@ const refreshBvToolbarCapabilities=()=>{
     document.body.classList.toggle("bv-toolbar-no-control",!control);document.body.classList.toggle("bv-toolbar-no-editor",!full);document.body.classList.toggle("bv-toolbar-no-quick",!quick);document.body.classList.toggle("bv-toolbar-no-overview",!overview);
     window.dispatchEvent(new CustomEvent("bv-toolbar-capabilities-changed",{detail:{control,quick,full,overview}}));
 };
-const scopedNodeInfo=(node:any)=>collectScopedNodes((comfyApp as any).rootGraph??(comfyApp as any).graph,candidate=>candidate===node)[0];
+const scopedNodeInfo=(node:any)=>collectScopedNodes(activeGraph(),candidate=>candidate===node)[0];
 const scopedNodeKey=(node:any)=>scopedNodeInfo(node)?.key??String(node.id);
 const nodeLauncherLabel = (node:any, fallback:string) => {const scoped=scopedNodeInfo(node);return{label:String(node.title||fallback),meta:`${scoped?.breadcrumb?`${scoped.breadcrumb} · `:""}#${node.id}`}};
 const activateManagedLauncherNode = (type:"detailer"|"detector", prefix:string, widgetName:string, node:any) => {
@@ -365,7 +367,7 @@ const activateManagedLauncherNode = (type:"detailer"|"detector", prefix:string, 
     else openTarget();
     rememberBvWindowInstance(type,targetId);
 };
-const openFullEditorNode=(type:string,node:any)=>{if(type==="regional")window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}}));else if(type==="lora")window.dispatchEvent(new CustomEvent(OPEN_LORA_V3_EDITOR_EVENT,{detail:{node}}));else if(type==="detailer")activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node);else if(type==="detector")activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node);else window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind:type}}))};
+const openFullEditorNode=(type:string,node:any)=>{if(type==="regional")requestRegionalWindow("regional",node);else if(type==="lora")requestRegionalWindow("lora",node);else if(type==="detailer")activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node);else if(type==="detector")activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node);else window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind:type}}))};
 const openLastFullBvEditor=()=>{
     const definitions=[{type:"regional",nodes:regionalNodes()},{type:"lora",nodes:workflowNodesOfType("BV Regional LoRA")},{type:"detailer",nodes:workflowNodesOfType("BV Regional Detailer Plan")},{type:"detector",nodes:workflowNodesOfType("BV Detector Registry")},{type:"pipe",nodes:workflowNodesOfType("BV Smart Pipe")},{type:"merge",nodes:workflowNodesOfType("BV Smart Pipe Merge")}],lastType=lastBvFullWindowType(),lastId=lastType&&lastBvWindowInstance(lastType),last=definitions.find(item=>item.type===lastType)?.nodes.find(node=>scopedNodeKey(node)===lastId);
     if(last){openFullEditorNode(lastType!,last);return}
@@ -373,7 +375,7 @@ const openLastFullBvEditor=()=>{
     if(!fallback)return;openFullEditorNode(fallback.type,fallback.node);if(lastType)showBvToast({title:"Previous editor unavailable",message:"Opened the first available BV editor instead.",tone:"warning",duration:4000});
 };
 const namedLoraStacks = (): NamedLoraStack[] => {
-    const graph = (comfyApp as any).graph, found: NamedLoraStack[] = [];
+    const graph = activeGraph(), found: NamedLoraStack[] = [];
     const visit = (candidate: any) => {
         for (const node of candidate?._nodes ?? []) {
             if (node.type === "BV Named LoRA Stack") {
@@ -463,17 +465,23 @@ function BVRoot() {
     const [quickEditOpen, setQuickEditOpen] = useState(false);
     const [quickEditActivation,setQuickEditActivation]=useState(0);
     const [regionalNode, setRegionalNode] = useState<RegionalNode | null>(null);
+    const regionalNodeRef=useRef<RegionalNode|null>(null);
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
     const [loraV3Node,setLoraV3Node]=useState<any|null>(null);
+    const quickEditOpenRef=useRef(false);
+    regionalNodeRef.current=regionalNode;
+    quickEditOpenRef.current=quickEditOpen;
+    const workflowOwnerRef=useRef<unknown>(activeWorkflowIdentity(comfyApp));
+    const bindActiveWorkflow=()=>{const owner=activeWorkflowIdentity(comfyApp);workflowOwnerRef.current=owner;return owner;};
     const launcherColumns=useCallback((includeHidden=false):ToolbarLauncherColumn[]=>{
         const regional=regionalNodes(),loras=workflowNodesOfType("BV Regional LoRA"),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry"),pipes=[...workflowNodesOfType("BV Smart Pipe"),...workflowNodesOfType("BV Smart Pipe Merge")];
         const decorate=(node:any,item:any)=>{const hidden=!windowMenuVisible(node);return hidden&&!includeHidden?null:{...item,hidden,onReveal:hidden?()=>setWindowMenuVisible(node,true):undefined}};
-        const regionalItems=regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance("regional")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}})),secondary:{label:`Quick edit ${copy.label}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT,{detail:{node}}))}})}).filter(Boolean) as any[];
+        const regionalItems=regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance("regional")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>requestRegionalWindow("regional",node),secondary:{label:`Quick edit ${copy.label}`,onSelect:()=>requestRegionalWindow("quick",node)}})}).filter(Boolean) as any[];
         return [
             {id:"regional",label:"Regional Prompts",items:regionalItems},
-            {id:"lora",label:"Regional LoRA",items:loras.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional LoRA"),last=lastBvWindowInstance("lora")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>{rememberBvWindowInstance("lora",scopedNodeKey(node));window.dispatchEvent(new CustomEvent(OPEN_LORA_V3_EDITOR_EVENT,{detail:{node}}));}})}).filter(Boolean) as any[]},
+            {id:"lora",label:"Regional LoRA",items:loras.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional LoRA"),last=lastBvWindowInstance("lora")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>{rememberBvWindowInstance("lora",scopedNodeKey(node));requestRegionalWindow("lora",node);}})}).filter(Boolean) as any[]},
             {id:"detailer",label:"Detailer Plan",items:detailers.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Detailer Plan"),action=node.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan"),last=lastBvWindowInstance("detailer")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,disabled:!action||action.disabled,meta:`${copy.meta}${action?.disabled?" · Connect Regional Prompt":last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node)})}).filter(Boolean) as any[]},
             {id:"detector",label:"Detector Registry",items:detectors.map(node=>{const copy=nodeLauncherLabel(node,"BV Detector Registry"),last=lastBvWindowInstance("detector")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node)})}).filter(Boolean) as any[]},
             {id:"smart-pipe",label:"Smart Pipes",items:pipes.map(node=>{const kind=String(node.type??node.comfyClass)==="BV Smart Pipe Merge"?"merge":"pipe",copy=nodeLauncherLabel(node,kind==="merge"?"Smart Pipe Merge":"Smart Pipe");return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta} · ${kind==="merge"?"Merge":"Pipe"}`,onSelect:()=>window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind}}))})}).filter(Boolean) as any[]},
@@ -481,24 +489,18 @@ function BVRoot() {
     },[]);
 
     useEffect(() => {
-        if (!regionalOpen && !quickEditOpen) return;
-        return watchActiveWorkflow(comfyApp, comfyApi, () => {
-            setRegionalOpen(false);
-            setQuickEditOpen(false);
-        });
-    }, [quickEditOpen, regionalOpen]);
-
-    useEffect(() => {
         const open = () => setPortalOpen(true);
         window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
         return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
     }, []);
-    useEffect(()=>{const open=(event:Event)=>{const node=(event as CustomEvent<{node?:any}>).detail?.node??null;if(node)rememberBvWindowInstance("lora",scopedNodeKey(node));setLoraV3Node(node)};window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,open);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,open)},[]);
+    useEffect(()=>watchActiveWorkflow(comfyApp,comfyApi,()=>window.setTimeout(resetBvRootForWorkflow,0),undefined,undefined,workflowOwnerRef.current),[]);
+    useEffect(()=>{const open=(node:any|null)=>{if(node){bindActiveWorkflow();rememberBvWindowInstance("lora",scopedNodeKey(node));}setLoraV3Node(node)},legacy=(event:Event)=>open((event as CustomEvent<{node?:any}>).detail?.node??null);window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,legacy);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,legacy)},[]);
     useEffect(()=>{const update=(event:Event)=>setHasControlNodes(Boolean((event as CustomEvent).detail?.control));window.addEventListener("bv-toolbar-capabilities-changed",update);refreshBvToolbarCapabilities();return()=>window.removeEventListener("bv-toolbar-capabilities-changed",update)},[]);
     useEffect(()=>{const refresh=()=>refreshBvToolbarCapabilities();window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh)},[]);
 
     useEffect(() => {
         const open = (event: Event) => {
+            bindActiveWorkflow();
             const requested = (event as CustomEvent<{ node?: RegionalNode }>).detail?.node ?? null;
             const available = regionalNodes();
             setLoraStacks(namedLoraStacks());
@@ -529,20 +531,26 @@ function BVRoot() {
 
     useEffect(() => {
         const open = (event: Event) => {
-            const requested = (event as CustomEvent<{ node?: RegionalNode }>).detail?.node ?? null;
-            const available = regionalNodes();
-            setLoraStacks(namedLoraStacks());
-            setNodes(available);
-            const target=requested??available.find(node=>scopedNodeKey(node)===lastBvWindowInstance("regional"))??available[0]??null;
-            if(target)rememberBvWindowInstance("regional",scopedNodeKey(target));
-            setRegionalNode(target);
-            if(target&&quickEditOpen&&String(regionalNode?.id)===String(target.id))setQuickEditOpen(false);
-            setRegionalOpen(true);
-            setRegionalActivation(value=>value+1);
+            try {
+                bindActiveWorkflow();
+                const requested = (event as CustomEvent<{ node?: RegionalNode }>).detail?.node ?? null;
+                const available = regionalNodes();
+                setLoraStacks(namedLoraStacks());
+                setNodes(available);
+                const target=requested??available.find(node=>scopedNodeKey(node)===lastBvWindowInstance("regional"))??available[0]??null;
+                if(target)rememberBvWindowInstance("regional",scopedNodeKey(target));
+                setRegionalNode(target);
+                if(target&&quickEditOpenRef.current&&String(regionalNodeRef.current?.id)===String(target.id))setQuickEditOpen(false);
+                setRegionalOpen(true);
+                setRegionalActivation(value=>value+1);
+            } catch (error) {
+                showBvToast({title:"Regional editor failed to open",message:error instanceof Error?error.message:String(error),tone:"danger",duration:10000});
+                throw error;
+            }
         };
         window.addEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
         return () => window.removeEventListener(OPEN_REGIONAL_EDITOR_EVENT, open);
-    }, [quickEditOpen,regionalNode]);
+    }, []);
 
     return (<>
         <BvGlobalToastStack/>
@@ -556,6 +564,21 @@ function BVRoot() {
 }
 
 const MOUNT_ID = "bv-root";
+let bvRootContainer:HTMLDivElement|null=null;
+let bvReactRoot:ReturnType<typeof ReactDOM.createRoot>|null=null;
+
+function renderBvRoot(){
+    if(!bvRootContainer)return;
+    bvReactRoot=ReactDOM.createRoot(bvRootContainer);
+    bvReactRoot.render(<React.StrictMode><BVRoot /></React.StrictMode>);
+}
+
+function resetBvRootForWorkflow(){
+    if(!bvRootContainer?.isConnected){ensureMountedOnce();return;}
+    bvReactRoot?.unmount();
+    bvReactRoot=null;
+    renderBvRoot();
+}
 
 function ensureMountedOnce() {
     if (!document.getElementById(STYLE_ID)) {
@@ -564,19 +587,16 @@ function ensureMountedOnce() {
         style.textContent = `${flexLayoutStyles}\n${styles}`;
         document.head.appendChild(style);
     }
-    let container = document.getElementById(MOUNT_ID);
+    let container = document.getElementById(MOUNT_ID) as HTMLDivElement|null;
     if (!container) {
-        container = document.createElement("div");
-        container.id = MOUNT_ID;
+        container=bvRootContainer??document.createElement("div");container.id=MOUNT_ID;
         document.body.appendChild(container);
-        const root = ReactDOM.createRoot(container);
-        root.render(
-            <React.StrictMode>
-                <BVRoot />
-            </React.StrictMode>
-        );
     }
+    bvRootContainer=container;
+    if(!bvReactRoot)renderBvRoot();
 }
+
+new MutationObserver(()=>{if(!document.getElementById(MOUNT_ID))ensureMountedOnce()}).observe(document.body,{childList:true});
 
 comfyApp.registerExtension({
     name: "bv_nodepack.control_rack_portal",
@@ -697,7 +717,7 @@ comfyApp.registerExtension({
         icon: "icon-[lucide--chevron-down]",
         class: "bv-regional-action bv-regional-action-menu",
         tooltip: "Choose BV window",
-        onClick: () => window.dispatchEvent(new CustomEvent(BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT)),
+        onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         if (installM0ResourceSpike(nodeType, nodeData)) return;
@@ -883,12 +903,12 @@ comfyApp.registerExtension({
                 }
             }
             if (!this.widgets?.find((widget: any) => widget.name === "open_regional_editor")) {
-                const button = this.addWidget("button", "open_regional_editor", null, () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT, { detail: { node: this } })), { serialize: false });
+                const button = this.addWidget("button", "open_regional_editor", null, () => requestRegionalWindow("regional",this), { serialize: false });
                 button.label = "Open Regional Editor";
                 button.serialize = false;
             }
             if (!this.widgets?.find((widget: any) => widget.name === "quick_edit_regional_prompts")) {
-                const button = this.addWidget("button", "quick_edit_regional_prompts", null, () => window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT, { detail: { node: this } })), { serialize: false });
+                const button = this.addWidget("button", "quick_edit_regional_prompts", null, () => requestRegionalWindow("quick",this), { serialize: false });
                 button.label = "Quick Edit Prompts";
                 button.serialize = false;
             }

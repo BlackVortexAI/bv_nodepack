@@ -6,10 +6,14 @@ type WorkflowEventSource = {
 };
 
 export function activeWorkflowIdentity(app: any): unknown {
-    return app?.extensionManager?.workflow?.activeWorkflow
+    const workflow=app?.extensionManager?.workflow?.activeWorkflow
         ?? app?.workflowManager?.activeWorkflow
-        ?? app?.graph
         ?? null;
+    if(workflow&&typeof workflow==="object"){
+        for(const field of ["key","id","workflowId","workflow_id","uuid","path"]){const value=workflow[field];if(value!=null&&String(value))return `${field}:${String(value)}`;}
+        return workflow;
+    }
+    return app?.canvas?.graph??app?.graph??workflow;
 }
 
 export function watchActiveWorkflow(
@@ -18,11 +22,11 @@ export function watchActiveWorkflow(
     onWorkflowChanged: () => void,
     schedule: Scheduler = (callback, milliseconds) => globalThis.setInterval(callback, milliseconds),
     cancel: Canceller = handle => globalThis.clearInterval(handle as ReturnType<typeof setInterval>),
+    owner: unknown = activeWorkflowIdentity(app),
 ): () => void {
-    const initial = activeWorkflowIdentity(app);
     let changed = false;
     const check = () => {
-        if (changed || activeWorkflowIdentity(app) === initial) return;
+        if (changed || activeWorkflowIdentity(app) === owner) return;
         changed = true;
         onWorkflowChanged();
     };

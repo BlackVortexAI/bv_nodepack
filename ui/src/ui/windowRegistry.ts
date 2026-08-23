@@ -32,7 +32,12 @@ export function useWindowMenuVisibility(node:any){
     return windowMenuVisible(node);
 }
 
-const graphToken = (graph: any, fallback: string) => String(graph?.id ?? graph?._id ?? graph?.extra?.uuid ?? fallback);
+const runtimeGraphTokens=new WeakMap<object,string>();let nextRuntimeGraphToken=1;
+const graphToken = (graph: any, fallback: string) => {
+    const persisted=graph?.id??graph?._id??graph?.extra?.uuid;if(persisted!=null&&String(persisted))return String(persisted);
+    if(!graph||typeof graph!=="object")return fallback;
+    let token=runtimeGraphTokens.get(graph);if(!token){token=`${fallback}@${nextRuntimeGraphToken++}`;runtimeGraphTokens.set(graph,token);}return token;
+};
 
 export type ScopedNode = { node:any; graph:any; path:string[]; key:string; breadcrumb:string };
 

@@ -525,7 +525,13 @@ class BVRegionalSDXLAttentionNode:
                     "FLOAT",
                     {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001},
                 ),
-            }
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -537,8 +543,17 @@ class BVRegionalSDXLAttentionNode:
         "and other SDXL-family checkpoints. Uses a standard KSampler."
     )
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
-        positive, negative, slots, aspect_ratio = compile_sdxl_attention(regional, clip)
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
+              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+        document = context_document(regional)
+        scope_stacks = resolve_stack_paths(
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
+        )
+        hook_groups = create_hook_groups(scope_stacks)
+        positive, negative, slots, aspect_ratio = compile_sdxl_attention(document, clip)
+        positive, negative = apply_attention_hook_passes(
+            positive, negative, document, scope_stacks, hook_groups
+        )
         patched_model = apply_sdxl_attention_patch(
             model,
             slots,
@@ -561,7 +576,13 @@ class BVRegionalZImageAttentionNode:
                 "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
-            }
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -570,8 +591,17 @@ class BVRegionalZImageAttentionNode:
     CATEGORY = CATEGORY_MODEL_ZIMAGE
     DESCRIPTION = "Joint-attention regional routing backend for Z-Image Turbo. Uses a standard KSampler."
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
-        positive, negative, slots, _ = compile_zimage_attention(regional, clip)
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
+              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+        document = context_document(regional)
+        scope_stacks = resolve_stack_paths(
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
+        )
+        hook_groups = create_hook_groups(scope_stacks)
+        positive, negative, slots, _ = compile_zimage_attention(document, clip)
+        positive, negative = apply_attention_hook_passes(
+            positive, negative, document, scope_stacks, hook_groups
+        )
         patched_model = apply_zimage_attention_patch(
             model, slots, attention_strength, start_percent, end_percent
         )
@@ -589,7 +619,13 @@ class BVRegionalFlux2KleinAttentionNode:
                 "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
-            }
+            },
+            "optional": {
+                "lora_registry": (REGISTRY, {}),
+                "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -601,8 +637,17 @@ class BVRegionalFlux2KleinAttentionNode:
         "The distilled profile uses zero negative conditioning and a standard KSampler."
     )
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
-        positive, negative, slots, aspect_ratio = compile_flux2_klein_attention(regional, clip)
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
+              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+        document = context_document(regional)
+        scope_stacks = resolve_stack_paths(
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
+        )
+        hook_groups = create_hook_groups(scope_stacks)
+        positive, negative, slots, aspect_ratio = compile_flux2_klein_attention(document, clip)
+        positive, negative = apply_attention_hook_passes(
+            positive, negative, document, scope_stacks, hook_groups
+        )
         patched_model = apply_flux2_klein_attention_patch(
             model,
             slots,
