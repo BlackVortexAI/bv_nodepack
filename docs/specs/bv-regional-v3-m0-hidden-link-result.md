@@ -39,7 +39,8 @@ retains the real link and remaps their stable IDs together.
 - four-collector live fan-in and a twenty-collector automated stress path;
 - hidden ports, anchors, labels, and links in normal presentation;
 - dashed animated native links in debug presentation;
-- Nodes 1.0 and Nodes 2.0 renderer roundtrip without canonical-array mutation;
+- fresh workflow loads in Nodes 1.0 and Nodes 2.0 without canonical-array
+  replacement by the BV canvas projection;
 - save/reload, queue dependency, copy/paste, isolated copy, bypass/mute,
   deleted collector, picker switching, and non-dirty UI reconstruction;
 - root graphs and same-subgraph collector/consumer pairs.
@@ -53,11 +54,14 @@ not added to positional `widgets_values`.
 
 - Vite production build passed (117 modules).
 - TypeScript typecheck passed.
-- All 259 UI tests passed, including 18 focused M0 picker/link tests.
+- All 273 UI tests passed, including 21 focused M0 picker/link tests.
 - All 293 Python tests passed, including 8 focused M0 runtime/validation tests.
 - `git diff --check` passed.
 - Fresh isolated Nodes 2.0 session: four resolved root-graph bindings rendered
   four native dashed debug links.
+- Fresh isolated Nodes 1.0 session: the same saved four-binding workflow loaded
+  with zero unresolved rows and `graphToPrompt()` contained all four ordinary
+  `resource_provider_*` dependencies without prompt rewriting.
 - Fresh isolated Nodes 2.0 session: a same-subgraph collector/consumer pair was
   resolved visually and executed successfully in 0.20 seconds.
 - Fresh isolated Nodes 2.0 session: a root collector was absent from the inner
@@ -75,6 +79,16 @@ A future, separately approved Smart Pipe/Subgraph research project may evaluate
 official exposed-port manipulation and renderer APIs. Cross-graph bindings may
 only be admitted after their own full feasibility gate; they must not be enabled
 incrementally or by fallback heuristics in the V3 implementation.
+
+Live switching between the beta Nodes 2.0 renderer and Nodes 1.0 is not part of
+the approved persistence contract. The ComfyUI menu switch can reconstruct the
+active canvas and discard the spike's native provider edges during a two-way
+renderer roundtrip even though a fresh load of the saved workflow works in each
+renderer independently. M0 validation therefore follows the project-wide
+fresh-session rule and never treats an in-place renderer conversion as a
+save/reload substitute. No prompt hook, registry, or link-repair heuristic is
+introduced to mask this frontend behavior. A future renderer/subgraph research
+project may re-evaluate it against official ComfyUI APIs.
 
 ## Decision
 

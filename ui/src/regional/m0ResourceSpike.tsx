@@ -23,7 +23,7 @@ function repairCopiedCollector(node:any){
     cid.value=remap.collector[String(cid.value)];aid.value=remap.resources[String(aid.value)];bid.value=remap.resources[String(bid.value)];node.__bvM0IdRemap=remap;
 }
 function selectLinkedCollector(node:any,inputName:string,expectedId=""){
-    const source=resolveM0LocalLinkedCollector(node,inputName);return source&&(!expectedId||String(widget(source,"collector_id")?.value??"")===expectedId)?source:null;
+    return resolveM0LocalLinkedCollector(node,inputName,expectedId?(source:any)=>String(widget(source,"collector_id")?.value??"")===expectedId:undefined);
 }
 function linkedCollector(node:any){return selectLinkedCollector(node,"resource_provider",String(widget(node,"collector_id")?.value??""));}
 function linkedCollectorAt(node:any,index:number){const binding=parseBindings(node)[index];return selectLinkedCollector(node,`resource_provider_${index+1}`,binding?.collector_id??"");}
@@ -61,14 +61,14 @@ function applyMultiLinkedRemaps(node:any){
 }
 function collectorHasResource(source:any,resourceId:string){return ["resource_a_id","resource_b_id"].some(name=>String(widget(source,name)?.value??"")===resourceId);}
 function sanitizeSingleSelection(node:any){
-    const cid=widget(node,"collector_id"),rid=widget(node,"resource_id"),source=resolveM0LocalLinkedCollector(node,"resource_provider");if(!cid||!rid)return;
+    const cid=widget(node,"collector_id"),rid=widget(node,"resource_id");if(!cid||!rid)return;const source=selectLinkedCollector(node,"resource_provider",String(cid.value??""));
     const valid=Boolean(source)&&String(cid.value??"")===String(widget(source,"collector_id")?.value??"")&&collectorHasResource(source,String(rid.value??""));
     if(valid)return;
     cid.value="";rid.value="";const slot=node.inputs?.findIndex((input:any)=>input.name==="resource_provider")??-1;if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);
 }
 function sanitizeMultiSelections(node:any){
     const bindings=parseBindings(node),slots=ensureM0MultiConsumerInputs(node);let changed=false;
-    bindings.forEach((binding,index)=>{const source=resolveM0LocalLinkedCollector(node,`resource_provider_${index+1}`),valid=Boolean(source)&&binding.collector_id===String(widget(source,"collector_id")?.value??"")&&collectorHasResource(source,binding.resource_id);if(valid)return;binding.collector_id="";binding.resource_id="";changed=true;const slot=slots[index];if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);});
+    bindings.forEach((binding,index)=>{const source=selectLinkedCollector(node,`resource_provider_${index+1}`,binding.collector_id),valid=Boolean(source)&&collectorHasResource(source,binding.resource_id);if(valid)return;binding.collector_id="";binding.resource_id="";changed=true;const slot=slots[index];if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);});
     if(changed)saveBindings(node,bindings);
 }
 function setMultiDebug(node:any,visible:boolean,markDirty=true){

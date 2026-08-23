@@ -75,6 +75,23 @@ test("a direct same-graph link resolves its local collector",()=>{
   assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),collector);
 });
 
+test("renderer slot migration resolves only through a real local link and the persisted collector id",()=>{
+  const graph={_nodes:[],_links:new Map(),links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const first={id:1,graph,__bvM0ResourceProvider:true},second={id:2,graph,__bvM0ResourceProvider:true};
+  const consumer={id:3,graph,inputs:[{name:"resource_provider_1",link:null}]};graph._nodes.push(first,second,consumer);
+  graph.links.set(9,{origin_id:2,target_id:3,target_slot:7});
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider_1",source=>source===second),second);
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider_1",source=>source===first),null);
+});
+
+test("renderer migration resolves a typed provider before its UI upgrade marker is restored",()=>{
+  const graph={_nodes:[],_links:new Map([[1,{origin_id:1,origin_slot:0,target_id:2,target_slot:0,type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"}]]),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const collector={id:1,graph,outputs:[{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"}]};
+  const consumer={id:2,graph,inputs:[{name:"resource_provider",link:1}]};
+  graph._nodes.push(collector,consumer);
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),collector);
+});
+
 test("the shared picker panel exposes a non-serialized debug control",()=>{
   const html=renderToStaticMarkup(React.createElement(M0ResourcePickerPanel,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,debugVisible:false,onCollector(){},onResource(){},onDebug(){}}));
   assert.match(html,/Hidden link debug/);
@@ -188,21 +205,24 @@ test("the canvas projection marks legacy ports hidden without replacing graph ar
   assert.deepEqual(node.inputs,[input]);assert.deepEqual(node.outputs,[output]);
 });
 
-test("classic canvas suppresses only typed provider slot drawing while still drawing their debug link",()=>{
+test("classic canvas suppresses provider presentation without replacing canonical graph arrays",()=>{
   const draws=[];
   const slotPrototype={draw(){draws.push("provider")},drawCollapsed(){draws.push("provider-collapsed")}};
-  const input=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7});
-  const output=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",links:[7]});
+  const input=Object.assign(Object.create(slotPrototype),{name:"resource_provider",label:"Resource",localized_name:"Resource",type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7});
+  const output=Object.assign(Object.create(slotPrototype),{name:"resource_provider",label:"Resource",localized_name:"Resource",type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",links:[7]});
   const ordinary={type:"IMAGE",draw(){draws.push("ordinary")}};
   const collector={id:1,inputs:[],outputs:[output]},consumer={id:2,__bvM0ResourceConsumer:true,inputs:[input],outputs:[],properties:{bvM0DebugVisible:true}},seen={};
   const nodes=new Map([[1,collector],[2,consumer]]),ctx={save(){},restore(){},setLineDash(){}};
   collector.outputs.push(ordinary);
-  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(node){seen[node.id]=[node.inputs.length,node.outputs.length];for(const slot of [...node.inputs,...node.outputs]){slot.draw?.();slot.drawCollapsed?.()}}};
+  const collectorOutputs=collector.outputs,consumerInputs=consumer.inputs;
+  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(node){seen[node.id]=[node.outputs===collectorOutputs||node.inputs===consumerInputs,node.inputs.length,node.outputs.length,...[...node.inputs,...node.outputs].filter(slot=>slot.type==="BV_RUNTIME_RESOURCE_PROVIDER_M0").map(slot=>[slot.name,slot.label,slot.localized_name])];for(const slot of [...node.inputs,...node.outputs]){slot.draw?.();slot.drawCollapsed?.()}}};
   installM0CanvasVisibility(canvas);
   canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
   canvas.drawNode(collector,ctx);canvas.drawNode(consumer,ctx);
-  assert.deepEqual(seen,{1:[0,1],2:[0,0],link:true});
+  assert.deepEqual(seen,{1:[true,0,2,["","",""]],2:[true,1,0,["","",""]],link:true});
   assert.deepEqual(draws,["ordinary"]);
+  assert.equal(collector.outputs,collectorOutputs);assert.equal(consumer.inputs,consumerInputs);
+  assert.equal(output.name,"resource_provider");assert.equal(input.label,"Resource");
   assert.equal(Object.hasOwn(output,"draw"),false);assert.equal(Object.hasOwn(input,"draw"),false);
   assert.equal(output.draw,slotPrototype.draw);assert.equal(input.drawCollapsed,slotPrototype.drawCollapsed);
   assert.deepEqual(collector.outputs,[output,ordinary]);assert.deepEqual(consumer.inputs,[input]);

@@ -1,5 +1,5 @@
 const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
-type M0Slot = { type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
+type M0Slot = { name?:string; label?:string; localized_name?:string; type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
 type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0ResourceConsumer?:boolean; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
 
 function workflowHasM0Debug(graph:any){
@@ -66,12 +66,14 @@ export function installM0CanvasVisibility(canvas: any) {
         }finally{ctx.restore();}
     };
     canvas.drawNode = function (node:M0Node,ctx:CanvasRenderingContext2D) {
-        const inputs=node.inputs,outputs=node.outputs;
-        const modern=typeof document!=="undefined"&&document.querySelector(`.lg-node[data-node-id="${String(node.id)}"]`)!==null;
-        if(!modern){node.inputs=inputs?.filter(slot=>!slot.__bvM0ResourceSlot&&slot.type!==M0_PROVIDER_TYPE);node.outputs=outputs?.filter(slot=>!slot.__bvM0ResourceSlot&&slot.type!==M0_PROVIDER_TYPE);}
         const restores:Array<()=>void>=[];
-        for(const slot of [...(inputs??[]),...(outputs??[])]){
+        for(const slot of [...(node.inputs??[]),...(node.outputs??[])]){
             if(slot.type!==M0_PROVIDER_TYPE)continue;
+            for(const field of ["name","label","localized_name"] as const){
+                const own=Object.prototype.hasOwnProperty.call(slot,field),value=slot[field];
+                Object.defineProperty(slot,field,{configurable:true,writable:true,value:""});
+                restores.push(()=>own?Object.defineProperty(slot,field,{configurable:true,writable:true,value}):delete slot[field]);
+            }
             for(const method of ["draw","drawCollapsed"] as const){
                 if(typeof slot[method]!=="function")continue;
                 const own=Object.prototype.hasOwnProperty.call(slot,method),value=slot[method];
@@ -80,7 +82,7 @@ export function installM0CanvasVisibility(canvas: any) {
             }
         }
         try{return drawNode.call(this,node,ctx);}
-        finally{node.inputs=inputs;node.outputs=outputs;for(let index=restores.length-1;index>=0;index--)restores[index]();}
+        finally{for(let index=restores.length-1;index>=0;index--)restores[index]();}
     };
 }
 
