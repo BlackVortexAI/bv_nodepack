@@ -3,7 +3,7 @@ import { Button, ResourcePicker, SelectField, SortableList, type SortableItem } 
 import { BvManagedWindow } from "../ui/window";
 import { setWindowMenuVisible, useWindowMenuVisibility } from "../ui/windowRegistry";
 import { type LoraV3Config, type LoraV3Operation, type LoraV3Step, loraV3TargetValue } from "./LoraV3ResourcePickerPanel";
-import { loraV3Catalog, loraV3Resolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3Collector, setLoraV3EntryResource, writeNodeLoraV3Config } from "./loraV3Ui";
+import { commitLoraV3Config, loraV3Catalog, loraV3Resolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3Collector, setLoraV3EntryResource } from "./loraV3Ui";
 
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 const operations=["replace","merge","subtract","clear"].map(value=>({value,label:value[0].toUpperCase()+value.slice(1)}));
@@ -15,7 +15,7 @@ export default function LoraV3EditorWindow({open,node,onClose}:{open:boolean;nod
     const collectors=loraV3Catalog(node).filter(item=>item.resources.length>0),targets=loraV3TargetOptions(node),resolved=loraV3Resolved(node,config);
     const legacyOperation=String(widget(node,"operation")?.value??"replace") as LoraV3Operation;
     const steps:LoraV3Step[]=config.version===2?(config.steps??[]):config.entries.flatMap(entry=>entry.targets.map(target=>({id:crypto.randomUUID(),operation:legacyOperation,target:target as any,entries:[{...entry,targets:[target]}]})));
-    const commit=(nextSteps:LoraV3Step[],collectorId=config.collector_id)=>{const next:LoraV3Config={version:2,collector_id:collectorId,entries:[],steps:nextSteps};writeNodeLoraV3Config(node,next);setConfig(next);};
+    const commit=(nextSteps:LoraV3Step[],collectorId=config.collector_id)=>{const next:LoraV3Config={version:2,collector_id:collectorId,entries:[],steps:nextSteps};setConfig(commitLoraV3Config(node,next));};
     const items:SortableItem[]=steps.map((step,index)=>{
         const targetValue=loraV3TargetValue(step.target),targetLabel=targets.find(item=>item.value===targetValue)?.label??"Missing region";
         return {id:step.id,title:`Step ${index+1}: ${targetLabel}`,description:step.operation,content:<div className="bv-ui-stack">

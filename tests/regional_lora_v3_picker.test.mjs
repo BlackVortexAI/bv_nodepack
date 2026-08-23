@@ -8,6 +8,7 @@ import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config} from "../ui/s
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
 const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
+const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
 test("the production picker renders Collector / Resource from persisted ids",()=>{
  const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
  const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){}}));
@@ -39,6 +40,14 @@ test("Regional Prompt easy mode renders every stack assigned to its scope",()=>{
  const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"global"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(html,/LoRA enabled/);assert.match(html,/LoRA Stack 1/);assert.match(html,/LoRA Stack 2/);assert.match(html,/Add LoRA stack/);
  assert.match(html,/aria-label="Remove LoRA Stack 1"/);assert.doesNotMatch(html,/>Remove</);
+});
+test("Regional Prompt keeps the LoRA toggle above the stack card without overlap",()=>{
+ assert.match(styles,/\.bv-lora-v3-enable-row\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+ assert.doesNotMatch(styles,/\.bv-lora-v3-enable-row>\.bv-control-field\{[^}]*padding-top/);
+});
+test("adding an advanced LoRA stack commits through the graph-linking helper",()=>{
+ assert.match(editorSource,/commitLoraV3Config\(node,next\)/);
+ assert.doesNotMatch(editorSource,/writeNodeLoraV3Config\(node,next\)/);
 });
 test("the LoRA editor exposes ordered repeatable scope operations and participates in window visibility",()=>{
  assert.match(editorSource,/Add step/);assert.match(editorSource,/<SortableList/);assert.match(editorSource,/onReorder=/);

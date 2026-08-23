@@ -39,7 +39,7 @@ export function loraV3TargetOptions(node:any):LoraV3TargetOption[]{
     return [{value:"global",label:"Global",target:{scope:"global"}},...(document.regions??[]).map((region:any)=>({value:`region:${document.document_id}:${region.id}`,label:String(region.name||region.id),target:{scope:"region" as const,document_id:String(document.document_id),region_id:String(region.id)}}))];
 }
 export function loraV3Resolved(node:any,config:LoraV3Config){const linked=linkedLocalLoraCollector(node);return Boolean(linked)&&String(widget(linked,"collector_id")?.value??"")===String(config.collector_id??"");}
-function commitLoraV3Config(node:any,next:LoraV3Config){
+export function commitLoraV3Config(node:any,next:LoraV3Config){
     const choice=loraV3Catalog(node).find(item=>item.id===next.collector_id);connectLoraConsumerTree(node,choice?.node??null);writeNodeLoraV3Config(node,next);return next;
 }
 export function setLoraV3Collector(node:any,config:LoraV3Config,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"",map=(entry:any)=>entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry;return commitLoraV3Config(node,{...config,collector_id:collectorId||null,entries:config.entries.map(map),steps:config.steps?.map(step=>({...step,entries:step.entries.map(map)}))});}
