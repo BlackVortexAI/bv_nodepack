@@ -6,7 +6,7 @@ import { M0ResourcePickerPanel } from "./M0ResourcePickerPanel";
 import { M0MultiResourcePickerPanel, M0ResourceBinding } from "./M0MultiResourcePickerPanel";
 import { ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs, M0_MAX_MULTI_COLLECTORS, M0_PROVIDER_TYPE } from "./m0GraphContract";
 import { installM0CanvasVisibility, markM0NodeElement, requestM0DebugAnimation, syncM0DebugRoot } from "./m0VisualProjection";
-import { allM0WorkflowGraphs, planM0CollectorConnection, projectM0InputRoute, resolveM0LinkedCollectors } from "./m0GraphTraversal";
+import { resolveM0LocalLinkedCollector } from "./m0LocalGraph";
 
 const COLLECTOR="BV M0 Fake Resource Collector", CONSUMER="BV M0 Fake Resource Consumer", MULTI_CONSUMER="BV M0 Fake Multi Resource Consumer", PROVIDER=M0_PROVIDER_TYPE;
 const A="a1bdeceb-76ae-4e45-ae36-e5c2664819ce", B="d97a4268-c02c-42a3-8793-8e578e12e12c";
@@ -23,8 +23,7 @@ function repairCopiedCollector(node:any){
     cid.value=remap.collector[String(cid.value)];aid.value=remap.resources[String(aid.value)];bid.value=remap.resources[String(bid.value)];node.__bvM0IdRemap=remap;
 }
 function selectLinkedCollector(node:any,inputName:string,expectedId=""){
-    const sources=resolveM0LinkedCollectors(node,inputName),matching=expectedId?sources.filter(source=>String(widget(source,"collector_id")?.value??"")===expectedId):sources;
-    return matching.length===1?matching[0]:null;
+    const source=resolveM0LocalLinkedCollector(node,inputName);return source&&(!expectedId||String(widget(source,"collector_id")?.value??"")===expectedId)?source:null;
 }
 function linkedCollector(node:any){return selectLinkedCollector(node,"resource_provider",String(widget(node,"collector_id")?.value??""));}
 function linkedCollectorAt(node:any,index:number){const binding=parseBindings(node)[index];return selectLinkedCollector(node,`resource_provider_${index+1}`,binding?.collector_id??"");}
@@ -33,14 +32,14 @@ function applyLinkedRemap(node:any){
     const cid=widget(node,"collector_id"),rid=widget(node,"resource_id");if(cid&&remap.collector[String(cid.value)])cid.value=remap.collector[String(cid.value)];if(rid&&remap.resources[String(rid.value)])rid.value=remap.resources[String(rid.value)];
 }
 function collectors(node:any):ResourcePickerCollector[]{
-    return allM0WorkflowGraphs(node.graph).flatMap((graph:any)=>graph?._nodes??[]).filter((item:any)=>item.__bvM0ResourceProvider===true).map((item:any)=>({
+    return (node.graph?._nodes??[]).filter((item:any)=>item.__bvM0ResourceProvider===true&&item.graph===node.graph).map((item:any)=>({
         id:String(widget(item,"collector_id")?.value??""),label:String(item.title||`Collector #${item.id}`),
         resources:[{id:String(widget(item,"resource_a_id")?.value??""),label:"Alpha"},{id:String(widget(item,"resource_b_id")?.value??""),label:"Beta"}],node:item,
     })).filter((item:any,index:number,items:any[])=>item.id&&items.findIndex(candidate=>candidate.id===item.id)===index);
 }
 function refreshCollector(node:any){
     if(!node?.__bvM0ResourceProvider)return;
-    const consumers=allM0WorkflowGraphs(node.graph).flatMap((graph:any)=>graph?._nodes??[]);
+    const consumers=node.graph?._nodes??[];
     const output=node.outputs?.find((item:any)=>item.type===PROVIDER),debug=consumers.some((consumer:any)=>Boolean(consumer.properties?.bvM0DebugVisible)&&(linkedCollector(consumer)===node||consumer.inputs?.some((_:any,index:number)=>linkedCollectorAt(consumer,index)===node)));
     if(output){output.hidden=true;output.__bvM0VisualHidden=!debug;output.__bvM0PortHidden=true;output.__bvM0ResourceSlot=true;}
     markM0NodeElement(node,"collector",debug);
@@ -60,12 +59,23 @@ function applyMultiLinkedRemaps(node:any){
     bindings.forEach((binding,index)=>{const remap:IdRemap|undefined=linkedCollectorAt(node,index)?.__bvM0IdRemap;if(!remap)return;const collector=remap.collector[binding.collector_id],resource=remap.resources[binding.resource_id];if(collector){binding.collector_id=collector;changed=true}if(resource){binding.resource_id=resource;changed=true}});
     if(changed)saveBindings(node,bindings);
 }
+function collectorHasResource(source:any,resourceId:string){return ["resource_a_id","resource_b_id"].some(name=>String(widget(source,name)?.value??"")===resourceId);}
+function sanitizeSingleSelection(node:any){
+    const cid=widget(node,"collector_id"),rid=widget(node,"resource_id"),source=resolveM0LocalLinkedCollector(node,"resource_provider");if(!cid||!rid)return;
+    const valid=Boolean(source)&&String(cid.value??"")===String(widget(source,"collector_id")?.value??"")&&collectorHasResource(source,String(rid.value??""));
+    if(valid)return;
+    cid.value="";rid.value="";const slot=node.inputs?.findIndex((input:any)=>input.name==="resource_provider")??-1;if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);
+}
+function sanitizeMultiSelections(node:any){
+    const bindings=parseBindings(node),slots=ensureM0MultiConsumerInputs(node);let changed=false;
+    bindings.forEach((binding,index)=>{const source=resolveM0LocalLinkedCollector(node,`resource_provider_${index+1}`),valid=Boolean(source)&&binding.collector_id===String(widget(source,"collector_id")?.value??"")&&collectorHasResource(source,binding.resource_id);if(valid)return;binding.collector_id="";binding.resource_id="";changed=true;const slot=slots[index];if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);});
+    if(changed)saveBindings(node,bindings);
+}
 function setMultiDebug(node:any,visible:boolean,markDirty=true){
     node.properties??={};node.properties.bvM0DebugVisible=visible;
     const providerInputs=(node.inputs??[]).map((input:any,index:number)=>({input,index})).filter(({input}:any)=>String(input.name??"").startsWith("resource_provider_"));
     node.__bvM0FanInAnchorSlot=visible?providerInputs[0]?.index:undefined;
     for(const {input} of providerInputs){input.hidden=true;input.__bvM0ResourceSlot=true;input.__bvM0VisualHidden=!visible;input.__bvM0PortHidden=true;input.label="";}
-    for(let index=0;index<providerInputs.length;index++)projectM0InputRoute(node,`resource_provider_${index+1}`,visible);
     markM0NodeElement(node,"consumer",visible);
     for(let index=0;index<M0_MAX_MULTI_COLLECTORS;index++)refreshCollector(linkedCollectorAt(node,index));
     syncM0DebugRoot(node.graph);
@@ -73,10 +83,9 @@ function setMultiDebug(node:any,visible:boolean,markDirty=true){
 }
 function connectMulti(node:any,index:number,collectorId:string){
     const slots=ensureM0MultiConsumerInputs(node),input=slots[index],previous=linkedCollectorAt(node,index);
-    const source=(collectors(node) as any[]).find(item=>item.id===collectorId)?.node;if(source)ensureM0CollectorOutput(source);
-    const plan=source?planM0CollectorConnection(node,`resource_provider_${index+1}`,source):null;
-    if(plan){if(plan.target.inputs?.[plan.targetSlot]?.link!=null)plan.target.disconnectInput?.(plan.targetSlot);plan.source.connect(plan.sourceSlot,plan.target,plan.targetSlot);}
-    else if(input>=0&&node.inputs?.[input]?.link!=null)node.disconnectInput?.(input);
+    if(input>=0&&node.inputs?.[input]?.link!=null)node.disconnectInput?.(input);
+    const source=(collectors(node) as any[]).find(item=>item.id===collectorId)?.node,output=source?ensureM0CollectorOutput(source):-1;
+    if(source&&input>=0&&output>=0)source.connect(output,node,input);
     setMultiDebug(node,Boolean(node.properties?.bvM0DebugVisible));refreshCollector(previous);
 }
 function renderMultiPicker(node:any){
@@ -107,7 +116,6 @@ function setDebug(node:any,visible:boolean,markDirty=true){
     node.properties??={};node.properties.bvM0DebugVisible=visible;
     const input=node.inputs?.find((item:any)=>item.name==="resource_provider");
     if(input){input.hidden=true;input.__bvM0VisualHidden=!visible;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;input.label="";}
-    projectM0InputRoute(node,"resource_provider",visible);
     markM0NodeElement(node,"consumer",visible);refreshCollector(linkedCollector(node));
     syncM0DebugRoot(node.graph);
     if(visible)requestM0DebugAnimation(node.graph?.list_of_graphcanvas?.[0]??getApp().canvas);
@@ -116,11 +124,9 @@ function setDebug(node:any,visible:boolean,markDirty=true){
 function connect(node:any,collectorId:string){
     const previous=linkedCollector(node);
     const input=ensureM0ConsumerInput(node);
-    const source=(collectors(node) as any[]).find(item=>item.id===collectorId)?.node;
-    if(source)ensureM0CollectorOutput(source);
-    const plan=source?planM0CollectorConnection(node,"resource_provider",source):null;
-    if(plan){if(plan.target.inputs?.[plan.targetSlot]?.link!=null)plan.target.disconnectInput?.(plan.targetSlot);plan.source.connect(plan.sourceSlot,plan.target,plan.targetSlot);}
-    else if(input>=0&&node.inputs?.[input]?.link!=null)node.disconnectInput?.(input);
+    if(input>=0&&node.inputs?.[input]?.link!=null)node.disconnectInput?.(input);
+    const source=(collectors(node) as any[]).find(item=>item.id===collectorId)?.node,output=source?ensureM0CollectorOutput(source):-1;
+    if(source&&input>=0&&output>=0)source.connect(output,node,input);
     setDebug(node,Boolean(node.properties?.bvM0DebugVisible));refreshCollector(previous);
 }
 function renderPicker(node:any){
@@ -133,7 +139,7 @@ function renderPicker(node:any){
 }
 export function installM0ResourceSpike(nodeType:any,nodeData:any){
     if(nodeData.name===COLLECTOR){const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure;const upgrade=function(this:any){ensureCanvasVisibility();this.__bvM0ResourceProvider=true;ensureM0CollectorOutput(this);ensureId(widget(this,"collector_id"));ensureId(widget(this,"resource_a_id"),A);ensureId(widget(this,"resource_b_id"),B);repairCopiedCollector(this);["collector_id","resource_a_id","resource_b_id"].forEach(name=>hideWidget(widget(this,name)));installDomRefresh(this,()=>refreshCollector(this));refreshCollector(this);};nodeType.prototype.onNodeCreated=function(){const r=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConfigure=function(){const r=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};return true;}
-    if(nodeData.name===CONSUMER){const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;const upgrade=function(this:any){ensureCanvasVisibility();ensureM0ConsumerInput(this);applyLinkedRemap(this);["collector_id","resource_id"].forEach(name=>hideWidget(widget(this,name)));installDomRefresh(this,()=>renderPicker(this));renderPicker(this);setTimeout(()=>renderPicker(this),0);};nodeType.prototype.onNodeCreated=function(){const r=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConfigure=function(){const r=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConnectionsChange=function(){const previous=linkedCollector(this),r=changed?.apply(this,arguments);queueMicrotask(()=>{applyLinkedRemap(this);renderPicker(this);refreshCollector(previous);refreshCollector(linkedCollector(this))});return r};return true;}
-    if(nodeData.name===MULTI_CONSUMER){const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;const upgrade=function(this:any){ensureCanvasVisibility();ensureM0MultiConsumerInputs(this);repairMultiBindingIds(this);applyMultiLinkedRemaps(this);hideWidget(widget(this,"resource_bindings"));installDomRefresh(this,()=>{applyMultiLinkedRemaps(this);renderMultiPicker(this)});renderMultiPicker(this);[0,50,150].forEach(delay=>setTimeout(()=>{applyMultiLinkedRemaps(this);renderMultiPicker(this)},delay));};nodeType.prototype.onNodeCreated=function(){const r=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConfigure=function(){const r=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConnectionsChange=function(){const r=changed?.apply(this,arguments);queueMicrotask(()=>{applyMultiLinkedRemaps(this);setMultiDebug(this,Boolean(this.properties?.bvM0DebugVisible),false);renderMultiPicker(this)});return r};return true;}
+    if(nodeData.name===CONSUMER){const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;const upgrade=function(this:any){ensureCanvasVisibility();ensureM0ConsumerInput(this);applyLinkedRemap(this);sanitizeSingleSelection(this);["collector_id","resource_id"].forEach(name=>hideWidget(widget(this,name)));installDomRefresh(this,()=>renderPicker(this));renderPicker(this);setTimeout(()=>renderPicker(this),0);};nodeType.prototype.onNodeCreated=function(){const r=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConfigure=function(){const r=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConnectionsChange=function(){const previous=linkedCollector(this),r=changed?.apply(this,arguments);queueMicrotask(()=>{applyLinkedRemap(this);sanitizeSingleSelection(this);renderPicker(this);refreshCollector(previous);refreshCollector(linkedCollector(this))});return r};return true;}
+    if(nodeData.name===MULTI_CONSUMER){const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;const upgrade=function(this:any){ensureCanvasVisibility();ensureM0MultiConsumerInputs(this);repairMultiBindingIds(this);applyMultiLinkedRemaps(this);sanitizeMultiSelections(this);hideWidget(widget(this,"resource_bindings"));installDomRefresh(this,()=>{applyMultiLinkedRemaps(this);renderMultiPicker(this)});renderMultiPicker(this);[0,50,150].forEach(delay=>setTimeout(()=>{applyMultiLinkedRemaps(this);sanitizeMultiSelections(this);renderMultiPicker(this)},delay));};nodeType.prototype.onNodeCreated=function(){const r=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConfigure=function(){const r=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return r};nodeType.prototype.onConnectionsChange=function(){const r=changed?.apply(this,arguments);queueMicrotask(()=>{applyMultiLinkedRemaps(this);sanitizeMultiSelections(this);setMultiDebug(this,Boolean(this.properties?.bvM0DebugVisible),false);renderMultiPicker(this)});return r};return true;}
     return false;
 }

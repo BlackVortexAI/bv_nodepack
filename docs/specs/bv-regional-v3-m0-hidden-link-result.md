@@ -1,73 +1,83 @@
 # BV Regional v3 Milestone 0 hidden-link result
 
-Status: **No-Go**
+Status: **Go with a mandatory same-graph boundary**
 
 Validated on 2026-08-23 with ComfyUI 0.33.1 and
-`comfyui-frontend-package` 1.48.7 in an isolated ComfyUI session on port 8192.
+`comfyui-frontend-package` 1.48.7.
 
-The spike proves that ordinary persisted typed links can provide strict
-ID-based resource selection, native multi-provider fan-in, cache dependencies,
-copy remapping, and execution across exposed subgraph boundaries. It does not
-prove the complete hidden-link presentation reliably enough for V3: in Nodes
-2.0 a real host-to-host link between two subgraph instances is not rendered
-when both exposed typed anchors are hidden. The prompt still contains the
-dependency and executes successfully, but debug mode cannot show the required
-complete dashed connection chain without drawing a replacement overlay or
-revealing progressive ports.
+## Approved contract
 
-Per the gate rule, no replacement line registry, prompt hook, queue rewrite,
-runtime singleton, name lookup, or cache heuristic was added. Later milestones
-must use progressively visible typed ports unless a future ComfyUI renderer API
-provides a stable native solution and Milestone 0 is explicitly reopened.
+A collector and every consumer binding that references it must belong to the
+same concrete ComfyUI graph:
+
+- root collector to root consumer: allowed;
+- collector and consumer inside the same subgraph definition: allowed;
+- root to subgraph, subgraph to root, and one subgraph to another: invalid.
+
+The Resource Picker catalogs only collector nodes from `consumer.graph`.
+Collector display names and node types never participate in persistence or
+resolution. A copied consumer whose persisted selection is not backed by a real
+same-graph collector link is repaired to an explicit unresolved binding:
+
+- `collector_id` and `resource_id` are cleared;
+- the invalid consumer input link is disconnected;
+- the binding row and stable `binding_id` remain visible;
+- no collector is selected automatically;
+- prompt validation fails with an explanation that collector and consumer must
+  be in the same graph;
+- runtime validation remains as a second fail-closed layer.
+
+Jointly copying a linked collector and consumer into the same target graph
+retains the real link and remaps their stable IDs together.
 
 ## Proven behavior
 
-- one stable `collector_id`, two stable resource IDs, and mutable runtime data;
-- one ordinary stored `BV_RUNTIME_RESOURCE_PROVIDER_M0` edge per binding;
-- four-provider live fan-in and a twenty-provider automated stress path;
-- graph-local transient catalog reconstructed from collector nodes;
-- strict ID-only resolution with visible unresolved state and clear errors;
-- normal hidden presentation and dashed animated debug links in root graphs;
-- collector outside / consumer inside a subgraph;
-- collector inside / consumer outside a subgraph;
-- collector and consumer inside the same subgraph;
-- picker rewiring across an exposed subgraph input by changing the real parent
-  host link while retaining the inner boundary link;
-- collector-subgraph to consumer-subgraph execution through the ordinary
-  host-to-host dependency;
-- Nodes 1.0 / Nodes 2.0 renderer roundtrip without input-array loss;
-- save/reload, queue dependency, cache invalidation, copy/paste, isolated-copy
-  unresolved handling, bypass/mute, deleted collector, and non-dirty UI rebuild
-  from the earlier focused gate runs.
+- ordinary persisted typed ComfyUI links, with no prompt rewriting;
+- one stable collector ID and two stable resource IDs;
+- mutable producer runtime value and ordinary cache invalidation;
+- shared BV Resource Picker with visible unresolved state;
+- four-collector live fan-in and a twenty-collector automated stress path;
+- hidden ports, anchors, labels, and links in normal presentation;
+- dashed animated native links in debug presentation;
+- Nodes 1.0 and Nodes 2.0 renderer roundtrip without canonical-array mutation;
+- save/reload, queue dependency, copy/paste, isolated copy, bypass/mute,
+  deleted collector, picker switching, and non-dirty UI reconstruction;
+- root graphs and same-subgraph collector/consumer pairs.
 
-## Decisive failing case
+The implementation contains no queue hook, global persisted registry, runtime
+singleton, name fallback, cache heuristic, global DOM observer, or replacement
+link overlay. Dynamic picker controls remain non-serializing DOM widgets and are
+not added to positional `widgets_values`.
 
-Workflow `M0 Subgraph To Subgraph` stores three ordinary typed edges:
+## Final evidence
 
-1. internal collector to the first subgraph output;
-2. first subgraph host output to second subgraph host input;
-3. second subgraph input to the internal consumer.
-
-The picker resolves `BV M0 Fake Resource Collector / Alpha`, and a normal Run
-completed successfully. With debug enabled, the internal and one-sided boundary
-cases can render dashed links, but the root host-to-host segment remains absent
-in a fresh Nodes 2.0 tab after a fresh server restart. This violates the expanded
-M0 requirement that debug provide a complete visual overview while anchors and
-labels remain hidden.
-
-## Automated evidence
-
-- 18 focused UI contract tests passed.
-- 259 complete UI tests passed.
+- Vite production build passed (117 modules).
 - TypeScript typecheck passed.
-- Vite production build passed.
-- 6 focused Python M0 tests passed.
-- The first complete Python run found the new fake multi-consumer missing from
-  `node_list.json`; the manifest was corrected and all 291 Python tests passed
-  on the complete rerun.
+- All 259 UI tests passed, including 18 focused M0 picker/link tests.
+- All 293 Python tests passed, including 8 focused M0 runtime/validation tests.
+- `git diff --check` passed.
+- Fresh isolated Nodes 2.0 session: four resolved root-graph bindings rendered
+  four native dashed debug links.
+- Fresh isolated Nodes 2.0 session: a same-subgraph collector/consumer pair was
+  resolved visually and executed successfully in 0.20 seconds.
+- Fresh isolated Nodes 2.0 session: a root collector was absent from the inner
+  consumer picker, the stale binding was visibly unresolved with cleared IDs and
+  no link, and prompt validation rejected execution with the same-graph message.
+
+## Deferred research
+
+Cross-graph resource routing is explicitly outside the V3 contract. A technical
+spike proved that execution can traverse exposed subgraph inputs and outputs,
+but Nodes 2.0 did not reliably render the host-to-host debug segment when both
+exposed anchors were hidden. This does not block V3 under the same-graph rule.
+
+A future, separately approved Smart Pipe/Subgraph research project may evaluate
+official exposed-port manipulation and renderer APIs. Cross-graph bindings may
+only be admitted after their own full feasibility gate; they must not be enabled
+incrementally or by fallback heuristics in the V3 implementation.
 
 ## Decision
 
-Milestone 0 is **No-Go** for the fully hidden-link model. The functional graph
-model remains useful evidence, but it is not approval to start Context Kernel,
-LoRA, Detailer, or another V3 milestone.
+Milestone 0 is **Go** for same-graph hidden typed resource links. This approves
+the transport and picker model for later V3 milestones under the boundary above;
+it does not itself implement Context Kernel, LoRA, Detailer, or Milestone A.

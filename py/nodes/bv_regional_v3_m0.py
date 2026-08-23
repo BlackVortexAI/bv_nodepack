@@ -53,6 +53,15 @@ class BVM0FakeResourceConsumer:
     FUNCTION = "consume"
     CATEGORY = "🌀 BV Node Pack/experimental"
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, collector_id, resource_id, **kwargs):
+        if not str(collector_id or "").strip() or not str(resource_id or "").strip():
+            return (
+                "BV M0 resource selection is unresolved. "
+                "Collector and consumer must be located in the same graph."
+            )
+        return True
+
     def consume(self, collector_id, resource_id, resource_provider=None):
         if resource_provider is None:
             raise ValueError(f"BV M0 resource collector is missing for collector_id {collector_id!r}")
@@ -84,6 +93,24 @@ class BVM0FakeMultiResourceConsumer:
     OUTPUT_NODE = True
     FUNCTION = "consume"
     CATEGORY = "🌀 BV Node Pack/experimental"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, resource_bindings, **kwargs):
+        try:
+            bindings = json.loads(resource_bindings)
+        except (TypeError, json.JSONDecodeError) as exc:
+            return f"BV M0 multi-resource bindings are invalid JSON: {exc}"
+        if not isinstance(bindings, list) or not bindings:
+            return "BV M0 needs at least one local resource binding."
+        if len(bindings) > MAX_MULTI_COLLECTORS:
+            return f"BV M0 supports at most {MAX_MULTI_COLLECTORS} collector bindings."
+        for index, binding in enumerate(bindings, 1):
+            if not isinstance(binding, dict) or not str(binding.get("collector_id", "")).strip() or not str(binding.get("resource_id", "")).strip():
+                return (
+                    f"BV M0 resource binding {index} is unresolved. "
+                    "Collector and consumer must be located in the same graph."
+                )
+        return True
 
     def consume(self, resource_bindings, **providers):
         try:

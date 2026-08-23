@@ -426,6 +426,15 @@ switching must not resize the node or reorder serialized widgets. A future
 workflow-wide shortcut may activate the same transient presentation, but is not
 part of Milestone 0.
 
+The approved V3 transport is graph-local: a collector and each consumer binding
+must belong to the same concrete root graph or the same subgraph definition.
+The Resource Picker must not catalog collectors from parent, child, sibling, or
+otherwise external graphs. A copied external selection is cleared without
+fallback, remains visibly unresolved, and fails prompt validation with a
+same-graph diagnostic. Cross-graph routing through exposed subgraph ports is
+deferred to a separate future Smart Pipe/Subgraph research gate and is not a V3
+requirement.
+
 If any required behavior cannot be made reliable with ordinary stored links, V3
 abandons Wireless presentation and uses progressively revealed typed ports. Queue
 rewriting, global runtime registries, and provider discovery heuristics are not

@@ -23,6 +23,11 @@ class RegionalV3M0Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"mismatched"): BVM0FakeResourceConsumer().consume("Collector",RESOURCE_IDS[0],provider)
         with self.assertRaisesRegex(ValueError,"collector is missing"): BVM0FakeResourceConsumer().consume("c",RESOURCE_IDS[0])
 
+    def test_unresolved_single_selection_fails_prompt_validation(self):
+        result = BVM0FakeResourceConsumer.VALIDATE_INPUTS("", "")
+        self.assertIn("same graph", result)
+        self.assertTrue(BVM0FakeResourceConsumer.VALIDATE_INPUTS("c", RESOURCE_IDS[0]))
+
     def test_multi_consumer_uses_one_native_typed_input_per_binding(self):
         optional = BVM0FakeMultiResourceConsumer.INPUT_TYPES()["optional"]
         self.assertEqual(len(optional), MAX_MULTI_COLLECTORS)
@@ -43,6 +48,12 @@ class RegionalV3M0Tests(unittest.TestCase):
         bindings = '[{"collector_id":"c1","resource_id":"%s"}]' % RESOURCE_IDS[0]
         with self.assertRaisesRegex(ValueError, "missing for binding 1"):
             BVM0FakeMultiResourceConsumer().consume(bindings)
+
+    def test_unresolved_multi_selection_fails_prompt_validation(self):
+        bindings = '[{"binding_id":"b1","collector_id":"","resource_id":""}]'
+        result = BVM0FakeMultiResourceConsumer.VALIDATE_INPUTS(bindings)
+        self.assertIn("binding 1", result)
+        self.assertIn("same graph", result)
 
     def test_twenty_provider_stress_path_preserves_order(self):
         bindings=[];providers={}

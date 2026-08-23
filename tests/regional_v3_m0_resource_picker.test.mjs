@@ -7,7 +7,7 @@ import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
 import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
 import { ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
 import { installM0CanvasVisibility, markM0NodeElement } from "../ui/src/regional/m0VisualProjection.ts";
-import { planM0CollectorConnection, resolveM0LinkedCollectors } from "../ui/src/regional/m0GraphTraversal.ts";
+import { resolveM0LocalLinkedCollector } from "../ui/src/regional/m0LocalGraph.ts";
 
 const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resource-1",label:"Alpha"}]}];
 
@@ -44,7 +44,7 @@ test("multi fan-in keeps twenty independently named native graph inputs",()=>{
   assert.ok(consumer.inputs.every(input=>input.type==="BV_RUNTIME_RESOURCE_PROVIDER_M0"));
 });
 
-test("a real exposed subgraph input resolves its collector through both persisted links",()=>{
+test("an exposed subgraph input cannot resolve an external collector",()=>{
   const collector={id:1,__bvM0ResourceProvider:true,widgets:[{name:"collector_id",value:"c1"}]};
   const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
   const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
@@ -53,10 +53,10 @@ test("a real exposed subgraph input resolves its collector through both persiste
   root._nodes.push(collector,host);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(consumer);
   root.links.set(10,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
   subgraph.links.set(11,{origin_id:-10,origin_slot:0,target_id:3,target_slot:0});
-  assert.deepEqual(resolveM0LinkedCollectors(consumer,"resource_provider"),[collector]);
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),null);
 });
 
-test("a real exposed subgraph output resolves its internal collector from the parent consumer",()=>{
+test("an exposed subgraph output cannot expose an internal collector to a parent consumer",()=>{
   const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
   const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[{linkIds:[21]}],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
   const collector={id:4,graph:subgraph,__bvM0ResourceProvider:true,widgets:[{name:"collector_id",value:"c1"}]};
@@ -65,19 +65,14 @@ test("a real exposed subgraph output resolves its internal collector from the pa
   root._nodes.push(host,consumer);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(collector);
   root.links.set(20,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
   subgraph.links.set(21,{origin_id:4,origin_slot:0,target_id:-20,target_slot:0});
-  assert.deepEqual(resolveM0LinkedCollectors(consumer,"resource_provider"),[collector]);
-  assert.deepEqual(planM0CollectorConnection(consumer,"resource_provider",collector),{source:host,sourceSlot:0,target:consumer,targetSlot:0,preserveLocal:false});
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),null);
 });
 
-test("picker rewiring across an exposed subgraph input targets the parent host without replacing the inner link",()=>{
-  const collector={id:1,graph:null,__bvM0ResourceProvider:true,outputs:[{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"}]};
-  const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};collector.graph=root;
-  const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
-  const host={id:2,graph:root,subgraph,inputs:[{link:10}],isSubgraphNode(){return true}};
-  const consumer={id:3,graph:subgraph,inputs:[{name:"resource_provider",link:11}]};
-  root._nodes.push(collector,host);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(consumer);
-  root.links.set(10,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});subgraph.links.set(11,{origin_id:-10,origin_slot:0,target_id:3,target_slot:0});
-  assert.deepEqual(planM0CollectorConnection(consumer,"resource_provider",collector),{source:collector,sourceSlot:0,target:host,targetSlot:0,preserveLocal:true});
+test("a direct same-graph link resolves its local collector",()=>{
+  const graph={_nodes:[],links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const collector={id:1,graph,__bvM0ResourceProvider:true},consumer={id:2,graph,inputs:[{name:"resource_provider",link:1}]};graph._nodes.push(collector,consumer);
+  graph.links.set(1,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),collector);
 });
 
 test("the shared picker panel exposes a non-serialized debug control",()=>{
@@ -130,13 +125,15 @@ test("Nodes 2.0 provider ports are hidden by their stable type, including subgra
 
 test("the spike uses ordinary graph links without prompt hooks or name fallback",()=>{
   const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
-  const traversal=readFileSync(new URL("../ui/src/regional/m0GraphTraversal.ts",import.meta.url),"utf8");
-  assert.match(source,/plan\.source\.connect\(plan\.sourceSlot,plan\.target,plan\.targetSlot\)/);
-  assert.match(traversal,/link\.target_id/);
+  const traversal=readFileSync(new URL("../ui/src/regional/m0LocalGraph.ts",import.meta.url),"utf8");
+  assert.match(source,/source\.connect\(output,node,input\)/);
+  assert.match(traversal,/source\?\.graph===node\.graph/);
   assert.doesNotMatch(source,/graphToPrompt|queuePrompt|api\.queuePrompt/);
   assert.doesNotMatch(source,/find\([^\n]*(?:title|type).*collectorId/);
   assert.match(source,/input\.hidden=true/);
   assert.doesNotMatch(source,/MutationObserver/);
+  assert.doesNotMatch(source,/allM0WorkflowGraphs|planM0CollectorConnection/);
+  assert.match(source,/sanitizeSingleSelection/);
   assert.match(source,/draw\(\);setDebug\(node,Boolean\(node\.properties\?\.bvM0DebugVisible\),false\)/);
 });
 

@@ -3,8 +3,7 @@ type M0Slot = { type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __b
 type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
 
 function workflowHasM0Debug(graph:any){
-    const root=graph?.rootGraph??graph,graphs=[root,...(root?.subgraphs?.values?.()??root?._subgraphs?.values?.()??[])];
-    return graphs.some(candidate=>(candidate?._nodes??[]).some((node:M0Node)=>Boolean(node.properties?.bvM0DebugVisible)));
+    return (graph?._nodes??[]).some((node:M0Node)=>Boolean(node.properties?.bvM0DebugVisible));
 }
 
 function hiddenLink(canvas:any,link:any) {
