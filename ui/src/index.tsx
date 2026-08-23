@@ -24,7 +24,8 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
-import { installLoraV3Ui } from "./regional/loraV3Ui";
+import { hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
+import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
@@ -465,6 +466,7 @@ function BVRoot() {
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
     const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
+    const [loraV3Node,setLoraV3Node]=useState<any|null>(null);
     const launcherColumns=useCallback((includeHidden=false):ToolbarLauncherColumn[]=>{
         const regional=regionalNodes(),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry"),pipes=[...workflowNodesOfType("BV Smart Pipe"),...workflowNodesOfType("BV Smart Pipe Merge")];
         const decorate=(node:any,item:any)=>{const hidden=!windowMenuVisible(node);return hidden&&!includeHidden?null:{...item,hidden,onReveal:hidden?()=>setWindowMenuVisible(node,true):undefined}};
@@ -490,6 +492,7 @@ function BVRoot() {
         window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
         return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
     }, []);
+    useEffect(()=>{const open=(event:Event)=>setLoraV3Node((event as CustomEvent<{node?:any}>).detail?.node??null);window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,open);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,open)},[]);
     useEffect(()=>{const update=(event:Event)=>setHasControlNodes(Boolean((event as CustomEvent).detail?.control));window.addEventListener("bv-toolbar-capabilities-changed",update);refreshBvToolbarCapabilities();return()=>window.removeEventListener("bv-toolbar-capabilities-changed",update)},[]);
 
     useEffect(() => {
@@ -544,6 +547,7 @@ function BVRoot() {
         <ToolbarWindowLauncher getColumns={launcherColumns}/>
         <SmartPipeEditorWindow/>
         <BVPortal open={portalOpen} hasControlNodes={hasControlNodes} onClose={() => setPortalOpen(false)} />
+        <LoraV3EditorWindow open={Boolean(loraV3Node)} node={loraV3Node} onClose={()=>setLoraV3Node(null)}/>
         <RegionalEditor open={regionalOpen} activationToken={regionalActivation} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
         <QuickPromptEditor open={quickEditOpen} activationToken={quickEditActivation} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { rememberBvWindowInstance("regional",scopedNodeKey(node)); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); setRegionalActivation(value=>value+1); }} />
     </>);
@@ -859,7 +863,10 @@ comfyApp.registerExtension({
             ensureUniqueDocument(this, true);
             const jsonWidget = this.widgets?.find((widget: any) => widget.name === "regional_json");
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
+            const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
+            if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
+            installLoraV3ConsumerSlot(this);
             if (jsonWidget) {
                 hideRegionalWidget(jsonWidget);
                 if (!jsonWidget.__bvRegionalDocumentHooked) {
@@ -890,7 +897,10 @@ comfyApp.registerExtension({
             const result = originalConfigure?.apply(this, arguments);
             ensureUniqueDocument(this, false);
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
+            const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
+            if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
+            installLoraV3ConsumerSlot(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };

@@ -64,6 +64,7 @@ CATEGORY_MODEL_KREA2 = f"{CATEGORY_MODELS}/Krea 2"
 CATEGORY_MODEL_ANIMA = f"{CATEGORY_MODELS}/Anima"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
+DEFAULT_LORA_V3_JSON = '{"version":1,"collector_id":null,"entries":[]}'
 
 
 def apply_anima_token_lora_patch(*args, **kwargs):
@@ -87,6 +88,11 @@ class BVRegionalPromptNode:
                     "STRING",
                     {"default": DEFAULT_LORA_BINDINGS_JSON, "multiline": True, "dynamicPrompts": False},
                 ),
+                "lora_v3_config_json": (
+                    "STRING",
+                    {"default": DEFAULT_LORA_V3_JSON, "multiline": True, "dynamicPrompts": False},
+                ),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
             },
         }
 
@@ -95,9 +101,15 @@ class BVRegionalPromptNode:
     FUNCTION = "build"
     CATEGORY = CATEGORY_CORE
 
-    def build(self, regional_json, lora_bindings_json=None):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, resource_provider=None):
         document = parse_document(regional_json)
-        return document, reconcile_bindings(lora_bindings_json, document)
+        payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
+        regional = document
+        if payload.get("entries"):
+            regional = transform_lora_capability(document, payload, registry=LORA_CAPABILITY_REGISTRY)
+            resolve_lora_capability(regional, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
+            regional = regional.to_dict()
+        return regional, reconcile_bindings(lora_bindings_json, document)
 
 
 class BVNamedLoraStackNode:
@@ -150,7 +162,7 @@ class BVRegionalLoraNode:
             "required": {
                 "regional": (REGIONAL, {}),
                 "operation": (["replace", "merge", "subtract", "clear"], {"default": "replace"}),
-                "config_json": ("STRING", {"default": '{"version":1,"collector_id":null,"entries":[]}', "multiline": True}),
+                "config_json": ("STRING", {"default": DEFAULT_LORA_V3_JSON, "multiline": True}),
             },
             "optional": {
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),

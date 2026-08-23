@@ -116,6 +116,35 @@ class RegionalNodeTests(unittest.TestCase):
 
         self.assertEqual(parsed["regions"], {current_region: "current"})
 
+    def test_main_node_easy_mode_emits_v3_lora_capability_from_live_provider(self):
+        document = fixture()
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        config = {
+            "version": 1,
+            "collector_id": collector_id,
+            "entries": [{
+                "id": "33333333-3333-4333-8333-333333333333",
+                "source": {"kind": "external", "resource_id": "skin"},
+                "targets": [{"scope": "global"}],
+            }],
+        }
+        provider = self.module.build_lora_provider(collector_id, {
+            "skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", 0.8, 0.6]]},
+        })
+
+        regional, _ = self.module.BVRegionalPromptNode().build(
+            json.dumps(document), lora_v3_config_json=json.dumps(config), resource_provider=provider
+        )
+
+        self.assertEqual(regional["schema"], "bv.regional")
+        self.assertEqual(regional["version"], 3)
+        self.assertEqual(regional["core"]["document_id"], document["document_id"])
+        self.assertEqual(regional["capabilities"]["bv-nodepack.lora"], config)
+
+    def test_main_node_without_easy_mode_preserves_legacy_document_shape(self):
+        regional, _ = self.module.BVRegionalPromptNode().build(json.dumps(fixture()))
+        self.assertEqual(regional["schema"], "bv.regional")
+
     def test_old_prompt_call_and_native_compiler_inputs_remain_compatible(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
         self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "resource_provider"})

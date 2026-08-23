@@ -80,7 +80,7 @@ export function upstreamLoraTransformer(consumer:any){
             if(input?.type!=="BV_REGIONAL")continue;
             const link=graphLink(graph,input.link),source=link&&graph?.getNodeById?.(link.origin_id);
             if(!source||source.graph!==graph||seen.has(source))continue;
-            if(source.type==="BV Regional LoRA")return source;
+            if(source.type==="BV Regional LoRA"||source.type==="BV Regional Prompt")return source;
             seen.add(source);queue.push(source);
         }
     }

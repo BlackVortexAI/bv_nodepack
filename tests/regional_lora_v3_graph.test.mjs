@@ -43,3 +43,9 @@ test("a consumer added later discovers only its linked upstream LoRA transformer
   transformer.outputs=[{type:"BV_REGIONAL",links:[5]}];consumer.inputs=[{name:"regional",type:"BV_REGIONAL",link:5}];g.links.set(5,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
   assert.equal(upstreamLoraTransformer(consumer),transformer);
 });
+
+test("a consumer added later also discovers Regional Prompt easy mode",()=>{
+  const g=graph(),prompt=node(2,"BV Regional Prompt",g),consumer=node(3,"BV Regional Native Conditioning",g);g._nodes.push(prompt,consumer);
+  prompt.outputs=[{type:"BV_REGIONAL",links:[5]}];consumer.inputs=[{name:"regional",type:"BV_REGIONAL",link:5}];g.links.set(5,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
+  assert.equal(upstreamLoraTransformer(consumer),prompt);
+});

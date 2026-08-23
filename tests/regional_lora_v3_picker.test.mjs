@@ -27,5 +27,6 @@ test("external entries cannot be created without a live collector resource",()=>
 test("production LoRA presentation keeps ComfyUI links authoritative",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
  assert.match(source,/serialize:false/);assert.match(source,/connectLoraConsumerTree/);assert.match(source,/__bvLoraCollectorIdRemap/);assert.match(source,/__bvLoraResourceIdRemap/);
+ assert.match(source,/Open LoRA Editor/);assert.doesNotMatch(source,/addDOMWidget|ReactDOM/);
  assert.doesNotMatch(source,/graphToPrompt|queuePrompt|MutationObserver/);
 });
