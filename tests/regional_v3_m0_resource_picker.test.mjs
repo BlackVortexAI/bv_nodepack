@@ -5,7 +5,7 @@ import React from "../ui/node_modules/react/index.js";
 import { renderToStaticMarkup } from "../ui/node_modules/react-dom/server.node.js";
 import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
 import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
-import { ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
+import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
 import { installM0CanvasVisibility, markM0NodeElement } from "../ui/src/regional/m0VisualProjection.ts";
 import { resolveM0LocalLinkedCollector } from "../ui/src/regional/m0LocalGraph.ts";
 
@@ -73,6 +73,10 @@ test("a direct same-graph link resolves its local collector",()=>{
   const collector={id:1,graph,__bvM0ResourceProvider:true},consumer={id:2,graph,inputs:[{name:"resource_provider",link:1}]};graph._nodes.push(collector,consumer);
   graph.links.set(1,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
   assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),collector);
+});
+test("M0 multi fan-in removes hidden provider rows from the persisted node height",()=>{
+  let applied;const consumer={size:[300,520],computeSize:()=>[300,520],setSize:size=>{applied=size}};
+  compactM0HiddenProviderSlots(consumer,20);assert.deepEqual(applied,[300,120]);
 });
 
 test("the shared resource picker uses BV popover selects and treats empty as neutral",()=>{

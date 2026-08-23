@@ -4,7 +4,7 @@ import { getApi, getApp } from "../appHelper.js";
 import { ResourcePickerCollector } from "../ui/components";
 import { M0ResourcePickerPanel } from "./M0ResourcePickerPanel";
 import { M0MultiResourcePickerPanel, M0ResourceBinding } from "./M0MultiResourcePickerPanel";
-import { ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs, M0_MAX_MULTI_COLLECTORS, M0_PROVIDER_TYPE } from "./m0GraphContract";
+import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs, M0_MAX_MULTI_COLLECTORS, M0_PROVIDER_TYPE } from "./m0GraphContract";
 import { installM0CanvasVisibility, markM0NodeElement, requestM0DebugAnimation, syncM0DebugRoot } from "./m0VisualProjection";
 import { resolveM0LocalLinkedCollector } from "./m0LocalGraph";
 
@@ -112,7 +112,7 @@ function renderMultiPicker(node:any){
             onAdd={()=>{if(bindings.length>=M0_MAX_MULTI_COLLECTORS)return;bindings.push({binding_id:crypto.randomUUID(),collector_id:"",resource_id:"",resolved:false});saveBindings(node,bindings);draw();}}
             onRemove={index=>{const slots=ensureM0MultiConsumerInputs(node),slot=slots[index];if(slot>=0&&node.inputs?.[slot]?.link!=null)node.disconnectInput?.(slot);bindings.splice(index,1);saveBindings(node,bindings);for(let offset=index;offset<bindings.length;offset++)connectMulti(node,offset,bindings[offset].collector_id);const trailing=slots[bindings.length];if(trailing>=0&&node.inputs?.[trailing]?.link!=null)node.disconnectInput?.(trailing);draw();}}/>);
     };
-    draw();setMultiDebug(node,Boolean(node.properties?.bvM0DebugVisible),false);scheduleLegacyPickerLayout(node,host!);
+    draw();setMultiDebug(node,Boolean(node.properties?.bvM0DebugVisible),false);compactM0HiddenProviderSlots(node,M0_MAX_MULTI_COLLECTORS);scheduleLegacyPickerLayout(node,host!);
 }
 function installDomRefresh(node:any,refresh:()=>void){
     if(node.__bvM0DomRefresh)return;

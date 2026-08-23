@@ -139,7 +139,28 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(regional["schema"], "bv.regional")
         self.assertEqual(regional["version"], 3)
         self.assertEqual(regional["core"]["document_id"], document["document_id"])
-        self.assertEqual(regional["capabilities"]["bv-nodepack.lora"], config)
+        self.assertEqual(regional["capabilities"]["bv-nodepack.lora"], {
+            "version": 2,
+            "entries": [{**config["entries"][0], "source": {**config["entries"][0]["source"], "collector_id": collector_id}}],
+        })
+
+    def test_main_node_accepts_the_frontend_v3_easy_mode_envelope(self):
+        document = fixture()
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        entry = {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "source": {"kind": "external", "collector_id": collector_id, "resource_id": "skin"},
+            "targets": [{"scope": "global"}],
+        }
+        provider = self.module.build_lora_provider(collector_id, {
+            "skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", 0.8, 0.6]]},
+        })
+        regional, _ = self.module.BVRegionalPromptNode().build(
+            json.dumps(document),
+            lora_v3_config_json=json.dumps({"version": 3, "entries": [entry], "steps": []}),
+            resource_provider_1=provider,
+        )
+        self.assertEqual(regional["capabilities"]["bv-nodepack.lora"]["entries"], [entry])
 
     def test_main_node_without_easy_mode_preserves_legacy_document_shape(self):
         regional, _ = self.module.BVRegionalPromptNode().build(json.dumps(fixture()))
@@ -147,8 +168,14 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_old_prompt_call_and_native_compiler_inputs_remain_compatible(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
-        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "resource_provider"})
+        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()})
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
+
+    def test_regional_lora_nodes_expose_twenty_real_typed_provider_inputs(self):
+        for node_type in (self.module.BVRegionalPromptNode, self.module.BVRegionalLoraNode, self.module.BVRegionalNativeConditioningNode):
+            optional = node_type.INPUT_TYPES()["optional"]
+            providers = [optional[f"resource_provider_{index}"] for index in range(1, 21)]
+            self.assertTrue(all(spec[0] == self.module.RUNTIME_PROVIDER and spec[1]["forceInput"] for spec in providers))
 
     def test_named_lora_stack_node_builds_a_chainable_registry(self):
         output = self.module.BVNamedLoraStackNode().register(
@@ -314,7 +341,7 @@ class RegionalNodeTests(unittest.TestCase):
         )
         self.assertEqual(
             set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
-            {"lora_registry", "lora_bindings", "resource_provider"},
+            {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()},
         )
         mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])

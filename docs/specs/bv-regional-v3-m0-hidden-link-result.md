@@ -38,6 +38,8 @@ retains the real link and remaps their stable IDs together.
 - shared BV Resource Picker with visible unresolved state;
 - four-collector live fan-in and a twenty-collector automated stress path;
 - hidden ports, anchors, labels, and links in normal presentation;
+- hidden provider rows do not contribute their 20 px slot reserve to the
+  persisted consumer-node height;
 - dashed animated native links in debug presentation;
 - fresh workflow loads in Nodes 1.0 and Nodes 2.0 without canonical-array
   replacement by the BV canvas projection;

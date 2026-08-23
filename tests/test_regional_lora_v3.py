@@ -31,6 +31,89 @@ DOCUMENT = {
 
 
 class RegionalLoraV3Tests(unittest.TestCase):
+    def test_two_regions_resolve_independent_collectors(self):
+        capabilities, _ = register_lora_contracts()
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=capabilities)
+        left_id, right_id = [region["id"] for region in context.core["regions"][:2]]
+        payload = {
+            "version": 2,
+            "entries": [
+                {
+                    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "source": {
+                        "kind": "external",
+                        "collector_id": "22222222-2222-4222-8222-222222222222",
+                        "resource_id": "left-stack",
+                    },
+                    "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": left_id}],
+                },
+                {
+                    "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "source": {
+                        "kind": "external",
+                        "collector_id": "33333333-3333-4333-8333-333333333333",
+                        "resource_id": "right-stack",
+                    },
+                    "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": right_id}],
+                },
+            ],
+        }
+        transformed = transform_lora_capability(context, payload, registry=capabilities)
+        providers = {
+            "22222222-2222-4222-8222-222222222222": build_lora_provider(
+                "22222222-2222-4222-8222-222222222222",
+                {"left-stack": {"id": "left-stack", "name": "Left", "stack": [["left.safetensors", 1.0, 1.0]]}},
+            ),
+            "33333333-3333-4333-8333-333333333333": build_lora_provider(
+                "33333333-3333-4333-8333-333333333333",
+                {"right-stack": {"id": "right-stack", "name": "Right", "stack": [["right.safetensors", 0.5, 0.5]]}},
+            ),
+        }
+        scopes = resolve_lora_capability(transformed, providers, registry=capabilities)
+        self.assertEqual(scopes[left_id], [["left.safetensors", 1.0, 1.0]])
+        self.assertEqual(scopes[right_id], [["right.safetensors", 0.5, 0.5]])
+
+    def test_only_the_binding_with_a_missing_provider_is_reported_unresolved(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=register_lora_contracts()[0])
+        left_id, right_id = [region["id"] for region in context.core["regions"][:2]]
+        payload = {"version": 2, "entries": [
+            {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "source": {"kind": "external", "collector_id": "22222222-2222-4222-8222-222222222222", "resource_id": "left"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": left_id}]},
+            {"id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "source": {"kind": "external", "collector_id": "33333333-3333-4333-8333-333333333333", "resource_id": "right"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": right_id}]},
+        ]}
+        transformed = transform_lora_capability(context, payload, registry=register_lora_contracts()[0])
+        left = build_lora_provider("22222222-2222-4222-8222-222222222222", {"left": {"id": "left", "name": "Left", "stack": [["left.safetensors", 1.0, 1.0]]}})
+        with self.assertRaisesRegex(ValueError, "33333333-3333-4333-8333-333333333333"):
+            resolve_lora_capability(transformed, {left["provider_id"]: left}, registry=register_lora_contracts()[0])
+
+    def test_global_region_and_repeated_collector_resources_keep_semantic_order(self):
+        capabilities, _ = register_lora_contracts()
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=capabilities)
+        region_id = context.core["regions"][0]["id"]
+        first_id = "22222222-2222-4222-8222-222222222222"
+        second_id = "33333333-3333-4333-8333-333333333333"
+        payload = {"version": 2, "entries": [
+            {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "source": {"kind": "external", "collector_id": first_id, "resource_id": "global"}, "targets": [{"scope": "global"}]},
+            {"id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "source": {"kind": "external", "collector_id": second_id, "resource_id": "regional"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": region_id}]},
+            {"id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "source": {"kind": "external", "collector_id": first_id, "resource_id": "second"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": region_id}]},
+        ]}
+        transformed = transform_lora_capability(context, payload, registry=capabilities)
+        providers = {
+            first_id: build_lora_provider(first_id, {
+                "global": {"id": "global", "name": "Global", "stack": [["global.safetensors", 1.0, 1.0]]},
+                "second": {"id": "second", "name": "Second", "stack": [["second.safetensors", 0.4, 0.3]]},
+            }),
+            second_id: build_lora_provider(second_id, {"regional": {"id": "regional", "name": "Regional", "stack": [["regional.safetensors", 0.7, 0.6]]}}),
+        }
+        scopes = resolve_lora_capability(transformed, providers, registry=capabilities)
+        self.assertEqual(scopes["background"], [["global.safetensors", 1.0, 1.0]])
+        self.assertEqual(scopes[region_id], [
+            ["global.safetensors", 1.0, 1.0],
+            ["regional.safetensors", 0.7, 0.6],
+            ["second.safetensors", 0.4, 0.3],
+        ])
     def setUp(self):
         self.capabilities, self.resources = register_lora_contracts()
         self.context = normalize_context(DOCUMENT, registry=self.capabilities)
@@ -82,9 +165,13 @@ class RegionalLoraV3Tests(unittest.TestCase):
 
     def test_provider_identity_is_fail_closed(self):
         provider = build_lora_provider("22222222-2222-4222-8222-222222222222", {})
-        payload = {"version": 1, "collector_id": "55555555-5555-4555-8555-555555555555", "entries": []}
+        payload = {"version": 1, "collector_id": "55555555-5555-4555-8555-555555555555", "entries": [{
+            "id": "33333333-3333-4333-8333-333333333333",
+            "source": {"kind": "external", "resource_id": "skin"},
+            "targets": [{"scope": "global"}],
+        }]}
         transformed = transform_lora_capability(self.context, payload, registry=self.capabilities)
-        with self.assertRaisesRegex(ValueError, "mismatched"):
+        with self.assertRaisesRegex(ValueError, "missing"):
             resolve_lora_capability(transformed, provider, registry=self.capabilities)
 
     def test_transform_does_not_mutate_a_branch(self):
@@ -93,14 +180,20 @@ class RegionalLoraV3Tests(unittest.TestCase):
         self.assertNotIn(LORA_CAPABILITY, self.context.capabilities)
         self.assertIn(LORA_CAPABILITY, transformed.capabilities)
 
-    def test_merge_and_subtract_require_the_same_collector(self):
-        first = {"version": 1, "collector_id": "22222222-2222-4222-8222-222222222222", "entries": []}
+    def test_merge_and_subtract_allow_independent_collectors_by_entry_id(self):
+        first = {"version": 1, "collector_id": "22222222-2222-4222-8222-222222222222", "entries": [{
+            "id": "33333333-3333-4333-8333-333333333333", "source": {"kind": "external", "resource_id": "first"}, "targets": [{"scope": "global"}],
+        }]}
         context = transform_lora_capability(self.context, first, registry=self.capabilities)
-        other = {"version": 1, "collector_id": "55555555-5555-4555-8555-555555555555", "entries": []}
-        with self.assertRaisesRegex(ValueError, "same collector_id"):
-            transform_lora_capability(context, other, registry=self.capabilities, operation="merge")
-        with self.assertRaisesRegex(ValueError, "same collector_id"):
-            transform_lora_capability(context, other, registry=self.capabilities, operation="subtract")
+        other = {"version": 1, "collector_id": "55555555-5555-4555-8555-555555555555", "entries": [{
+            "id": "44444444-4444-4444-8444-444444444444", "source": {"kind": "external", "resource_id": "second"}, "targets": [{"scope": "global"}],
+        }]}
+        merged = transform_lora_capability(context, other, registry=self.capabilities, operation="merge")
+        self.assertEqual([entry["source"]["collector_id"] for entry in merged.require_capability(LORA_CAPABILITY)["entries"]], [
+            "22222222-2222-4222-8222-222222222222", "55555555-5555-4555-8555-555555555555"
+        ])
+        subtracted = transform_lora_capability(merged, other, registry=self.capabilities, operation="subtract")
+        self.assertEqual([entry["id"] for entry in subtracted.require_capability(LORA_CAPABILITY)["entries"]], ["33333333-3333-4333-8333-333333333333"])
 
     def test_clear_removes_only_the_lora_capability(self):
         payload = {"version": 1, "collector_id": None, "entries": []}

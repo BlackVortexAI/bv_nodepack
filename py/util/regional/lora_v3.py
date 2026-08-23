@@ -46,12 +46,12 @@ def validate_lora_resource_reference(reference: dict[str, Any]) -> None:
 
 
 def validate_lora_capability(payload: dict[str, Any]) -> None:
-    if set(payload) != {"version", "collector_id", "entries"}:
+    version = payload.get("version")
+    expected = {"version", "collector_id", "entries"} if version == 1 else {"version", "entries"}
+    if version not in {1, 2} or set(payload) != expected:
         raise RegionalContextError("LoRA capability has unknown or missing fields")
-    if payload["version"] != 1:
-        raise RegionalContextError("LoRA capability version must be 1")
-    collector_id = payload["collector_id"]
-    if collector_id is not None:
+    collector_id = payload.get("collector_id")
+    if version == 1 and collector_id is not None:
         _required_uuid(collector_id, "LoRA collector_id")
     entries = payload["entries"]
     if not isinstance(entries, list):
@@ -70,8 +70,11 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
         if not isinstance(source, dict):
             raise RegionalContextError(f"{path}.source must be an object")
         if source.get("kind") == "external":
-            if set(source) != {"kind", "resource_id"} or not isinstance(source["resource_id"], str) or not source["resource_id"].strip():
+            source_fields = {"kind", "resource_id"} if version == 1 else {"kind", "collector_id", "resource_id"}
+            if set(source) != source_fields or not isinstance(source["resource_id"], str) or not source["resource_id"].strip():
                 raise RegionalContextError(f"{path}.source is not a valid external LoRA reference")
+            if version == 2:
+                _required_uuid(source["collector_id"], f"{path}.source.collector_id")
             needs_collector = True
         elif source.get("kind") == "native":
             if set(source) != {"kind", "lora_name", "model_strength", "clip_strength"}:
@@ -96,8 +99,37 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
                     raise RegionalContextError(f"{target_path} region target has unknown or missing fields")
                 _required_uuid(target["document_id"], f"{target_path}.document_id")
                 _required_uuid(target["region_id"], f"{target_path}.region_id")
-    if needs_collector and collector_id is None:
+    if version == 1 and needs_collector and collector_id is None:
         raise RegionalContextError("external LoRA entries require collector_id")
+
+
+def migrate_lora_capability_v1(payload: dict[str, Any]) -> dict[str, Any]:
+    validate_lora_capability(payload)
+    collector_id = payload["collector_id"]
+    entries = []
+    for entry in payload["entries"]:
+        source = dict(entry["source"])
+        if source["kind"] == "external":
+            source["collector_id"] = collector_id
+        entries.append({**entry, "source": source})
+    migrated = {"version": 2, "entries": entries}
+    validate_lora_capability(migrated)
+    return migrated
+
+
+def normalize_lora_capability(payload: Any) -> dict[str, Any]:
+    clean = dict(payload)
+    validate_lora_capability(clean)
+    return migrate_lora_capability_v1(clean) if clean["version"] == 1 else clean
+
+
+def normalize_lora_prompt_config(payload: Any) -> dict[str, Any]:
+    """Convert the shared frontend envelope into the persisted capability payload."""
+    if isinstance(payload, dict) and payload.get("version") == 3:
+        if set(payload) != {"version", "entries", "steps"} or payload.get("steps") != []:
+            raise RegionalContextError("Regional Prompt LoRA config version 3 must contain entries and no steps")
+        payload = {"version": 2, "entries": payload["entries"]}
+    return normalize_lora_capability(payload)
 
 
 def _replace_lora(_current: dict[str, Any], configured: Any) -> dict[str, Any]:
@@ -106,16 +138,12 @@ def _replace_lora(_current: dict[str, Any], configured: Any) -> dict[str, Any]:
 
 def _merge_lora(current: dict[str, Any], configured: Any) -> dict[str, Any]:
     incoming = dict(configured)
-    if current.get("collector_id") != incoming.get("collector_id"):
-        raise RegionalContextError("LoRA merge requires the same collector_id")
     incoming_ids = {entry["id"] for entry in incoming["entries"]}
     return {**incoming, "entries": [entry for entry in current["entries"] if entry["id"] not in incoming_ids] + incoming["entries"]}
 
 
 def _subtract_lora(current: dict[str, Any], configured: Any) -> dict[str, Any]:
     incoming = dict(configured)
-    if current.get("collector_id") != incoming.get("collector_id"):
-        raise RegionalContextError("LoRA subtract requires the same collector_id")
     removed = {entry["id"] for entry in incoming["entries"]}
     return {**current, "entries": [entry for entry in current["entries"] if entry["id"] not in removed]}
 
@@ -126,8 +154,10 @@ def register_lora_contracts() -> tuple[CapabilityRegistry, ResourceRegistry]:
     capabilities.register(
         "bv-nodepack", "lora",
         CapabilityRegistration(
-            version=1,
+            version=2,
             validator=validate_lora_capability,
+            version_validators={1: validate_lora_capability, 2: validate_lora_capability},
+            migrations={1: migrate_lora_capability_v1},
             operations={"replace": _replace_lora, "merge": _merge_lora, "subtract": _subtract_lora, "clear": lambda current, _configured: current},
             metadata={"display_name": "LoRA"},
         ),
@@ -160,8 +190,7 @@ def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityR
     context = normalize_context(value, registry=registry)
     if operation == "clear":
         return context.without_capability(LORA_CAPABILITY)
-    clean = dict(payload)
-    validate_lora_capability(clean)
+    clean = normalize_lora_capability(payload)
     document_id = context.core["document_id"]
     region_ids = {region["id"] for region in context.core["regions"]}
     for entry in clean["entries"]:
@@ -207,8 +236,9 @@ def transform_lora_sequence(
         raise RegionalContextError("LoRA transformer config must be an object")
     if config.get("version") == 1:
         return transform_lora_capability(value, config, registry=registry, operation=fallback_operation)
-    if config.get("version") != 2 or set(config) != {"version", "collector_id", "entries", "steps"}:
-        raise RegionalContextError("LoRA transformer config version 2 has unknown or missing fields")
+    version = config.get("version")
+    if version not in {2, 3} or set(config) != ({"version", "collector_id", "entries", "steps"} if version == 2 else {"version", "entries", "steps"}):
+        raise RegionalContextError("LoRA transformer config has unknown or missing fields")
     if config["entries"]:
         raise RegionalContextError("LoRA transformer config version 2 stores entries inside steps")
     steps = config["steps"]
@@ -237,8 +267,8 @@ def transform_lora_sequence(
                 raise RegionalContextError(f"{path}.target region target has unknown or missing fields")
             _required_uuid(target["document_id"], f"{path}.target.document_id")
             _required_uuid(target["region_id"], f"{path}.target.region_id")
-        scoped = {"version": 1, "collector_id": config["collector_id"], "entries": step["entries"]}
-        validate_lora_capability(scoped)
+        scoped = {"version": 1, "collector_id": config["collector_id"], "entries": step["entries"]} if version == 2 else {"version": 2, "entries": step["entries"]}
+        scoped = normalize_lora_capability(scoped)
         if any(len(entry["targets"]) != 1 or not _same_lora_target(entry["targets"][0], target) for entry in scoped["entries"]):
             raise RegionalContextError(f"{path}.entries must target only the step scope")
         context = transform_lora_capability(context, scoped, registry=registry, operation=operation)
@@ -251,7 +281,9 @@ def _provider_resources(provider: Any, expected_id: str | None) -> dict[str, Any
             raise RegionalContextError("LoRA provider is connected but the capability has no collector_id")
         return {}
     if not isinstance(provider, dict):
-        raise RegionalContextError("LoRA collector is missing; collector and consumer must be in the same graph")
+        raise RegionalContextError(
+            f"LoRA collector {expected_id!r} is missing; collector and consumer must be in the same graph"
+        )
     if provider.get("schema") != "bv.runtime_resource_provider" or provider.get("version") != 1:
         raise RegionalContextError("LoRA runtime resource provider is invalid")
     if provider.get("resource_type") != LORA_RESOURCE_TYPE:
@@ -269,17 +301,19 @@ def _provider_resources(provider: Any, expected_id: str | None) -> dict[str, Any
 def resolve_lora_capability(value: Any, provider: Any = None, *, registry: CapabilityRegistry) -> dict[str, list[list[Any]]]:
     context = normalize_context(value, registry=registry)
     payload = context.require_capability(LORA_CAPABILITY)
-    resources = _provider_resources(provider, payload["collector_id"])
+    providers = provider if isinstance(provider, dict) and provider.get("schema") != "bv.runtime_resource_provider" else ({provider.get("provider_id"): provider} if isinstance(provider, dict) else {})
     direct: dict[str, list[list[Any]]] = {"global": []}
     for entry in payload["entries"]:
         source = entry["source"]
         if source["kind"] == "native":
             stack = [[source["lora_name"], float(source["model_strength"]), float(source["clip_strength"])]]
         else:
+            collector_id = source["collector_id"]
+            resources = _provider_resources(providers.get(collector_id), collector_id)
             resource = resources.get(source["resource_id"])
             if not isinstance(resource, dict):
                 raise RegionalContextError(
-                    f"LoRA resource is unresolved: {source['resource_id']!r} in collector {payload['collector_id']!r}"
+                    f"LoRA resource is unresolved: {source['resource_id']!r} in collector {collector_id!r}"
                 )
             stack = parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {source["resource_id"]: resource}})["stacks"][source["resource_id"]]["stack"]
         for target in entry["targets"]:

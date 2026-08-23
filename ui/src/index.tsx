@@ -24,7 +24,7 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
-import { hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
+import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
@@ -891,7 +891,7 @@ comfyApp.registerExtension({
                 button.label = "Quick Edit Prompts";
                 button.serialize = false;
             }
-            this.setSize?.([Math.max(this.size?.[0] ?? 0, 220), this.computeSize?.()[1] ?? 60]);
+            compactLoraConsumerNode(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };
@@ -903,6 +903,7 @@ comfyApp.registerExtension({
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
             installLoraV3ConsumerSlot(this);
+            compactLoraConsumerNode(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };

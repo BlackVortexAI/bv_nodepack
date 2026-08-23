@@ -266,12 +266,19 @@ executes the detailer.
 
 ### LoRA
 
-One Regional context references at most one external LoRA collector. The collector
-may contain any number of named stacks with stable IDs. The LoRA capability may mix
-BV-native serializable LoRAs and external live-stack references.
+A Regional context may reference multiple external LoRA collectors. Every external
+entry owns its stable entry/binding ID and persists both `collector_id` and
+`resource_id`. Each distinct used collector is represented on every executing
+consumer by its own ordinary typed same-graph ComfyUI link; repeated entries may
+reuse that collector link while preserving their independent resources, targets,
+and semantic order. The LoRA capability may mix BV-native serializable LoRAs and
+external live-stack references.
 
-Replacing the capability may switch collectors. Merge and subtract require the
-same collector ID. Clear removes the collector reference and all bindings.
+Replacing the capability may switch any number of collectors. Merge and subtract
+operate by stable entry ID; complete per-entry source references remove the former
+global same-collector restriction. Clear removes the capability and all bindings.
+Legacy single-collector payloads migrate deterministically by copying their global
+collector ID into every external entry without changing entry IDs or order.
 
 ### Detailer and detectors
 

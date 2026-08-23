@@ -37,6 +37,7 @@ from ..util.regional.lora_v3 import (
     RUNTIME_PROVIDER,
     build_lora_provider,
     resolve_lora_capability,
+    normalize_lora_prompt_config,
     transform_lora_capability,
     transform_lora_sequence,
 )
@@ -65,7 +66,24 @@ CATEGORY_MODEL_KREA2 = f"{CATEGORY_MODELS}/Krea 2"
 CATEGORY_MODEL_ANIMA = f"{CATEGORY_MODELS}/Anima"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
-DEFAULT_LORA_V3_JSON = '{"version":1,"collector_id":null,"entries":[]}'
+DEFAULT_LORA_V3_JSON = '{"version":3,"entries":[],"steps":[]}'
+MAX_LORA_COLLECTORS = 20
+
+
+def _lora_provider_inputs():
+    return {
+        f"resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
+        for index in range(1, MAX_LORA_COLLECTORS + 1)
+    }
+
+
+def _lora_provider_map(resource_provider=None, **providers):
+    values = [resource_provider, *(providers.get(f"resource_provider_{index}") for index in range(1, MAX_LORA_COLLECTORS + 1))]
+    return {
+        value["provider_id"]: value
+        for value in values
+        if isinstance(value, dict) and isinstance(value.get("provider_id"), str)
+    }
 
 
 def apply_anima_token_lora_patch(*args, **kwargs):
@@ -94,6 +112,7 @@ class BVRegionalPromptNode:
                     {"default": DEFAULT_LORA_V3_JSON, "multiline": True, "dynamicPrompts": False},
                 ),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
             },
         }
 
@@ -102,13 +121,15 @@ class BVRegionalPromptNode:
     FUNCTION = "build"
     CATEGORY = CATEGORY_CORE
 
-    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, resource_provider=None):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, resource_provider=None, **providers):
         document = parse_document(regional_json)
         payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
         regional = document
         if payload.get("entries"):
-            regional = transform_lora_capability(document, payload, registry=LORA_CAPABILITY_REGISTRY)
-            resolve_lora_capability(regional, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
+            regional = transform_lora_capability(
+                document, normalize_lora_prompt_config(payload), registry=LORA_CAPABILITY_REGISTRY
+            )
+            resolve_lora_capability(regional, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
             regional = regional.to_dict()
         return regional, reconcile_bindings(lora_bindings_json, document)
 
@@ -167,6 +188,7 @@ class BVRegionalLoraNode:
             },
             "optional": {
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
             },
         }
 
@@ -176,24 +198,24 @@ class BVRegionalLoraNode:
     CATEGORY = CATEGORY_CORE
     DESCRIPTION = "Adds or replaces the immutable BV Regional v3 LoRA capability."
 
-    def transform(self, regional, operation, config_json, resource_provider=None):
+    def transform(self, regional, operation, config_json, resource_provider=None, **providers):
         payload = json.loads(config_json) if isinstance(config_json, str) else config_json
         transformed = transform_lora_sequence(
             regional, payload, registry=LORA_CAPABILITY_REGISTRY, fallback_operation=operation
         )
         result = transformed.capabilities.get(LORA_CAPABILITY)
         if result is not None and any(entry["source"]["kind"] == "external" for entry in result["entries"]):
-            resolve_lora_capability(transformed, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
+            resolve_lora_capability(transformed, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
         return (transformed.to_dict(),)
 
 
-def _consumer_lora_scopes(regional, document, lora_registry=None, lora_bindings=None, resource_provider=None):
+def _consumer_lora_scopes(regional, document, lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
     if lora_registry is not None or lora_bindings is not None:
         return resolve_scope_stacks(lora_registry, lora_bindings, document)
     context = normalize_context(regional, registry=LORA_CAPABILITY_REGISTRY)
     if LORA_CAPABILITY not in context.capabilities:
         return {}
-    return resolve_lora_capability(context, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
+    return resolve_lora_capability(context, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
 
 
 class BVRegionalDebugNode:
@@ -458,6 +480,7 @@ class BVRegionalNativeConditioningNode:
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
             },
         }
 
@@ -470,10 +493,10 @@ class BVRegionalNativeConditioningNode:
         "mask_bounds requires a 2D image latent and is rejected for Anima with a compatibility error."
     )
 
-    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None, resource_provider=None):
+    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
         )
         hook_groups = create_hook_groups(scope_stacks)
         return compile_native_conditioning(
@@ -612,6 +635,7 @@ class BVRegionalKrea2AttentionNode:
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
             },
         }
 
@@ -640,12 +664,13 @@ class BVRegionalKrea2AttentionNode:
         lora_registry=None,
         lora_bindings=None,
         resource_provider=None,
+        **providers,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
         )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
@@ -711,6 +736,7 @@ class BVRegionalAnimaConditioningNode:
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **_lora_provider_inputs(),
             },
         }
 
@@ -741,6 +767,7 @@ class BVRegionalAnimaConditioningNode:
         lora_registry=None,
         lora_bindings=None,
         resource_provider=None,
+        **providers,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
@@ -754,7 +781,7 @@ class BVRegionalAnimaConditioningNode:
 
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
         )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)

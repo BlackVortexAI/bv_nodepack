@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import React from "../ui/node_modules/react/index.js";
 import {renderToStaticMarkup} from "../ui/node_modules/react-dom/server.node.js";
 import {LoraV3ResourcePickerPanel,OptionalLoraV3ScopePicker,withoutLoraV3Target} from "../ui/src/regional/LoraV3ResourcePickerPanel.tsx";
-import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config} from "../ui/src/regional/loraV3Config.ts";
+import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config,updateLoraV3EntryCollector} from "../ui/src/regional/loraV3Config.ts";
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
 const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
@@ -24,6 +24,18 @@ test("an unresolved production selection remains explicit",()=>{
 });
 test("config serialization is named and deterministic outside positional visual widgets",()=>{
  const value=emptyLoraV3Config();assert.deepEqual(parseLoraV3Config(serializeLoraV3Config(value)),value);
+});
+test("legacy single-collector config migrates every external entry losslessly",()=>{
+ const legacy={version:1,collector_id:"collector-a",entries:[{id:"left",source:{kind:"external",resource_id:"a"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]},{id:"native",source:{kind:"native",lora_name:"n",model_strength:1,clip_strength:1},targets:[{scope:"global"}]}]};
+ const migrated=parseLoraV3Config(legacy);assert.equal(migrated.version,3);assert.equal(migrated.entries[0].source.collector_id,"collector-a");assert.equal(migrated.entries[0].id,"left");assert.deepEqual(migrated.entries[1],legacy.entries[1]);
+});
+test("unknown future config versions fail closed without mutating the persisted value",()=>{
+ const future={version:99,entries:[{id:"future",source:{kind:"future"},targets:[]}],future_field:{keep:true}},before=JSON.stringify(future);
+ assert.throws(()=>parseLoraV3Config(future),/Invalid BV Regional LoRA v3 configuration/);assert.equal(JSON.stringify(future),before);
+});
+test("changing region two collector leaves region one collector and resource unchanged",()=>{
+ const config=parseLoraV3Config({version:3,entries:[{id:"left",source:{kind:"external",collector_id:"collector-a",resource_id:"resource-a"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]},{id:"right",source:{kind:"external",collector_id:"collector-b",resource_id:"resource-b"},targets:[{scope:"region",document_id:"doc",region_id:"right"}]}],steps:[]});
+ const next=updateLoraV3EntryCollector(config,"right","collector-c","resource-c");assert.deepEqual(next.entries[0],config.entries[0]);assert.deepEqual(next.entries[1].source,{kind:"external",collector_id:"collector-c",resource_id:"resource-c"});
 });
 test("external entries cannot be created without a live collector resource",()=>{
  const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors:[],config:emptyLoraV3Config(),resolved:false,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){},onRemove(){}}));
