@@ -4,6 +4,7 @@ from py.nodes.bv_regional_v3_m0 import BVM0FakeResourceCollector, BVM0FakeResour
 class RegionalV3M0Tests(unittest.TestCase):
     def test_typed_provider_and_stable_ids(self):
         self.assertEqual(BVM0FakeResourceCollector.RETURN_TYPES, (RESOURCE_PROVIDER,))
+        self.assertTrue(BVM0FakeResourceConsumer.INPUT_TYPES()["optional"]["resource_provider"][1]["forceInput"])
         self.assertEqual(len(set(RESOURCE_IDS)), 2)
     def test_runtime_value_changes_provider_and_cache_key(self):
         node=BVM0FakeResourceCollector(); first=node.collect(2,"c",*RESOURCE_IDS)[0]; second=node.collect(3,"c",*RESOURCE_IDS)[0]

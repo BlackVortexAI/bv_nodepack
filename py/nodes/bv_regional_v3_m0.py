@@ -41,7 +41,7 @@ class BVM0FakeResourceConsumer:
         return {"required": {
             "collector_id": ("STRING", {"default": ""}),
             "resource_id": ("STRING", {"default": ""}),
-        }, "optional": {"resource_provider": (RESOURCE_PROVIDER,)}}
+        }, "optional": {"resource_provider": (RESOURCE_PROVIDER, {"forceInput": True})}}
 
     RETURN_TYPES = ("INT", "STRING")
     RETURN_NAMES = ("value", "selection")
