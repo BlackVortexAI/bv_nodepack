@@ -10,6 +10,7 @@ const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Sk
 const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
 const pickerSource=readFileSync(new URL("../ui/src/regional/LoraV3ResourcePickerPanel.tsx",import.meta.url),"utf8");
 const regionalEditorSource=readFileSync(new URL("../ui/src/regional/RegionalEditor.tsx",import.meta.url),"utf8");
+const dockSource=readFileSync(new URL("../ui/src/ui/dock.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
 test("the production picker renders Collector / Resource from persisted ids",()=>{
  const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
@@ -49,6 +50,12 @@ test("Regional Prompt easy mode changes scope immediately when the selected regi
  const config={version:1,collector_id:"collector",entries:[{id:"left-entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]}]};
  const right=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"region",document_id:"doc",region_id:"right"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(right,/LoRA disabled/);assert.doesNotMatch(right,/LoRA Stack 1/);
+});
+test("dock panels resolve their latest content after FlexLayout has mounted the tab",()=>{
+ assert.match(dockSource,/createContext<ReadonlyMap<string,ReactNode>>/);
+ assert.match(dockSource,/function LiveDockPanel/);
+ assert.match(dockSource,/factory=\{\(node:TabNode\)=><LiveDockPanel/);
+ assert.doesNotMatch(dockSource,/factory=\{\(node:TabNode\)=>content\.get/);
 });
 test("Regional Prompt keeps the LoRA toggle above the stack card without overlap",()=>{
  assert.match(styles,/\.bv-lora-v3-enable-row\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
