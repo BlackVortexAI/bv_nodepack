@@ -327,6 +327,21 @@ test("regional toolbar uses compact framework buttons and theme-colored outline 
     assert.match(styles, /\.bv-toolbar \.bv-button>svg\s*\{[^}]*fill:none[^}]*stroke:currentColor/s);
 });
 
+test("regional drawing toolbar remains pointer-interactive inside the passive artboard overlay", () => {
+    assert.match(styles, /\.artboard-tools\s*\{[^}]*pointer-events:\s*none/s);
+    assert.match(styles, /\.artboard-tools\s+\.bv-toolbar\s*\{[^}]*pointer-events:\s*auto/s);
+});
+
+test("active polygon input closes from a single click near its first screen point", () => {
+    assert.match(regionalEditor, /shouldClosePolygon\([^)]*event\.clientX[^)]*event\.clientY[^)]*\)\)\s*\{\s*finalizePolygon\(\)/s);
+});
+
+test("completion popup overrides generic button layout with compact left-aligned BV styling", () => {
+    assert.match(styles, /\.bv-completion-popup \.bv-button\s*\{[^}]*justify-content:stretch[^}]*justify-items:start/s);
+    assert.match(styles, /\.bv-completion-popup button\s*\{[^}]*color:\s*var\(--bv-ui-text\)/s);
+    assert.match(styles, /\.bv-completion-popup small\s*\{[^}]*color:\s*var\(--bv-ui-muted\)/s);
+});
+
 test("regional default layout separates geometric tools left from prompting right", () => {
     const selectionStart = options.indexOf('activeTab !== "selection"');
     const regionStart = options.indexOf('activeTab !== "region"');

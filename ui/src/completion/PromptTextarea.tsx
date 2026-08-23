@@ -18,8 +18,11 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     const requestRef = useRef<ReturnType<typeof completionRequest>>(null);
     const abortRef = useRef<AbortController | null>(null);
     const timerRef = useRef<number | null>(null);
+    const popupHeightRef = useRef(210);
+    const searchRef = useRef<(text: string, caret: number, selectionEnd?: number) => void>(() => {});
 
     const close = () => { abortRef.current?.abort(); setSuggestions([]); setPopup(null); };
+    const position = () => { const element = textarea.current; if (element) setPopup(completionPopupPosition(element, placement, popupHeightRef.current)); };
     const search = (text: string, caret: number, selectionEnd = caret) => {
         if (!enabled) return close();
         if (caret !== selectionEnd) return close();
@@ -37,6 +40,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
             setPopup(items.length && element ? completionPopupPosition(element, placement) : null);
         }, 120);
     };
+    searchRef.current = search;
     const accept = (index = selected) => {
         const request = requestRef.current, suggestion = suggestions[index];
         if (!request || !suggestion) return;
@@ -46,7 +50,18 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
     };
 
     useEffect(() => { if (!enabled) close(); }, [enabled]);
-    useEffect(() => { if (popup && textarea.current) setPopup(completionPopupPosition(textarea.current, placement)); }, [placement]);
+    useEffect(() => {
+        const selectionChanged = () => { const element = textarea.current; if (element && document.activeElement === element) searchRef.current(element.value, element.selectionStart, element.selectionEnd); };
+        document.addEventListener("selectionchange", selectionChanged);
+        return () => document.removeEventListener("selectionchange", selectionChanged);
+    }, []);
+    useEffect(() => { if (popup) position(); }, [placement]);
+    useEffect(() => {
+        if (!popup) return;
+        window.addEventListener("scroll", position, true);
+        window.addEventListener("resize", position);
+        return () => { window.removeEventListener("scroll", position, true); window.removeEventListener("resize", position); };
+    }, [Boolean(popup), placement]);
     useEffect(() => () => { abortRef.current?.abort(); if (timerRef.current != null) window.clearTimeout(timerRef.current); }, []);
     return <>
         <span className="bv-textarea-shell resize-vertical"><TextareaControl {...props} ref={textarea} value={value} onChange={event => { onValue(event.target.value); search(event.target.value, event.target.selectionStart, event.target.selectionEnd); }} onSelect={event => { search(event.currentTarget.value, event.currentTarget.selectionStart, event.currentTarget.selectionEnd); onSelect?.(event); }} onKeyDown={event => {
@@ -57,6 +72,12 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
             }
             onKeyDown?.(event);
         }} onBlur={event => { window.setTimeout(close, 120); onBlur?.(event); }}/></span>
-        {enabled && popup && <CompletionPopup suggestions={suggestions} selected={selected} position={popup} onAccept={accept}/>}
+        {enabled && popup && <CompletionPopup
+            suggestions={suggestions}
+            selected={selected}
+            position={popup}
+            onAccept={accept}
+            onHeight={height => { if (Math.abs(height - popupHeightRef.current) < 1) return; popupHeightRef.current = height; position(); }}
+        />}
     </>;
 }

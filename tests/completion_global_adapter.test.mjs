@@ -15,5 +15,16 @@ test("global completion targets native multiline widgets and provides an explici
 test("global completion reevaluates suggestions when the caret moves", () => {
     assert.match(source, /addEventListener\("select", search\)/);
     assert.match(source, /removeEventListener\("select", search\)/);
+    assert.match(source, /document\.addEventListener\("selectionchange", selectionChanged\)/);
+    assert.match(source, /document\.removeEventListener\("selectionchange", selectionChanged\)/);
     assert.match(promptTextareaSource, /onSelect=\{event => \{ search\(/);
+    assert.match(promptTextareaSource, /document\.addEventListener\("selectionchange", selectionChanged\)/);
+    assert.match(promptTextareaSource, /document\.removeEventListener\("selectionchange", selectionChanged\)/);
+});
+
+test("BV prompt completion follows scrolling fields and corrects for measured popup height", () => {
+    assert.match(promptTextareaSource, /addEventListener\("scroll",\s*position,\s*true\)/);
+    assert.match(promptTextareaSource, /addEventListener\("resize",\s*position\)/);
+    assert.match(promptTextareaSource, /onHeight=/);
+    assert.match(source, /onHeight:/);
 });

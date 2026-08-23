@@ -25,6 +25,7 @@ function attach(textarea: HTMLTextAreaElement) {
     let timer: number | null = null;
     let popup: HTMLDivElement | null = null;
     let popupRoot: Root | null = null;
+    let popupHeight = 210;
 
     const close = () => {
         abort?.abort();
@@ -38,12 +39,12 @@ function attach(textarea: HTMLTextAreaElement) {
     };
     const position = () => {
         if (!popup) return;
-        const next = completionPopupPosition(textarea, completionPlacement(), popup.offsetHeight || 210);
+        const next = completionPopupPosition(textarea, completionPlacement(), popupHeight);
         renderPopup(next);
     };
-    const renderPopup = (coordinates = completionPopupPosition(textarea, completionPlacement(), popup?.offsetHeight || 210)) => {
+    const renderPopup = (coordinates = completionPopupPosition(textarea, completionPlacement(), popupHeight)) => {
         if (!popup) { popup = document.createElement("div"); popup.className = "bv-ui bv-ui-portal"; document.body.append(popup); popupRoot = createRoot(popup); }
-        popupRoot!.render(createElement(CompletionPopup, { suggestions, selected, position: coordinates, onAccept: accept }));
+        popupRoot!.render(createElement(CompletionPopup, { suggestions, selected, position: coordinates, onAccept: accept, onHeight: (height: number) => { if (Math.abs(height - popupHeight) < 1) return; popupHeight = height; position(); } }));
     };
     const render = () => renderPopup();
     const accept = (index = selected) => {
@@ -87,8 +88,10 @@ function attach(textarea: HTMLTextAreaElement) {
         }
     };
     const blur = () => window.setTimeout(() => { if (!popup?.contains(document.activeElement)) close(); }, 120);
+    const selectionChanged = () => { if (document.activeElement === textarea) search(); };
     textarea.addEventListener("input", search);
     textarea.addEventListener("select", search);
+    document.addEventListener("selectionchange", selectionChanged);
     textarea.addEventListener("keydown", keydown, true);
     textarea.addEventListener("blur", blur);
     window.addEventListener("resize", position);
@@ -97,6 +100,7 @@ function attach(textarea: HTMLTextAreaElement) {
         close();
         textarea.removeEventListener("input", search);
         textarea.removeEventListener("select", search);
+        document.removeEventListener("selectionchange", selectionChanged);
         textarea.removeEventListener("keydown", keydown, true);
         textarea.removeEventListener("blur", blur);
         window.removeEventListener("resize", position);

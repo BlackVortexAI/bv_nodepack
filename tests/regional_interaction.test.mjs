@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addGeometryLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
+import { addGeometryLayerTarget, regionsInPaintOrder, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldClosePolygon, shouldStartSelectionMove, synchronizeRegionPriorities } from "../ui/src/regional/interaction.ts";
 import { mergeSelectedLayers, selectLayers, splitCompoundLayer } from "../ui/src/regional/layerOperations.ts";
 import { connectedAreas } from "../ui/src/regional/connectedComponents.ts";
 
@@ -29,6 +29,13 @@ test("only drawing appends the pointer-up point to a brush stroke", () => {
     assert.equal(shouldAppendFinalBrushPoint("draw-brush"), true);
     assert.equal(shouldAppendFinalBrushPoint("move"), false);
     assert.equal(shouldAppendFinalBrushPoint("resize"), false);
+});
+
+test("polygon closes when a later click returns to its first point", () => {
+    const first = { x: 120, y: 80 };
+    assert.equal(shouldClosePolygon(3, first, { x: 126, y: 86 }), true);
+    assert.equal(shouldClosePolygon(3, first, { x: 140, y: 80 }), false);
+    assert.equal(shouldClosePolygon(2, first, first), false);
 });
 
 test("add geometry extends the selected editable layer regardless of its existing geometry type", () => {

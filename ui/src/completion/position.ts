@@ -11,12 +11,16 @@ const COPIED_STYLES = [
 export function textareaCaretRect(textarea: HTMLTextAreaElement, caret = textarea.selectionStart ?? textarea.value.length) {
     const bounds = textarea.getBoundingClientRect();
     const style = window.getComputedStyle(textarea);
+    const layoutWidth = textarea.offsetWidth || bounds.width;
+    const layoutHeight = textarea.offsetHeight || bounds.height;
+    const scaleX = bounds.width / layoutWidth;
+    const scaleY = bounds.height / layoutHeight;
     const mirror = document.createElement("div");
     mirror.setAttribute("aria-hidden", "true");
     Object.assign(mirror.style, {
         position: "fixed", visibility: "hidden", pointerEvents: "none",
-        left: `${bounds.left}px`, top: `${bounds.top}px`, width: `${bounds.width}px`,
-        height: `${bounds.height}px`, boxSizing: style.boxSizing,
+        left: "0", top: "0", width: `${layoutWidth}px`,
+        height: `${layoutHeight}px`, boxSizing: style.boxSizing,
         whiteSpace: "pre-wrap", overflowWrap: "break-word", overflow: "hidden",
     });
     COPIED_STYLES.forEach(property => { mirror.style[property] = style[property]; });
@@ -27,10 +31,13 @@ export function textareaCaretRect(textarea: HTMLTextAreaElement, caret = textare
     document.body.append(mirror);
     mirror.scrollTop = textarea.scrollTop;
     mirror.scrollLeft = textarea.scrollLeft;
+    const mirrorRect = mirror.getBoundingClientRect();
     const markerRect = marker.getBoundingClientRect();
     const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2 || 16;
     mirror.remove();
-    return { left: markerRect.left, top: markerRect.top, bottom: markerRect.top + lineHeight };
+    const left = bounds.left + (markerRect.left - mirrorRect.left) * scaleX;
+    const top = bounds.top + (markerRect.top - mirrorRect.top) * scaleY;
+    return { left, top, bottom: top + lineHeight * scaleY };
 }
 
 export function completionPopupPosition(textarea: HTMLTextAreaElement, placement: CompletionPlacement, popupHeight = 210): CompletionPopupPosition {

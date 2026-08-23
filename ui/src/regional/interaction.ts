@@ -15,6 +15,10 @@ export function shouldStartSelectionMove(start: ScreenPoint, current: ScreenPoin
     return Math.hypot(current.x - start.x, current.y - start.y) >= threshold;
 }
 
+export function shouldClosePolygon(pointCount: number, start: ScreenPoint, current: ScreenPoint, threshold = 12) {
+    return pointCount >= 3 && Math.hypot(current.x - start.x, current.y - start.y) <= threshold;
+}
+
 export function regionsInPaintOrder<T extends { priority: number }>(regions: T[]) {
     return [...regions].sort((left, right) => right.priority - left.priority);
 }

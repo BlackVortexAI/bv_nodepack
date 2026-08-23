@@ -1208,6 +1208,15 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-23 — v0.18.1
+
+- Restore pointer interaction for every Regional Editor drawing tool after the
+  shared BV toolbar migration.
+- Close polygon drawings by clicking the initial point once at least three
+  vertices have been placed.
+- Fix autocomplete styling and caret-relative placement in long, scrolled or
+  transformed text areas, and refresh suggestions when the cursor moves.
+
 ### 2026-08-22 — v0.18.0
 
 - Move Smart Pipe and Smart Pipe Merge configuration into the shared BV window

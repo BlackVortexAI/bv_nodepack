@@ -4,7 +4,7 @@ import EditorMenus from "./EditorMenus";
 import OptionsPanel from "./OptionsPanel";
 import type { BrushSettings, Tool } from "../ui/components";
 import { Bounds, boundsOfLayer, Handle, hitTest, moveLayer, resizeLayer, setLayerBounds, simplifyPoints } from "./geometry";
-import { addGeometryLayerTarget, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldStartSelectionMove, synchronizeRegionPriorities } from "./interaction";
+import { addGeometryLayerTarget, regionsInPriorityOrder, shouldAppendFinalBrushPoint, shouldClosePolygon, shouldStartSelectionMove, synchronizeRegionPriorities } from "./interaction";
 import { automaticRegionColor, clone, Geometry, geometryAuthoring, geometryLayerId, geometryLayers, geometryMaskGroupId, newRegion, parseDocument, Point, preserveDocumentIdentity, RegionalDocument, Region, uuid } from "./model";
 import { mergeSelectedLayers, remapMaskGroups, selectLayers } from "./layerOperations";
 import { activeWindowGeometry, clampWindowGeometry, defaultEditorState, EditorViewState, loadEditorState, saveEditorState } from "./editorState";
@@ -25,7 +25,8 @@ type NodeRef = { id: number | string; title?: string; widgets?: Array<{ name: st
 const keyFor=(node:NodeRef|null|undefined)=>scopedNodeKey((getApp() as any).rootGraph??(getApp() as any).graph,node);
 type Props = { open: boolean; activationToken?:number; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; loraStacks: NamedLoraStack[]; onClose: () => void };
 type Gesture =
-    | { mode: "draw-box" | "draw-brush" | "draw-polygon"; start: Point; commit: "add" | "subtract" }
+    | { mode: "draw-box" | "draw-brush"; start: Point; commit: "add" | "subtract" }
+    | { mode: "draw-polygon"; start: Point; startScreen: { x: number; y: number }; commit: "add" | "subtract" }
     | { mode: "move"; start: Point; startScreen: { x: number; y: number }; original: Geometry[]; started: boolean }
     | { mode: "resize"; start: Point; original: Geometry[]; handle: Handle };
 
@@ -246,7 +247,11 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
         }
         const subtract = tool.endsWith("subtract");
         if (subtract && (!selectedLayerId || selectedLayer?.authoring.locked)) return;
-        if (tool.startsWith("polygon") && gesture.current?.mode === "draw-polygon") { setDraft(current => current?.map(item => item.type === "polygon" ? { ...item, points: [...item.points, point] } : item) ?? null); return; }
+        if (tool.startsWith("polygon") && gesture.current?.mode === "draw-polygon") {
+            const pointCount = draft?.find(item => item.type === "polygon")?.points.length ?? 0;
+            if (shouldClosePolygon(pointCount, gesture.current.startScreen, { x: event.clientX, y: event.clientY })) { finalizePolygon(); return; }
+            setDraft(current => current?.map(item => item.type === "polygon" ? { ...item, points: [...item.points, point] } : item) ?? null); return;
+        }
         const id = uuid(), reusableLayerId = !subtract ? addGeometryLayerTarget(selectedLayer) : null;
         const layerId = subtract ? selectedLayerId! : reusableLayerId ?? id;
         const shapeName = tool.startsWith("rect") ? "Rectangle" : tool.startsWith("ellipse") ? "Ellipse" : tool.startsWith("polygon") ? "Polygon" : "Brush";
@@ -259,7 +264,7 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
             gesture.current = { mode: "draw-box", start: point, commit: subtract ? "subtract" : "add" }; if (!subtract) replaceLayerSelection(layerId);
         } else if (tool.startsWith("polygon")) {
             setDraft(maskGroups.map((maskGroupId, index) => ({ id: index ? uuid() : id, layer_id: layerId, mask_group_id: maskGroupId, type: "polygon", operation: subtract ? "subtract" : "add", enabled: true, authoring, points: [point] })));
-            gesture.current = { mode: "draw-polygon", start: point, commit: subtract ? "subtract" : "add" }; if (!subtract) replaceLayerSelection(layerId);
+            gesture.current = { mode: "draw-polygon", start: point, startScreen: { x: event.clientX, y: event.clientY }, commit: subtract ? "subtract" : "add" }; if (!subtract) replaceLayerSelection(layerId);
         } else {
             event.currentTarget.setPointerCapture(event.pointerId);
             setDraft(maskGroups.map((maskGroupId, index) => ({ id: index ? uuid() : id, layer_id: layerId, mask_group_id: maskGroupId, type: "brush_stroke", operation: tool === "brush-add" ? "add" : "subtract", enabled: true, authoring, size: brush.size, hardness: brush.hardness, opacity: brush.opacity, shape: brush.shape, pressure_mode: brush.pressureMode, points: [point] })));
