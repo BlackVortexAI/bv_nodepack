@@ -26,9 +26,18 @@ from ..util.regional.lora_hooks import (
     apply_attention_hook_passes,
     create_hook_groups,
     default_bindings,
+    parse_registry,
     reconcile_bindings,
     resolve_stack_paths,
     resolve_scope_stacks,
+)
+from ..util.regional.lora_v3 import (
+    LORA_CAPABILITY,
+    LORA_CAPABILITY_REGISTRY,
+    RUNTIME_PROVIDER,
+    build_lora_provider,
+    resolve_lora_capability,
+    transform_lora_capability,
 )
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
@@ -111,6 +120,64 @@ class BVNamedLoraStackNode:
 
     def register(self, lora_stack, name, stack_id, registry=None):
         return (add_named_stack(registry, stack_id, name, lora_stack),)
+
+
+class BVLoraStackCollectorNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "lora_registry": (REGISTRY, {}),
+                "collector_id": ("STRING", {"default": "", "multiline": False}),
+            }
+        }
+
+    RETURN_TYPES = (RUNTIME_PROVIDER,)
+    RETURN_NAMES = ("resource_provider",)
+    FUNCTION = "collect"
+    CATEGORY = CATEGORY_CORE
+    DESCRIPTION = "Exposes live named LoRA stacks through the typed BV v3 runtime-resource protocol."
+
+    def collect(self, lora_registry, collector_id):
+        stacks = parse_registry(lora_registry)["stacks"]
+        return (build_lora_provider(collector_id, stacks),)
+
+
+class BVRegionalLoraNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "regional": (REGIONAL, {}),
+                "operation": (["replace", "merge", "subtract", "clear"], {"default": "replace"}),
+                "config_json": ("STRING", {"default": '{"version":1,"collector_id":null,"entries":[]}', "multiline": True}),
+            },
+            "optional": {
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = (REGIONAL,)
+    RETURN_NAMES = ("regional",)
+    FUNCTION = "transform"
+    CATEGORY = CATEGORY_CORE
+    DESCRIPTION = "Adds or replaces the immutable BV Regional v3 LoRA capability."
+
+    def transform(self, regional, operation, config_json, resource_provider=None):
+        payload = json.loads(config_json) if isinstance(config_json, str) else config_json
+        transformed = transform_lora_capability(regional, payload, registry=LORA_CAPABILITY_REGISTRY, operation=operation)
+        if operation != "clear" and any(entry["source"]["kind"] == "external" for entry in payload["entries"]):
+            resolve_lora_capability(transformed, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
+        return (transformed.to_dict(),)
+
+
+def _consumer_lora_scopes(regional, document, lora_registry=None, lora_bindings=None, resource_provider=None):
+    if lora_registry is not None or lora_bindings is not None:
+        return resolve_scope_stacks(lora_registry, lora_bindings, document)
+    context = normalize_context(regional, registry=LORA_CAPABILITY_REGISTRY)
+    if LORA_CAPABILITY not in context.capabilities:
+        return {}
+    return resolve_lora_capability(context, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
 
 
 class BVRegionalDebugNode:
@@ -374,6 +441,7 @@ class BVRegionalNativeConditioningNode:
             "optional": {
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
             },
         }
 
@@ -386,10 +454,10 @@ class BVRegionalNativeConditioningNode:
         "mask_bounds requires a 2D image latent and is rejected for Anima with a compatibility error."
     )
 
-    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None):
+    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None, resource_provider=None):
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            resolve_scope_stacks(lora_registry, lora_bindings, document)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
         )
         hook_groups = create_hook_groups(scope_stacks)
         return compile_native_conditioning(
@@ -527,6 +595,7 @@ class BVRegionalKrea2AttentionNode:
             "optional": {
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
             },
         }
 
@@ -554,12 +623,13 @@ class BVRegionalKrea2AttentionNode:
         regional_lora_mode="token_gated_singlepass",
         lora_registry=None,
         lora_bindings=None,
+        resource_provider=None,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            resolve_scope_stacks(lora_registry, lora_bindings, document)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
         )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
@@ -624,6 +694,7 @@ class BVRegionalAnimaConditioningNode:
             "optional": {
                 "lora_registry": (REGISTRY, {}),
                 "lora_bindings": (BINDINGS, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
             },
         }
 
@@ -653,6 +724,7 @@ class BVRegionalAnimaConditioningNode:
         regional_lora_mode="multipass_legacy",
         lora_registry=None,
         lora_bindings=None,
+        resource_provider=None,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
@@ -666,7 +738,7 @@ class BVRegionalAnimaConditioningNode:
 
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(
-            resolve_scope_stacks(lora_registry, lora_bindings, document)
+            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider)
         )
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
@@ -829,6 +901,8 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
 NODE_CLASS_MAPPINGS = {
     "BV Regional Prompt": BVRegionalPromptNode,
     "BV Named LoRA Stack": BVNamedLoraStackNode,
+    "BV LoRA Stack Collector": BVLoraStackCollectorNode,
+    "BV Regional LoRA": BVRegionalLoraNode,
     "BV Regional Debug": BVRegionalDebugNode,
     "BV Regional Select": BVRegionalSelectNode,
     "BV Regional Deconstructor": BVRegionalDeconstructorNode,
@@ -851,6 +925,8 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Prompt": "🌀 BV Regional Prompt",
     "BV Named LoRA Stack": "🌀 BV Named LoRA Stack",
+    "BV LoRA Stack Collector": "🌀 BV LoRA Stack Collector",
+    "BV Regional LoRA": "🌀 BV Regional LoRA",
     "BV Regional Debug": "🌀 BV Regional Debug",
     "BV Regional Select": "🌀 BV Regional Select",
     "BV Regional Deconstructor": "🌀 BV Regional Deconstructor",

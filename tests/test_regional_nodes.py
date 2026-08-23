@@ -62,6 +62,8 @@ class RegionalNodeTests(unittest.TestCase):
         expected_categories = {
             "BV Regional Prompt": "🌀 BV Node Pack/regional/core",
             "BV Named LoRA Stack": "🌀 BV Node Pack/regional/core",
+            "BV LoRA Stack Collector": "🌀 BV Node Pack/regional/core",
+            "BV Regional LoRA": "🌀 BV Node Pack/regional/core",
             "BV Regional Debug": "🌀 BV Node Pack/regional/core",
             "BV Regional Select": "🌀 BV Node Pack/regional/core",
             "BV Regional Deconstructor": "🌀 BV Node Pack/regional/core",
@@ -116,7 +118,7 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_old_prompt_call_and_native_compiler_inputs_remain_compatible(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
-        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings"})
+        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "resource_provider"})
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
     def test_named_lora_stack_node_builds_a_chainable_registry(self):
@@ -153,6 +155,24 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(selected_name, "Face left")
         self.assertIn("green eyes", extracted[1])
         self.assertEqual(tuple(rendered[0].shape), (1, 100, 100))
+
+    def test_lora_collector_keeps_live_stack_resources_outside_the_context(self):
+        registry = self.module.BVNamedLoraStackNode().register(
+            [("portrait.safetensors", 0.8, 0.6)], "Portrait", "stack-a"
+        )[0]
+        provider = self.module.BVLoraStackCollectorNode().collect(
+            registry, "22222222-2222-4222-8222-222222222222"
+        )[0]
+        self.assertEqual(provider["resource_type"], "bv-nodepack.lora-stack")
+        self.assertEqual(provider["resources"]["stack-a"]["stack"][0][0], "portrait.safetensors")
+
+    def test_regional_lora_node_returns_a_new_v3_context(self):
+        source = fixture()
+        payload = '{"version":1,"collector_id":null,"entries":[]}'
+        transformed = self.module.BVRegionalLoraNode().transform(source, "replace", payload)[0]
+        self.assertEqual(transformed["version"], 3)
+        self.assertIn("bv-nodepack.lora", transformed["capabilities"])
+        self.assertEqual(source["version"], 1)
 
     def test_detailer_mask_renders_selected_region_at_image_size(self):
         document = fixture()
@@ -265,7 +285,7 @@ class RegionalNodeTests(unittest.TestCase):
         )
         self.assertEqual(
             set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
-            {"lora_registry", "lora_bindings"},
+            {"lora_registry", "lora_bindings", "resource_provider"},
         )
         mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])

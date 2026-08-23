@@ -24,6 +24,8 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
+import { installLoraV3Ui } from "./regional/loraV3Ui";
+import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
@@ -574,6 +576,7 @@ comfyApp.registerExtension({
     name: "bv_nodepack.control_rack_portal",
     setup() {
         ensureMountedOnce();
+        installM0CanvasVisibility((comfyApp as any).canvas);
         applyUiPreferences((comfyApp as any).ui?.settings);
         installGlobalTextareaCompletion();
         debugBridgeEnabled = Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(DEBUG_BRIDGE_SETTING_ID, false));
@@ -692,6 +695,7 @@ comfyApp.registerExtension({
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         if (installM0ResourceSpike(nodeType, nodeData)) return;
+        if (installLoraV3Ui(nodeType, nodeData)) return;
         if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){
             const created=nodeType.prototype.onNodeCreated,removed=nodeType.prototype.onRemoved;
             nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(nodeData.name!=="BV Control Center"){this.properties??={};if(typeof this.properties.bvWindowMenuVisible!=="boolean")this.properties.bvWindowMenuVisible=!['BV Smart Pipe','BV Smart Pipe Merge'].includes(nodeData.name)}queueMicrotask(refreshBvToolbarCapabilities);return result};
@@ -785,7 +789,9 @@ comfyApp.registerExtension({
                 if (!idWidget) return;
                 const currentId = String(idWidget.value ?? "").trim();
                 if (!currentId || needsFreshStackId(String(node.id), currentId, namedLoraStacks())) {
-                    idWidget.value = crypto.randomUUID();
+                    const nextId = crypto.randomUUID();
+                    if(currentId)node.__bvLoraResourceIdRemap={[currentId]:nextId};
+                    idWidget.value = nextId;
                     node.setDirtyCanvas?.(true, true);
                 }
                 hideRegionalWidget(idWidget);

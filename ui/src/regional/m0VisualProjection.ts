@@ -1,4 +1,6 @@
 const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
+const V3_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
+const providerType=(value:unknown)=>value===M0_PROVIDER_TYPE||value===V3_PROVIDER_TYPE;
 type M0Slot = { name?:string; label?:string; localized_name?:string; type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
 type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0ResourceConsumer?:boolean; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
 
@@ -8,9 +10,10 @@ function workflowHasM0Debug(graph:any){
 
 function hiddenLink(canvas:any,link:any) {
     if (!link) return false;
-    if(resourceLink(canvas,link))return !workflowHasM0Debug(canvas.graph);
     const origin=canvas.graph?.getNodeById?.(link.origin_id) as M0Node|undefined;
     const target=canvas.graph?.getNodeById?.(link.target_id) as M0Node|undefined;
+    if(origin?.outputs?.[link.origin_slot]?.type===V3_PROVIDER_TYPE||target?.inputs?.[link.target_slot]?.type===V3_PROVIDER_TYPE)return true;
+    if(resourceLink(canvas,link))return !workflowHasM0Debug(canvas.graph);
     return Boolean(origin?.outputs?.[link.origin_slot]?.__bvM0VisualHidden||target?.inputs?.[link.target_slot]?.__bvM0VisualHidden);
 }
 
@@ -19,7 +22,7 @@ function resourceLink(canvas:any,link:any) {
     const origin=canvas.graph?.getNodeById?.(link.origin_id) as M0Node|undefined;
     const target=canvas.graph?.getNodeById?.(link.target_id) as M0Node|undefined;
     const output=origin?.outputs?.[link.origin_slot],input=target?.inputs?.[link.target_slot];
-    return Boolean((output?.__bvM0ResourceSlot||output?.type===M0_PROVIDER_TYPE)&&(input?.__bvM0ResourceSlot||input?.type===M0_PROVIDER_TYPE));
+    return Boolean((output?.__bvM0ResourceSlot||providerType(output?.type))&&(input?.__bvM0ResourceSlot||providerType(input?.type)));
 }
 
 export function requestM0DebugAnimation(canvas:any){
@@ -68,7 +71,7 @@ export function installM0CanvasVisibility(canvas: any) {
     canvas.drawNode = function (node:M0Node,ctx:CanvasRenderingContext2D) {
         const restores:Array<()=>void>=[];
         for(const slot of [...(node.inputs??[]),...(node.outputs??[])]){
-            if(slot.type!==M0_PROVIDER_TYPE)continue;
+            if(!providerType(slot.type))continue;
             for(const field of ["name","label","localized_name"] as const){
                 const own=Object.prototype.hasOwnProperty.call(slot,field),value=slot[field];
                 Object.defineProperty(slot,field,{configurable:true,writable:true,value:""});
