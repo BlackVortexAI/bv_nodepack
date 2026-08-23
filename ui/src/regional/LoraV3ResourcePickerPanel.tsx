@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Button, ResourcePicker, ResourcePickerCollector, ToggleField, type SelectOption } from "../ui/components";
 
 export type LoraV3Entry={id:string;source:{kind:"external";resource_id:string}|{kind:"native";lora_name:string;model_strength:number;clip_strength:number};targets:Record<string,unknown>[]};
-export type LoraV3Config={version:1;collector_id:string|null;entries:LoraV3Entry[]};
+export type LoraV3Operation="replace"|"merge"|"subtract"|"clear";
+export type LoraV3Step={id:string;operation:LoraV3Operation;target:LoraV3Target;entries:LoraV3Entry[]};
+export type LoraV3Config={version:1|2;collector_id:string|null;entries:LoraV3Entry[];steps?:LoraV3Step[]};
 
 export type LoraV3Target={scope:"global"}|{scope:"region";document_id:string;region_id:string};
 export type LoraV3TargetOption=SelectOption&{target:LoraV3Target};
@@ -17,7 +19,7 @@ const externalFor=(config:LoraV3Config,target:LoraV3Target)=>config.entries.filt
 
 export function LoraV3ScopePicker({collectors,config,target,resolved,onCollector,onResource,onAdd,onRemove}:ScopeProps){
     const entries=externalFor(config,target);
-    return <div className="bv-lora-v3-scope-picker">{entries.map((entry,index)=><section className="bv-lora-v3-stack-row" key={entry.id}><strong>LoRA Stack {index+1}</strong><ResourcePicker collectors={collectors} collectorId={config.collector_id??""} resourceId={entry.source.resource_id} resolved={resolved} onCollector={onCollector} onResource={id=>onResource(entry.id,id)}/><Button density="compact" intent="ghost" onClick={()=>onRemove(entry.id,target)}>Remove</Button></section>)}<Button intent="secondary" disabled={!collectors.some(collector=>collector.resources.length>0)} onClick={()=>onAdd(target)}>Add LoRA stack</Button></div>;
+    return <div className="bv-lora-v3-scope-picker">{entries.map((entry,index)=><section className="bv-lora-v3-stack-row" key={entry.id}><strong>LoRA Stack {index+1}</strong><ResourcePicker collectors={collectors} collectorId={config.collector_id??""} resourceId={entry.source.resource_id} resolved={resolved} onCollector={onCollector} onResource={id=>onResource(entry.id,id)}/><Button density="compact" intent="ghost" iconOnly aria-label={`Remove LoRA Stack ${index+1}`} title="Remove LoRA stack" onClick={()=>onRemove(entry.id,target)}><svg className="bv-trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg></Button></section>)}<Button intent="secondary" disabled={!collectors.some(collector=>collector.resources.length>0)} onClick={()=>onAdd(target)}>Add LoRA stack</Button></div>;
 }
 
 export function OptionalLoraV3ScopePicker(props:ScopeProps&{onClear:(target:LoraV3Target)=>void}){

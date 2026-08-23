@@ -38,6 +38,7 @@ from ..util.regional.lora_v3 import (
     build_lora_provider,
     resolve_lora_capability,
     transform_lora_capability,
+    transform_lora_sequence,
 )
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
@@ -177,8 +178,11 @@ class BVRegionalLoraNode:
 
     def transform(self, regional, operation, config_json, resource_provider=None):
         payload = json.loads(config_json) if isinstance(config_json, str) else config_json
-        transformed = transform_lora_capability(regional, payload, registry=LORA_CAPABILITY_REGISTRY, operation=operation)
-        if operation != "clear" and any(entry["source"]["kind"] == "external" for entry in payload["entries"]):
+        transformed = transform_lora_sequence(
+            regional, payload, registry=LORA_CAPABILITY_REGISTRY, fallback_operation=operation
+        )
+        result = transformed.capabilities.get(LORA_CAPABILITY)
+        if result is not None and any(entry["source"]["kind"] == "external" for entry in result["entries"]):
             resolve_lora_capability(transformed, resource_provider, registry=LORA_CAPABILITY_REGISTRY)
         return (transformed.to_dict(),)
 

@@ -1,4 +1,4 @@
-export type BvWindowType = "regional" | "quick" | "detailer" | "detector" | "pipe" | "merge";
+export type BvWindowType = "regional" | "quick" | "lora" | "detailer" | "detector" | "pipe" | "merge";
 
 const lastActive = new Map<BvWindowType, string>();
 let lastFull:BvWindowType|undefined;

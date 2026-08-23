@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import unittest
 
 from py.util.regional.context import normalize_context
@@ -8,6 +10,7 @@ from py.util.regional.lora_v3 import (
     register_lora_contracts,
     resolve_lora_capability,
     transform_lora_capability,
+    transform_lora_sequence,
 )
 
 
@@ -105,6 +108,35 @@ class RegionalLoraV3Tests(unittest.TestCase):
         cleared = transform_lora_capability(context, {}, registry=self.capabilities, operation="clear")
         self.assertNotIn(LORA_CAPABILITY, cleared.capabilities)
         self.assertEqual(cleared.core, self.context.core)
+
+    def test_scope_steps_match_two_sequential_transformer_nodes(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=self.capabilities)
+        first_region, second_region = [region["id"] for region in context.core["regions"][:2]]
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        removed_id = "33333333-3333-4333-8333-333333333333"
+        added_id = "44444444-4444-4444-8444-444444444444"
+        upstream = transform_lora_capability(context, {"version": 1, "collector_id": collector_id, "entries": [{"id": removed_id, "source": {"kind": "external", "resource_id": "remove"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}]}]}, registry=self.capabilities)
+        config = {"version": 2, "collector_id": collector_id, "entries": [], "steps": [
+            {"id": "55555555-5555-4555-8555-555555555555", "operation": "merge", "target": {"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}, "entries": [
+                {"id": added_id, "source": {"kind": "external", "resource_id": "add"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}]},
+            ]},
+            {"id": "66666666-6666-4666-8666-666666666666", "operation": "subtract", "target": {"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}, "entries": [
+                {"id": removed_id, "source": {"kind": "external", "resource_id": "remove"}, "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}]},
+            ]},
+        ]}
+        transformed = transform_lora_sequence(upstream, config, registry=self.capabilities)
+        self.assertEqual([entry["id"] for entry in transformed.require_capability(LORA_CAPABILITY)["entries"]], [added_id])
+
+    def test_same_region_can_appear_twice_and_order_remains_semantic(self):
+        target = {"scope": "global"}
+        entry = {"id": "33333333-3333-4333-8333-333333333333", "source": {"kind": "native", "lora_name": "style.safetensors", "model_strength": 1.0, "clip_strength": 1.0}, "targets": [target]}
+        config = {"version": 2, "collector_id": None, "entries": [], "steps": [
+            {"id": "44444444-4444-4444-8444-444444444444", "operation": "merge", "target": target, "entries": [entry]},
+            {"id": "55555555-5555-4555-8555-555555555555", "operation": "subtract", "target": target, "entries": [entry]},
+        ]}
+        transformed = transform_lora_sequence(self.context, config, registry=self.capabilities)
+        self.assertEqual(transformed.require_capability(LORA_CAPABILITY)["entries"], [])
 
     def test_registered_resource_type_rejects_runtime_objects(self):
         provider = build_lora_provider("22222222-2222-4222-8222-222222222222", {})

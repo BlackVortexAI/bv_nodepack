@@ -24,7 +24,7 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
-import { hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
+import { hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
@@ -350,7 +350,7 @@ const regionalNodes = (): RegionalNode[] => {
     return found;
 };
 const refreshBvToolbarCapabilities=()=>{
-    const control=workflowNodesOfType("BV Control Center").length>0,quick=regionalNodes().length>0,full=quick||["BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].some(type=>workflowNodesOfType(type).length>0),overview=full||quick;
+    const control=workflowNodesOfType("BV Control Center").length>0,quick=regionalNodes().length>0,full=quick||["BV Regional LoRA","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].some(type=>workflowNodesOfType(type).length>0),overview=full||quick;
     document.body.classList.toggle("bv-toolbar-no-control",!control);document.body.classList.toggle("bv-toolbar-no-editor",!full);document.body.classList.toggle("bv-toolbar-no-quick",!quick);document.body.classList.toggle("bv-toolbar-no-overview",!overview);
     window.dispatchEvent(new CustomEvent("bv-toolbar-capabilities-changed",{detail:{control,quick,full,overview}}));
 };
@@ -365,9 +365,9 @@ const activateManagedLauncherNode = (type:"detailer"|"detector", prefix:string, 
     else openTarget();
     rememberBvWindowInstance(type,targetId);
 };
-const openFullEditorNode=(type:string,node:any)=>{if(type==="regional")window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}}));else if(type==="detailer")activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node);else if(type==="detector")activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node);else window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind:type}}))};
+const openFullEditorNode=(type:string,node:any)=>{if(type==="regional")window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}}));else if(type==="lora")window.dispatchEvent(new CustomEvent(OPEN_LORA_V3_EDITOR_EVENT,{detail:{node}}));else if(type==="detailer")activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node);else if(type==="detector")activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node);else window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind:type}}))};
 const openLastFullBvEditor=()=>{
-    const definitions=[{type:"regional",nodes:regionalNodes()},{type:"detailer",nodes:workflowNodesOfType("BV Regional Detailer Plan")},{type:"detector",nodes:workflowNodesOfType("BV Detector Registry")},{type:"pipe",nodes:workflowNodesOfType("BV Smart Pipe")},{type:"merge",nodes:workflowNodesOfType("BV Smart Pipe Merge")}],lastType=lastBvFullWindowType(),lastId=lastType&&lastBvWindowInstance(lastType),last=definitions.find(item=>item.type===lastType)?.nodes.find(node=>scopedNodeKey(node)===lastId);
+    const definitions=[{type:"regional",nodes:regionalNodes()},{type:"lora",nodes:workflowNodesOfType("BV Regional LoRA")},{type:"detailer",nodes:workflowNodesOfType("BV Regional Detailer Plan")},{type:"detector",nodes:workflowNodesOfType("BV Detector Registry")},{type:"pipe",nodes:workflowNodesOfType("BV Smart Pipe")},{type:"merge",nodes:workflowNodesOfType("BV Smart Pipe Merge")}],lastType=lastBvFullWindowType(),lastId=lastType&&lastBvWindowInstance(lastType),last=definitions.find(item=>item.type===lastType)?.nodes.find(node=>scopedNodeKey(node)===lastId);
     if(last){openFullEditorNode(lastType!,last);return}
     const fallback=definitions.flatMap(item=>item.nodes.map(node=>({type:item.type,node}))).sort((left,right)=>(Number(left.node.id)||Number.MAX_SAFE_INTEGER)-(Number(right.node.id)||Number.MAX_SAFE_INTEGER))[0];
     if(!fallback)return;openFullEditorNode(fallback.type,fallback.node);if(lastType)showBvToast({title:"Previous editor unavailable",message:"Opened the first available BV editor instead.",tone:"warning",duration:4000});
@@ -468,11 +468,12 @@ function BVRoot() {
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
     const [loraV3Node,setLoraV3Node]=useState<any|null>(null);
     const launcherColumns=useCallback((includeHidden=false):ToolbarLauncherColumn[]=>{
-        const regional=regionalNodes(),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry"),pipes=[...workflowNodesOfType("BV Smart Pipe"),...workflowNodesOfType("BV Smart Pipe Merge")];
+        const regional=regionalNodes(),loras=workflowNodesOfType("BV Regional LoRA"),detailers=workflowNodesOfType("BV Regional Detailer Plan"),detectors=workflowNodesOfType("BV Detector Registry"),pipes=[...workflowNodesOfType("BV Smart Pipe"),...workflowNodesOfType("BV Smart Pipe Merge")];
         const decorate=(node:any,item:any)=>{const hidden=!windowMenuVisible(node);return hidden&&!includeHidden?null:{...item,hidden,onReveal:hidden?()=>setWindowMenuVisible(node,true):undefined}};
         const regionalItems=regional.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Prompt"),last=lastBvWindowInstance("regional")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT,{detail:{node}})),secondary:{label:`Quick edit ${copy.label}`,onSelect:()=>window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_QUICK_EDIT_EVENT,{detail:{node}}))}})}).filter(Boolean) as any[];
         return [
             {id:"regional",label:"Regional Prompts",items:regionalItems},
+            {id:"lora",label:"Regional LoRA",items:loras.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional LoRA"),last=lastBvWindowInstance("lora")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>{rememberBvWindowInstance("lora",scopedNodeKey(node));window.dispatchEvent(new CustomEvent(OPEN_LORA_V3_EDITOR_EVENT,{detail:{node}}));}})}).filter(Boolean) as any[]},
             {id:"detailer",label:"Detailer Plan",items:detailers.map(node=>{const copy=nodeLauncherLabel(node,"BV Regional Detailer Plan"),action=node.widgets?.find((widget:any)=>widget.name==="configure_detailer_plan"),last=lastBvWindowInstance("detailer")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,disabled:!action||action.disabled,meta:`${copy.meta}${action?.disabled?" · Connect Regional Prompt":last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detailer","detailer-plan","configure_detailer_plan",node)})}).filter(Boolean) as any[]},
             {id:"detector",label:"Detector Registry",items:detectors.map(node=>{const copy=nodeLauncherLabel(node,"BV Detector Registry"),last=lastBvWindowInstance("detector")===scopedNodeKey(node);return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta}${last?" · Last active":""}`,onSelect:()=>activateManagedLauncherNode("detector","detector-registry","configure_detector_registry",node)})}).filter(Boolean) as any[]},
             {id:"smart-pipe",label:"Smart Pipes",items:pipes.map(node=>{const kind=String(node.type??node.comfyClass)==="BV Smart Pipe Merge"?"merge":"pipe",copy=nodeLauncherLabel(node,kind==="merge"?"Smart Pipe Merge":"Smart Pipe");return decorate(node,{id:scopedNodeKey(node),...copy,meta:`${copy.meta} · ${kind==="merge"?"Merge":"Pipe"}`,onSelect:()=>window.dispatchEvent(new CustomEvent("bv-open-smart-pipe-editor",{detail:{node,kind}}))})}).filter(Boolean) as any[]},
@@ -492,8 +493,9 @@ function BVRoot() {
         window.addEventListener(OPEN_CONTROL_RACK_EVENT, open);
         return () => window.removeEventListener(OPEN_CONTROL_RACK_EVENT, open);
     }, []);
-    useEffect(()=>{const open=(event:Event)=>setLoraV3Node((event as CustomEvent<{node?:any}>).detail?.node??null);window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,open);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,open)},[]);
+    useEffect(()=>{const open=(event:Event)=>{const node=(event as CustomEvent<{node?:any}>).detail?.node??null;if(node)rememberBvWindowInstance("lora",scopedNodeKey(node));setLoraV3Node(node)};window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,open);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,open)},[]);
     useEffect(()=>{const update=(event:Event)=>setHasControlNodes(Boolean((event as CustomEvent).detail?.control));window.addEventListener("bv-toolbar-capabilities-changed",update);refreshBvToolbarCapabilities();return()=>window.removeEventListener("bv-toolbar-capabilities-changed",update)},[]);
+    useEffect(()=>{const refresh=()=>refreshBvToolbarCapabilities();window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh)},[]);
 
     useEffect(() => {
         const open = (event: Event) => {

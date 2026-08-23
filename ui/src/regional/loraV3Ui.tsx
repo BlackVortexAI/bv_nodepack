@@ -6,6 +6,7 @@ import { connectLoraConsumerTree, ensureLoraCollectorOutput, ensureLoraConsumerI
 import { installM0CanvasVisibility } from "./m0VisualProjection";
 
 export const OPEN_LORA_V3_EDITOR_EVENT="bv-open-regional-lora-editor";
+export const LORA_V3_INVENTORY_CHANGED_EVENT="bv-regional-lora-inventory-changed";
 const widget=(node:any,name:string)=>node.widgets?.find((item:any)=>item.name===name);
 const nodeClass=(node:any)=>String(node?.comfyClass??node?.type??"");
 const graphLink=(graph:any,id:any)=>id==null?null:(graph?._links?.get?.(id)??graph?.links?.get?.(id)??graph?.links?.[id]??null);
@@ -25,7 +26,8 @@ export function readNodeLoraV3Config(node:any,name=nodeClass(node)==="BV Regiona
     try{
         let config=parseLoraV3Config(widget(node,name)?.value),linked=linkedLocalLoraCollector(node);
         const collectorRemap=linked?.__bvLoraCollectorIdRemap?.[String(config.collector_id??"")],resourceRemaps=Object.assign({},...upstreamNamedStacks(linked).map((item:any)=>item.node?.__bvLoraResourceIdRemap??{}));
-        if(collectorRemap){config={...config,collector_id:collectorRemap,entries:config.entries.map(entry=>entry.source.kind==="external"&&resourceRemaps[entry.source.resource_id]?{...entry,source:{...entry.source,resource_id:resourceRemaps[entry.source.resource_id]}}:entry)};writeNodeLoraV3Config(node,config,name);}
+        const remap=(entry:any)=>entry.source.kind==="external"&&resourceRemaps[entry.source.resource_id]?{...entry,source:{...entry.source,resource_id:resourceRemaps[entry.source.resource_id]}}:entry;
+        if(collectorRemap){config={...config,collector_id:collectorRemap,entries:config.entries.map(remap),steps:config.steps?.map(step=>({...step,entries:step.entries.map(remap)}))};writeNodeLoraV3Config(node,config,name);}
         return config;
     }catch{return emptyLoraV3Config();}
 }
@@ -40,8 +42,8 @@ export function loraV3Resolved(node:any,config:LoraV3Config){const linked=linked
 function commitLoraV3Config(node:any,next:LoraV3Config){
     const choice=loraV3Catalog(node).find(item=>item.id===next.collector_id);connectLoraConsumerTree(node,choice?.node??null);writeNodeLoraV3Config(node,next);return next;
 }
-export function setLoraV3Collector(node:any,config:LoraV3Config,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"";return commitLoraV3Config(node,{...config,collector_id:collectorId||null,entries:config.entries.map(entry=>entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry)});}
-export function setLoraV3EntryResource(node:any,config:LoraV3Config,entryId:string,resourceId:string){return commitLoraV3Config(node,{...config,entries:config.entries.map(entry=>entry.id===entryId&&entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry)});}
+export function setLoraV3Collector(node:any,config:LoraV3Config,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"",map=(entry:any)=>entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry;return commitLoraV3Config(node,{...config,collector_id:collectorId||null,entries:config.entries.map(map),steps:config.steps?.map(step=>({...step,entries:step.entries.map(map)}))});}
+export function setLoraV3EntryResource(node:any,config:LoraV3Config,entryId:string,resourceId:string){const map=(entry:any)=>entry.id===entryId&&entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry;return commitLoraV3Config(node,{...config,entries:config.entries.map(map),steps:config.steps?.map(step=>({...step,entries:step.entries.map(map)}))});}
 export function addLoraV3TargetEntry(node:any,config:LoraV3Config,target:LoraV3Target){const choice=loraV3Catalog(node).find(item=>item.id===config.collector_id)??loraV3Catalog(node)[0],resource=choice?.resources[0];if(!choice||!resource)return config;return commitLoraV3Config(node,{...config,collector_id:choice.id,entries:[...config.entries,{id:crypto.randomUUID(),source:{kind:"external",resource_id:resource.id},targets:[target]}]});}
 export function removeLoraV3TargetEntry(node:any,config:LoraV3Config,entryId:string,target:LoraV3Target){return commitLoraV3Config(node,withoutLoraV3Target(config,target,entryId));}
 export function clearLoraV3Target(node:any,config:LoraV3Config,target:LoraV3Target){return commitLoraV3Config(node,withoutLoraV3Target(config,target));}
@@ -52,6 +54,6 @@ function installTransformer(node:any){installLoraV3ConsumerSlot(node);hideLoraV3
 
 export function installLoraV3Ui(nodeType:any,nodeData:any){
     const collector=nodeData.name==="BV LoRA Stack Collector",transformer=nodeData.name==="BV Regional LoRA",consumer=["BV Regional Native Conditioning","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"].includes(nodeData.name);if(!collector&&!transformer&&!consumer)return false;
-    const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange,upgrade=function(this:any){if(collector)installCollector(this);if(transformer)installTransformer(this);if(consumer)installLoraV3ConsumerSlot(this);};
-    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};return true;
+    const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange,removed=nodeType.prototype.onRemoved,upgrade=function(this:any){if(collector)installCollector(this);if(transformer)installTransformer(this);if(consumer)installLoraV3ConsumerSlot(this);if(transformer)window.dispatchEvent(new CustomEvent(LORA_V3_INVENTORY_CHANGED_EVENT));};
+    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){const result=removed?.apply(this,arguments);if(transformer)queueMicrotask(()=>window.dispatchEvent(new CustomEvent(LORA_V3_INVENTORY_CHANGED_EVENT)));return result;};return true;
 }

@@ -199,6 +199,16 @@ Unsupported operations are absent from the UI and rejected by the backend. A
 transformer always produces a complete valid capability; half-configured runtime
 contexts are forbidden.
 
+The dedicated Regional LoRA transformer may persist an ordered list of operation
+steps. Every step owns a stable ID, one global or regional target, its operation,
+and its own ordered LoRA entries. Targets are repeatable, and drag-and-drop order
+is execution order. The backend applies each step through the ordinary registered
+capability handler, so one node with `merge(region A)` followed by
+`subtract(region B)` is semantically identical to two transformer nodes in that
+order. `replace` and `clear` therefore retain their normal capability-wide effect
+at their position in the sequence. The original single-operation configuration
+remains accepted and is normalized deterministically as the Legacy fallback.
+
 If a downstream configuration references a region removed upstream, that
 transformer fails before emitting an output. It reports its node, missing
 `document_id + region_id`, and provides an action to open the affected editor.

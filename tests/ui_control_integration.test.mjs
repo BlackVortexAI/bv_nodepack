@@ -89,7 +89,8 @@ test("toolbar and node-button activation use the same keep-mode lifecycle", () =
 
 test("ComfyUI toolbar exposes a node-aware multi-column window launcher", () => {
     assert.match(uiEntry, /<ToolbarWindowLauncher\s+getColumns=\{launcherColumns\}/);
-    for (const label of ["Regional Prompts", "Detailer Plan", "Detector Registry"]) assert.match(uiEntry, new RegExp(`label:\"${label}\"`));
+    for (const label of ["Regional Prompts", "Regional LoRA", "Detailer Plan", "Detector Registry"]) assert.match(uiEntry, new RegExp(`label:\"${label}\"`));
+    assert.match(uiEntry,/workflowNodesOfType\("BV Regional LoRA"\)/);
     assert.match(uiEntry,/secondary:\{label:`Quick edit/);
     assert.match(toolbarLauncher, /filter\(column=>column\.items\.length\)/);
     assert.match(toolbarLauncher, /\.bv-regional-action/);
@@ -108,6 +109,7 @@ test("toolbar primary actions restore the last active node per editor type", () 
     assert.match(regionalEditor, /rememberBvWindowInstance\("regional",nextId\)/);
     assert.match(uiEntry, /rememberBvWindowInstance\("detailer",scopedNodeKey\(node\)\)/);
     assert.match(uiEntry, /rememberBvWindowInstance\("detector",scopedNodeKey\(node\)\)/);
+    assert.match(uiEntry, /rememberBvWindowInstance\("lora",scopedNodeKey\(node\)\)/);
 });
 
 test("detector and detailer editors use shared compact collection and grid modules", () => {

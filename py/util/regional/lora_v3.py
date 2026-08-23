@@ -188,6 +188,63 @@ def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityR
     return context.with_capability(LORA_CAPABILITY, result)
 
 
+def _same_lora_target(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return left.get("scope") == right.get("scope") and (
+        right.get("scope") == "global"
+        or (left.get("document_id") == right.get("document_id") and left.get("region_id") == right.get("region_id"))
+    )
+
+
+def transform_lora_sequence(
+    value: Any,
+    config: Any,
+    *,
+    registry: CapabilityRegistry,
+    fallback_operation: str = "replace",
+) -> RegionalContext:
+    """Apply a transformer config as one or more ordinary LoRA capability operations."""
+    if not isinstance(config, dict):
+        raise RegionalContextError("LoRA transformer config must be an object")
+    if config.get("version") == 1:
+        return transform_lora_capability(value, config, registry=registry, operation=fallback_operation)
+    if config.get("version") != 2 or set(config) != {"version", "collector_id", "entries", "steps"}:
+        raise RegionalContextError("LoRA transformer config version 2 has unknown or missing fields")
+    if config["entries"]:
+        raise RegionalContextError("LoRA transformer config version 2 stores entries inside steps")
+    steps = config["steps"]
+    if not isinstance(steps, list):
+        raise RegionalContextError("LoRA transformer steps must be an array")
+    context = normalize_context(value, registry=registry)
+    step_ids: set[str] = set()
+    for index, step in enumerate(steps):
+        path = f"LoRA transformer steps[{index}]"
+        if not isinstance(step, dict) or set(step) != {"id", "operation", "target", "entries"}:
+            raise RegionalContextError(f"{path} has unknown or missing fields")
+        step_id = _required_uuid(step["id"], f"{path}.id")
+        if step_id in step_ids:
+            raise RegionalContextError(f"duplicate LoRA transformer step id: {step_id}")
+        step_ids.add(step_id)
+        operation = step["operation"]
+        if operation not in {"replace", "merge", "subtract", "clear"}:
+            raise RegionalContextError(f"{path}.operation is unsupported")
+        target = step["target"]
+        if not isinstance(target, dict) or target.get("scope") not in {"global", "region"}:
+            raise RegionalContextError(f"{path}.target must target global or region scope")
+        if target["scope"] == "global" and set(target) != {"scope"}:
+            raise RegionalContextError(f"{path}.target global target has unknown fields")
+        if target["scope"] == "region":
+            if set(target) != {"scope", "document_id", "region_id"}:
+                raise RegionalContextError(f"{path}.target region target has unknown or missing fields")
+            _required_uuid(target["document_id"], f"{path}.target.document_id")
+            _required_uuid(target["region_id"], f"{path}.target.region_id")
+        scoped = {"version": 1, "collector_id": config["collector_id"], "entries": step["entries"]}
+        validate_lora_capability(scoped)
+        if any(len(entry["targets"]) != 1 or not _same_lora_target(entry["targets"][0], target) for entry in scoped["entries"]):
+            raise RegionalContextError(f"{path}.entries must target only the step scope")
+        context = transform_lora_capability(context, scoped, registry=registry, operation=operation)
+    return context
+
+
 def _provider_resources(provider: Any, expected_id: str | None) -> dict[str, Any]:
     if expected_id is None:
         if provider is not None:

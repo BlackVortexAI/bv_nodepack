@@ -7,6 +7,7 @@ import {LoraV3ResourcePickerPanel,OptionalLoraV3ScopePicker,withoutLoraV3Target}
 import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config} from "../ui/src/regional/loraV3Config.ts";
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
+const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
 test("the production picker renders Collector / Resource from persisted ids",()=>{
  const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
  const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){}}));
@@ -37,6 +38,12 @@ test("Regional Prompt easy mode renders every stack assigned to its scope",()=>{
  const config={version:1,collector_id:"collector",entries:[{id:"first",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]},{id:"second",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
  const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"global"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(html,/LoRA enabled/);assert.match(html,/LoRA Stack 1/);assert.match(html,/LoRA Stack 2/);assert.match(html,/Add LoRA stack/);
+ assert.match(html,/aria-label="Remove LoRA Stack 1"/);assert.doesNotMatch(html,/>Remove</);
+});
+test("the LoRA editor exposes ordered repeatable scope operations and participates in window visibility",()=>{
+ assert.match(editorSource,/Add step/);assert.match(editorSource,/<SortableList/);assert.match(editorSource,/onReorder=/);
+ assert.match(editorSource,/label="Target"/);assert.match(editorSource,/label="Operation"/);assert.match(editorSource,/crypto\.randomUUID\(\)/);
+ assert.match(editorSource,/menuVisible=\{menuVisible\}/);assert.match(editorSource,/onMenuVisible=\{visible=>setWindowMenuVisible/);
 });
 test("removing one scope preserves shared assignments and the input config",()=>{
  const original={version:1,collector_id:"collector",entries:[{id:"shared",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"},{scope:"region",document_id:"doc",region_id:"left"}]}]};
