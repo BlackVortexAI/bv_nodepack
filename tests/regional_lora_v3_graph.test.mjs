@@ -29,6 +29,11 @@ test("picker catalog is restricted to the concrete consumer graph",()=>{
   assert.deepEqual(localLoraCollectors(consumer),[first]);
 });
 
+test("collector discovery supports the Nodes 2.0 comfyClass identity",()=>{
+  const g=graph(),collector=node(1,undefined,g),consumer=node(2,"BV Regional Prompt",g);collector.comfyClass="BV LoRA Stack Collector";g._nodes.push(collector,consumer);
+  assert.deepEqual(localLoraCollectors(consumer),[collector]);
+});
+
 test("one picker selection materializes links to downstream LoRA executors",()=>{
   const g=graph(),collector=node(1,"BV LoRA Stack Collector",g),transformer=node(2,"BV Regional LoRA",g),consumer=node(3,"BV Regional Native Conditioning",g);g._nodes.push(collector,transformer,consumer);
   transformer.outputs=[{type:"BV_REGIONAL",links:[5]}];g.links.set(5,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});

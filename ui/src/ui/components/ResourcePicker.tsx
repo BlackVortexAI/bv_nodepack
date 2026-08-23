@@ -1,13 +1,13 @@
 import React from "react";
+import { FieldGrid, SelectField } from "./forms";
 
 export type ResourcePickerCollector = { id:string; label:string; resources:Array<{id:string;label:string}> };
 
 export function ResourcePicker({collectors,collectorId,resourceId,resolved=true,onCollector,onResource}:{collectors:ResourcePickerCollector[];collectorId:string;resourceId:string;resolved?:boolean;onCollector:(id:string)=>void;onResource:(id:string)=>void}) {
     const collector=collectors.find(item=>item.id===collectorId),resource=collector?.resources.find(item=>item.id===resourceId);
-    const unresolved=!resolved||!collector||!resource;
+    const selected=Boolean(collectorId||resourceId),unresolved=selected&&(!resolved||!collector||!resource);
     return <div className={`bv-resource-picker ${unresolved?"is-unresolved":""}`}>
-        <div className="bv-resource-picker-summary">{!unresolved&&collector&&resource?`${collector.label} / ${resource.label}`:"Unresolved resource selection"}</div>
-        <label>Collector<select aria-label="Collector" value={collectorId} onChange={event=>onCollector(event.target.value)}><option value="">Select collector</option>{collectors.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-        <label>Resource<select aria-label="Resource" value={resourceId} onChange={event=>onResource(event.target.value)}><option value="">Select resource</option>{collector?.resources.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
+        <div className="bv-resource-picker-summary">{unresolved?"Unresolved resource selection":collector&&resource?`${collector.label} / ${resource.label}`:"No resource selected"}</div>
+        <FieldGrid minimum={130}><SelectField label="Collector" value={collectorId} options={[{value:"",label:"Select collector"},...collectors.map(item=>({value:item.id,label:item.label}))]} onValue={onCollector}/><SelectField label="Resource" value={resourceId} disabled={!collector} options={[{value:"",label:"Select resource"},...(collector?.resources??[]).map(item=>({value:item.id,label:item.label}))]} onValue={onResource}/></FieldGrid>
     </div>;
 }

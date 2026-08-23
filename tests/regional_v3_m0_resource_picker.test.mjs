@@ -75,6 +75,13 @@ test("a direct same-graph link resolves its local collector",()=>{
   assert.equal(resolveM0LocalLinkedCollector(consumer,"resource_provider"),collector);
 });
 
+test("the shared resource picker uses BV popover selects and treats empty as neutral",()=>{
+  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"",resourceId:"",resolved:false,onCollector(){},onResource(){}}));
+  assert.match(html,/No resource selected/);
+  assert.doesNotMatch(html,/Unresolved resource selection|<select\b/);
+  assert.match(html,/aria-haspopup="listbox"/);
+});
+
 test("renderer slot migration resolves only through a real local link and the persisted collector id",()=>{
   const graph={_nodes:[],_links:new Map(),links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
   const first={id:1,graph,__bvM0ResourceProvider:true},second={id:2,graph,__bvM0ResourceProvider:true};

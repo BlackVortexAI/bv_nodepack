@@ -44,7 +44,7 @@ export function connectLocalLoraCollector(consumer:any,collector:any|null){
 }
 
 export function localLoraCollectors(node:any){
-    return (node.graph?._nodes??[]).filter((candidate:any)=>candidate!==node&&candidate.graph===node.graph&&candidate.type===LORA_COLLECTOR_NODE);
+    return (node.graph?._nodes??[]).filter((candidate:any)=>candidate!==node&&candidate.graph===node.graph&&String(candidate.comfyClass??candidate.type)===LORA_COLLECTOR_NODE);
 }
 
 const LORA_EXECUTORS=new Set(["BV Regional Native Conditioning","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"]);
@@ -80,7 +80,7 @@ export function upstreamLoraTransformer(consumer:any){
             if(input?.type!=="BV_REGIONAL")continue;
             const link=graphLink(graph,input.link),source=link&&graph?.getNodeById?.(link.origin_id);
             if(!source||source.graph!==graph||seen.has(source))continue;
-            if(source.type==="BV Regional LoRA"||source.type==="BV Regional Prompt")return source;
+            if(["BV Regional LoRA","BV Regional Prompt"].includes(String(source.comfyClass??source.type)))return source;
             seen.add(source);queue.push(source);
         }
     }

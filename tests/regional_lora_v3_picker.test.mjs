@@ -3,7 +3,7 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import React from "../ui/node_modules/react/index.js";
 import {renderToStaticMarkup} from "../ui/node_modules/react-dom/server.node.js";
-import {LoraV3ResourcePickerPanel} from "../ui/src/regional/LoraV3ResourcePickerPanel.tsx";
+import {LoraV3ResourcePickerPanel,OptionalLoraV3ScopePicker} from "../ui/src/regional/LoraV3ResourcePickerPanel.tsx";
 import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config} from "../ui/src/regional/loraV3Config.ts";
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
@@ -23,6 +23,15 @@ test("config serialization is named and deterministic outside positional visual 
 test("external entries cannot be created without a live collector resource",()=>{
  const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors:[],config:emptyLoraV3Config(),resolved:false,onCollector(){},onResource(){},onAddExternal(){}}));
  assert.match(html,/disabled=""/);
+});
+test("the advanced LoRA editor exposes assignment targets for every stack",()=>{
+ const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"},{scope:"region",document_id:"doc",region_id:"left"}]}]};
+ const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}},{value:"region:doc:left",label:"Left",target:{scope:"region",document_id:"doc",region_id:"left"}}],onCollector(){},onResource(){},onTargets(){},onAddExternal(){}}));
+ assert.match(html,/Assignment targets/);assert.match(html,/Global/);assert.match(html,/Left/);
+});
+test("Regional Prompt easy mode starts with a BV toggle and hides an unassigned picker",()=>{
+ const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{label:"Global LoRA Stack",collectors,config:emptyLoraV3Config(),target:{scope:"global"},resolved:false,onValue(){}}));
+ assert.match(html,/role="switch"/);assert.match(html,/Disabled/);assert.doesNotMatch(html,/No resource selected|Collector/);
 });
 test("production LoRA presentation keeps ComfyUI links authoritative",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
