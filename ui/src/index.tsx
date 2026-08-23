@@ -23,6 +23,7 @@ import { parseDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
+import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
@@ -690,6 +691,7 @@ comfyApp.registerExtension({
         onClick: () => window.dispatchEvent(new CustomEvent(BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT)),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if (installM0ResourceSpike(nodeType, nodeData)) return;
         if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){
             const created=nodeType.prototype.onNodeCreated,removed=nodeType.prototype.onRemoved;
             nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(nodeData.name!=="BV Control Center"){this.properties??={};if(typeof this.properties.bvWindowMenuVisible!=="boolean")this.properties.bvWindowMenuVisible=!['BV Smart Pipe','BV Smart Pipe Merge'].includes(nodeData.name)}queueMicrotask(refreshBvToolbarCapabilities);return result};
