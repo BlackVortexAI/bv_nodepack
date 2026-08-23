@@ -1,5 +1,6 @@
 export const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
 export const M0_PROVIDER_SLOT="resource_provider";
+export const M0_MAX_MULTI_COLLECTORS=20;
 
 function slotIndex(slots:any[]|undefined){return slots?.findIndex(slot=>slot?.name===M0_PROVIDER_SLOT||slot?.type===M0_PROVIDER_TYPE)??-1;}
 
@@ -17,4 +18,19 @@ export function ensureM0ConsumerInput(node:any){
     const input=node.inputs?.[index];
     if(input){input.name=M0_PROVIDER_SLOT;input.type=M0_PROVIDER_TYPE;}
     return index;
+}
+
+export function multiProviderSlot(index:number){return `${M0_PROVIDER_SLOT}_${index}`;}
+
+export function ensureM0MultiConsumerInputs(node:any,count=M0_MAX_MULTI_COLLECTORS){
+    const indexes:number[]=[];
+    for(let ordinal=1;ordinal<=count;ordinal++){
+        const name=multiProviderSlot(ordinal);
+        let index=node.inputs?.findIndex((slot:any)=>slot?.name===name)??-1;
+        if(index<0&&node.addInput){node.addInput(name,M0_PROVIDER_TYPE);index=node.inputs?.findIndex((slot:any)=>slot?.name===name)??-1;}
+        const input=node.inputs?.[index];
+        if(input){input.name=name;input.type=M0_PROVIDER_TYPE;input.__bvM0ProviderOrdinal=ordinal;}
+        indexes.push(index);
+    }
+    return indexes;
 }

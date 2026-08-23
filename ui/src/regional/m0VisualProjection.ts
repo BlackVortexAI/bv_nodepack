@@ -1,16 +1,45 @@
-type M0Slot = { __bvM0VisualHidden?: boolean; link?: unknown };
-type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[] };
+const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
+type M0Slot = { type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
+type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
 
-function node2Element(node:M0Node) {
-    if (typeof document === "undefined" || node.id == null) return null;
-    return document.querySelector(`.lg-node[data-node-id="${CSS.escape(String(node.id))}"]`);
+function workflowHasM0Debug(graph:any){
+    const root=graph?.rootGraph??graph,graphs=[root,...(root?.subgraphs?.values?.()??root?._subgraphs?.values?.()??[])];
+    return graphs.some(candidate=>(candidate?._nodes??[]).some((node:M0Node)=>Boolean(node.properties?.bvM0DebugVisible)));
 }
 
 function hiddenLink(canvas:any,link:any) {
     if (!link) return false;
+    if(resourceLink(canvas,link))return !workflowHasM0Debug(canvas.graph);
     const origin=canvas.graph?.getNodeById?.(link.origin_id) as M0Node|undefined;
     const target=canvas.graph?.getNodeById?.(link.target_id) as M0Node|undefined;
     return Boolean(origin?.outputs?.[link.origin_slot]?.__bvM0VisualHidden||target?.inputs?.[link.target_slot]?.__bvM0VisualHidden);
+}
+
+function resourceLink(canvas:any,link:any) {
+    if(!link)return false;
+    const origin=canvas.graph?.getNodeById?.(link.origin_id) as M0Node|undefined;
+    const target=canvas.graph?.getNodeById?.(link.target_id) as M0Node|undefined;
+    const output=origin?.outputs?.[link.origin_slot],input=target?.inputs?.[link.target_slot];
+    return Boolean((output?.__bvM0ResourceSlot||output?.type===M0_PROVIDER_TYPE)&&(input?.__bvM0ResourceSlot||input?.type===M0_PROVIDER_TYPE));
+}
+
+export function requestM0DebugAnimation(canvas:any){
+    if(!canvas||canvas.__bvM0DebugAnimation)return;
+    canvas.__bvM0DebugAnimation=true;
+    const frame=()=>{
+        const active=workflowHasM0Debug(canvas.graph);
+        document.documentElement.classList.toggle("bv-m0-debug-active",active);
+        if(!active){canvas.__bvM0DebugAnimation=false;return;}
+        canvas.setDirty?.(false,true);canvas.setDirtyCanvas?.(false,true);
+        requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+}
+
+export function syncM0DebugRoot(graph:any){
+    if(typeof document==="undefined")return;
+    const active=workflowHasM0Debug(graph);
+    document.documentElement.classList.toggle("bv-m0-debug-active",active);
 }
 
 export function installM0CanvasVisibility(canvas: any) {
@@ -20,28 +49,54 @@ export function installM0CanvasVisibility(canvas: any) {
     const renderLink = canvas.renderLink;
     canvas.renderLink = function (...args:any[]) {
         if (hiddenLink(this,args[3])) return;
-        return renderLink.apply(this,args);
+        if(!resourceLink(this,args[3]))return renderLink.apply(this,args);
+        const target=this.graph?.getNodeById?.(args[3]?.target_id) as M0Node|undefined;
+        const providerSlots=target?.inputs?.map((slot,index)=>({slot,index})).filter(({slot})=>slot.__bvM0ResourceSlot)??[];
+        const anchor=target?.__bvM0FanInAnchorSlot??(providerSlots.length>1?providerSlots[0].index:undefined);
+        if(anchor!=null&&target){
+            if(args[3]?.target_slot===anchor||!target.__bvM0FanInPoint)target.__bvM0FanInPoint=args[2];
+            args[2]=target.__bvM0FanInPoint;
+        }
+        const ctx=args[0] as CanvasRenderingContext2D;
+        ctx.save();
+        try{
+            ctx.setLineDash([7,5]);
+            ctx.lineDashOffset=-((typeof performance==="undefined"?0:performance.now())/45%12);
+            args[5]=(typeof performance==="undefined"?0:performance.now()/1000);
+            return renderLink.apply(this,args);
+        }finally{ctx.restore();}
     };
     canvas.drawNode = function (node:M0Node,ctx:CanvasRenderingContext2D) {
-        // Nodes 2.0 observes these arrays as workflow state. Its DOM projection is
-        // hidden with CSS; never replace canonical graph arrays just to draw it.
-        if(node2Element(node))return drawNode.call(this,node,ctx);
-        const inputs=node.inputs,outputs=node.outputs;
-        if(inputs?.some(slot=>slot.__bvM0VisualHidden))node.inputs=inputs.filter(slot=>!slot.__bvM0VisualHidden);
-        if(outputs?.some(slot=>slot.__bvM0VisualHidden))node.outputs=outputs.filter(slot=>!slot.__bvM0VisualHidden);
-        try { return drawNode.call(this,node,ctx); }
-        finally { if(inputs)node.inputs=inputs;if(outputs)node.outputs=outputs; }
+        const restores:Array<()=>void>=[];
+        for(const slot of [...(node.inputs??[]),...(node.outputs??[])]){
+            if(slot.type!==M0_PROVIDER_TYPE)continue;
+            for(const method of ["draw","drawCollapsed"] as const){
+                if(typeof slot[method]!=="function")continue;
+                const own=Object.prototype.hasOwnProperty.call(slot,method),value=slot[method];
+                Object.defineProperty(slot,method,{configurable:true,writable:true,value:()=>undefined});
+                restores.push(()=>own?Object.defineProperty(slot,method,{configurable:true,writable:true,value}):delete slot[method]);
+            }
+        }
+        try{return drawNode.call(this,node,ctx);}
+        finally{for(let index=restores.length-1;index>=0;index--)restores[index]();}
     };
 }
 
 export function markM0NodeElement(node:any,kind:"collector"|"consumer",debug:boolean) {
     let attempts=0;
+    const revision=(node.__bvM0ElementMarkRevision??0)+1;
+    node.__bvM0ElementMarkRevision=revision;
     const apply=()=>{
+        if(node.__bvM0ElementMarkRevision!==revision)return;
         const id=CSS.escape(String(node.id));
         const element=document.querySelector<HTMLElement>(`.lg-node[data-node-id="${id}"]`);
         if(!element){if(attempts++<40)setTimeout(apply,50);return;}
         element.classList.add(`bv-m0-${kind}`);
         element.classList.toggle("bv-m0-debug",debug);
+        const slots=element.querySelectorAll<HTMLElement>(".lg-slot--input"),providerSlots=node.inputs?.map((slot:any,index:number)=>({slot,index})).filter(({slot}:any)=>slot.__bvM0ResourceSlot)??[],fanInAnchor=providerSlots.length>1?providerSlots[0].index:undefined;
+        slots.forEach((slot,index)=>slot.classList.toggle("bv-m0-port-hidden",Boolean(node.inputs?.[index]?.__bvM0PortHidden)||(fanInAnchor!=null&&index!==fanInAnchor)));
+        element.classList.toggle("bv-m0-fan-in",fanInAnchor!=null);
+        if(attempts++<4)setTimeout(apply,75*attempts);
     };
     apply();
 }

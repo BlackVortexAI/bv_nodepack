@@ -415,6 +415,17 @@ A minimal fake producer and consumer must prove save/load, visual hiding and
 reveal, queue dependency, cache invalidation, copy/paste, root graph, subgraph,
 bypass/mute, deleted provider handling, and Resource Picker link switching.
 
+The gate additionally proves native multi-provider fan-in with at least four
+collectors and a stress capacity of twenty. Every provider remains an ordinary,
+independently persisted typed ComfyUI link. Physical provider slots need not
+participate in visible node layout: the frontend may project all real links onto
+one transient visual anchor. Debug presentation may draw these real links with a
+distinct dashed or animated style, but must not replace them with virtual links,
+persist a second link registry, or modify the queued prompt. Normal/debug
+switching must not resize the node or reorder serialized widgets. A future
+workflow-wide shortcut may activate the same transient presentation, but is not
+part of Milestone 0.
+
 If any required behavior cannot be made reliable with ordinary stored links, V3
 abandons Wireless presentation and uses progressively revealed typed ports. Queue
 rewriting, global runtime registries, and provider discovery heuristics are not

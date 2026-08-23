@@ -5,8 +5,9 @@ import React from "../ui/node_modules/react/index.js";
 import { renderToStaticMarkup } from "../ui/node_modules/react-dom/server.node.js";
 import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
 import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
-import { ensureM0CollectorOutput, ensureM0ConsumerInput } from "../ui/src/regional/m0GraphContract.ts";
-import { installM0CanvasVisibility } from "../ui/src/regional/m0VisualProjection.ts";
+import { ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
+import { installM0CanvasVisibility, markM0NodeElement } from "../ui/src/regional/m0VisualProjection.ts";
+import { planM0CollectorConnection, resolveM0LinkedCollectors } from "../ui/src/regional/m0GraphTraversal.ts";
 
 const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resource-1",label:"Alpha"}]}];
 
@@ -33,6 +34,52 @@ test("Nodes 2.0 graph slots are repaired idempotently before linking",()=>{
   assert.deepEqual(consumer.inputs,[{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:null}]);
 });
 
+test("multi fan-in keeps twenty independently named native graph inputs",()=>{
+  const consumer={inputs:[],addInput(name,type){this.inputs.push({name,type,link:null})}};
+  assert.equal(ensureM0MultiConsumerInputs(consumer).length,20);
+  assert.equal(ensureM0MultiConsumerInputs(consumer).length,20);
+  assert.equal(consumer.inputs.length,20);
+  assert.equal(consumer.inputs[0].name,"resource_provider_1");
+  assert.equal(consumer.inputs[19].name,"resource_provider_20");
+  assert.ok(consumer.inputs.every(input=>input.type==="BV_RUNTIME_RESOURCE_PROVIDER_M0"));
+});
+
+test("a real exposed subgraph input resolves its collector through both persisted links",()=>{
+  const collector={id:1,__bvM0ResourceProvider:true,widgets:[{name:"collector_id",value:"c1"}]};
+  const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const host={id:2,graph:root,subgraph,inputs:[{link:10}],isSubgraphNode(){return true}};
+  const consumer={id:3,graph:subgraph,inputs:[{name:"resource_provider",link:11}]};
+  root._nodes.push(collector,host);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(consumer);
+  root.links.set(10,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  subgraph.links.set(11,{origin_id:-10,origin_slot:0,target_id:3,target_slot:0});
+  assert.deepEqual(resolveM0LinkedCollectors(consumer,"resource_provider"),[collector]);
+});
+
+test("a real exposed subgraph output resolves its internal collector from the parent consumer",()=>{
+  const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[{linkIds:[21]}],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const collector={id:4,graph:subgraph,__bvM0ResourceProvider:true,widgets:[{name:"collector_id",value:"c1"}]};
+  const host={id:2,graph:root,subgraph,outputs:[{links:[20]}],isSubgraphNode(){return true}};
+  const consumer={id:3,graph:root,inputs:[{name:"resource_provider",link:20}]};
+  root._nodes.push(host,consumer);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(collector);
+  root.links.set(20,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
+  subgraph.links.set(21,{origin_id:4,origin_slot:0,target_id:-20,target_slot:0});
+  assert.deepEqual(resolveM0LinkedCollectors(consumer,"resource_provider"),[collector]);
+  assert.deepEqual(planM0CollectorConnection(consumer,"resource_provider",collector),{source:host,sourceSlot:0,target:consumer,targetSlot:0,preserveLocal:false});
+});
+
+test("picker rewiring across an exposed subgraph input targets the parent host without replacing the inner link",()=>{
+  const collector={id:1,graph:null,__bvM0ResourceProvider:true,outputs:[{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"}]};
+  const root={id:"root",_nodes:[],links:new Map(),subgraphs:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}};collector.graph=root;
+  const subgraph={id:"sub",rootGraph:root,_nodes:[],links:new Map(),outputs:[],getNodeById(id){return this._nodes.find(node=>node.id===id)}};
+  const host={id:2,graph:root,subgraph,inputs:[{link:10}],isSubgraphNode(){return true}};
+  const consumer={id:3,graph:subgraph,inputs:[{name:"resource_provider",link:11}]};
+  root._nodes.push(collector,host);root.subgraphs.set(subgraph.id,subgraph);subgraph._nodes.push(consumer);
+  root.links.set(10,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});subgraph.links.set(11,{origin_id:-10,origin_slot:0,target_id:3,target_slot:0});
+  assert.deepEqual(planM0CollectorConnection(consumer,"resource_provider",collector),{source:collector,sourceSlot:0,target:host,targetSlot:0,preserveLocal:true});
+});
+
 test("the shared picker panel exposes a non-serialized debug control",()=>{
   const html=renderToStaticMarkup(React.createElement(M0ResourcePickerPanel,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,debugVisible:false,onCollector(){},onResource(){},onDebug(){}}));
   assert.match(html,/Hidden link debug/);
@@ -53,18 +100,47 @@ test("Nodes 2.0 hides every persisted id widget without leaving click overlays",
   assert.match(source,/addEventListener\("executed",listener\)/);
 });
 
+test("a stale Nodes 2.0 marker retry cannot overwrite the current debug state",()=>{
+  const queued=[],classes=new Map(),element={
+    classList:{add(name){classes.set(name,true)},toggle(name,value){classes.set(name,Boolean(value))}},
+    querySelectorAll(){return[]},
+  };
+  const previousDocument=globalThis.document,previousCss=globalThis.CSS,previousTimeout=globalThis.setTimeout;
+  globalThis.document={querySelector(){return element}};
+  globalThis.CSS={escape:String};
+  globalThis.setTimeout=callback=>{queued.push(callback);return queued.length};
+  const node={id:7,inputs:[]};
+  try{
+    markM0NodeElement(node,"collector",false);
+    markM0NodeElement(node,"collector",true);
+    assert.equal(classes.get("bv-m0-debug"),true);
+    queued[0]();
+    assert.equal(classes.get("bv-m0-debug"),true);
+  }finally{
+    globalThis.document=previousDocument;globalThis.CSS=previousCss;globalThis.setTimeout=previousTimeout;
+  }
+});
+
+test("Nodes 2.0 provider ports are hidden by their stable type, including subgraph proxies",()=>{
+  const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
+  assert.match(styles,/\.lg-slot:has\(circle\[fill\*="BV_RUNTIME_RESOURCE_PROVIDER_M0"\],\[style\*="BV_RUNTIME_RESOURCE_PROVIDER_M0"\]\)\{display:none!important\}/);
+  assert.doesNotMatch(styles,/\.bv-m0-debug-active \.lg-slot/);
+  assert.doesNotMatch(styles,/content:"(?:collectors|resources)"/);
+});
+
 test("the spike uses ordinary graph links without prompt hooks or name fallback",()=>{
   const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
-  assert.match(source,/source\.connect\(output,node,input\)/);
-  assert.match(source,/link\.target_id/);
+  const traversal=readFileSync(new URL("../ui/src/regional/m0GraphTraversal.ts",import.meta.url),"utf8");
+  assert.match(source,/plan\.source\.connect\(plan\.sourceSlot,plan\.target,plan\.targetSlot\)/);
+  assert.match(traversal,/link\.target_id/);
   assert.doesNotMatch(source,/graphToPrompt|queuePrompt|api\.queuePrompt/);
   assert.doesNotMatch(source,/find\([^\n]*(?:title|type).*collectorId/);
-  assert.doesNotMatch(source,/input\.(?:hidden|bvHidden)\s*=/);
+  assert.match(source,/input\.hidden=true/);
   assert.doesNotMatch(source,/MutationObserver/);
   assert.match(source,/draw\(\);setDebug\(node,Boolean\(node\.properties\?\.bvM0DebugVisible\),false\)/);
 });
 
-test("the canvas projection hides links without mutating canonical Nodes 2.0 graph arrays",()=>{
+test("the canvas projection hides links without replacing canonical Nodes 2.0 graph arrays",()=>{
   const input={name:"resource_provider",link:7,__bvM0VisualHidden:true};
   const output={name:"resource_provider",links:[7],__bvM0VisualHidden:true};
   const collector={id:1,inputs:[],outputs:[output]};
@@ -88,13 +164,61 @@ test("the canvas projection hides links without mutating canonical Nodes 2.0 gra
   assert.deepEqual(collector.outputs,[output]);
 });
 
-test("the canvas projection still hides legacy ports only during drawing",()=>{
+test("the canvas projection marks legacy ports hidden without replacing graph arrays",()=>{
   const input={link:7,__bvM0VisualHidden:true},output={links:[7],__bvM0VisualHidden:true};
   const node={id:2,inputs:[input],outputs:[output]},seen={};
   const canvas={graph:{getNodeById(){return node}},renderLink(){},drawNode(candidate){seen.inputs=candidate.inputs.length;seen.outputs=candidate.outputs.length}};
   installM0CanvasVisibility(canvas);canvas.drawNode(node,{});
-  assert.deepEqual(seen,{inputs:0,outputs:0});
+  assert.deepEqual(seen,{inputs:1,outputs:1});
+  assert.equal(input.hidden,undefined);assert.equal(output.hidden,undefined);
   assert.deepEqual(node.inputs,[input]);assert.deepEqual(node.outputs,[output]);
+});
+
+test("classic canvas suppresses only typed provider slot drawing while still drawing their debug link",()=>{
+  const draws=[];
+  const slotPrototype={draw(){draws.push("provider")},drawCollapsed(){draws.push("provider-collapsed")}};
+  const input=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7});
+  const output=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",links:[7]});
+  const ordinary={type:"IMAGE",draw(){draws.push("ordinary")}};
+  const collector={id:1,inputs:[],outputs:[output]},consumer={id:2,inputs:[input],outputs:[],properties:{bvM0DebugVisible:true}},seen={};
+  const nodes=new Map([[1,collector],[2,consumer]]),ctx={save(){},restore(){},setLineDash(){}};
+  collector.outputs.push(ordinary);
+  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(node){seen[node.id]=[node.inputs.length,node.outputs.length];for(const slot of [...node.inputs,...node.outputs]){slot.draw?.();slot.drawCollapsed?.()}}};
+  installM0CanvasVisibility(canvas);
+  canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  canvas.drawNode(collector,ctx);canvas.drawNode(consumer,ctx);
+  assert.deepEqual(seen,{1:[0,2],2:[1,0],link:true});
+  assert.deepEqual(draws,["ordinary"]);
+  assert.equal(Object.hasOwn(output,"draw"),false);assert.equal(Object.hasOwn(input,"draw"),false);
+  assert.equal(output.draw,slotPrototype.draw);assert.equal(input.drawCollapsed,slotPrototype.drawCollapsed);
+  assert.deepEqual(collector.outputs,[output,ordinary]);assert.deepEqual(consumer.inputs,[input]);
+});
+
+test("debug rendering gives native M0 links a dashed animated projection",()=>{
+  const input={link:7,__bvM0ResourceSlot:true},output={links:[7],__bvM0ResourceSlot:true};
+  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input],properties:{bvM0DebugVisible:true}},seen={};
+  const ctx={lineDashOffset:0,save(){seen.saved=true},restore(){seen.restored=true},setLineDash(value){seen.dash=value}};
+  const nodes=new Map([[1,collector],[2,consumer]]);
+  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(...args){seen.flow=args[5]},drawNode(){}};
+  installM0CanvasVisibility(canvas);
+  canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0},false,null,null,0,0);
+  assert.deepEqual(seen.dash,[7,5]);
+  assert.equal(typeof seen.flow,"number");
+  assert.equal(seen.saved,true);assert.equal(seen.restored,true);
+  assert.equal(input.link,7);
+});
+
+test("multi debug projects every native edge onto one visual fan-in anchor",()=>{
+  const outputs=[{links:[1],__bvM0ResourceSlot:true},{links:[2],__bvM0ResourceSlot:true}];
+  const target={id:3,__bvM0FanInAnchorSlot:0,properties:{bvM0DebugVisible:true},inputs:[{link:1,__bvM0ResourceSlot:true},{link:2,__bvM0ResourceSlot:true}],getConnectionPos(input,slot){assert.equal(input,true);assert.equal(slot,0);return[9,11]}};
+  const nodes=new Map([[1,{id:1,outputs:[outputs[0]]}],[2,{id:2,outputs:[outputs[1]]}],[3,target]]),ends=[];
+  const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(){}};
+  const canvas={graph:{_nodes:[...nodes.values()],getNodeById(id){return nodes.get(id)}},renderLink(ctx,a,b){ends.push(b)},drawNode(){}};
+  installM0CanvasVisibility(canvas);
+  canvas.renderLink(ctx,[0,0],[3,4],{origin_id:1,origin_slot:0,target_id:3,target_slot:0},false,null,null,0,0);
+  canvas.renderLink(ctx,[0,0],[5,6],{origin_id:2,origin_slot:0,target_id:3,target_slot:1},false,null,null,0,0);
+  assert.deepEqual(ends,[[3,4],[3,4]]);
+  assert.equal(target.inputs[0].link,1);assert.equal(target.inputs[1].link,2);
 });
 
 test("copy remapping is based on stable ids and the copied real link",()=>{
@@ -103,4 +227,7 @@ test("copy remapping is based on stable ids and the copied real link",()=>{
   assert.match(source,/source\?\.__bvM0IdRemap/);
   assert.match(source,/remap\.collector\[String\(cid\.value\)\]/);
   assert.match(source,/remap\.resources\[String\(rid\.value\)\]/);
+  assert.match(source,/function applyMultiLinkedRemaps/);
+  assert.match(source,/linkedCollectorAt\(node,index\)\?\.__bvM0IdRemap/);
+  assert.match(source,/function repairMultiBindingIds/);
 });

@@ -18,6 +18,7 @@
   "BV Latent Random Rotate 90": "Rotate a latent by a deterministic or random multiple of 90 degrees.",
   "BV M0 Fake Resource Collector": "Technical BV Regional v3 feasibility collector for validating persisted hidden typed resource links.",
   "BV M0 Fake Resource Consumer": "Technical BV Regional v3 feasibility consumer for validating strict resource identity and hidden-link behavior.",
+  "BV M0 Fake Multi Resource Consumer": "Technical BV Regional v3 feasibility consumer for validating native multi-collector fan-in and hidden-link behavior.",
   "BV Named LoRA Stack": "Name an external LoRA stack and add it to a chainable regional stack registry.",
   "BV Pipe": "Carry configurable named values through a typed workflow pipe.",
   "BV Pipe Config": "Define the configurable slots used by a BV Pipe.",
