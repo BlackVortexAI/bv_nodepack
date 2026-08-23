@@ -1208,6 +1208,17 @@ Technical references:
 
 ## Changelog
 
+### 2026-08-23 — v0.18.2
+
+- Adopt the Fluent Cyclone mark and the `#1345B7` CI palette across published
+  BV NodePack brand assets and shared UI accent states.
+- Add white, black and light-tinted canonical logo variants together with the
+  required Microsoft Fluent Emoji MIT attribution.
+- Replace the legacy Regional Editor window and minimized-window spiral with
+  the canonical Cyclone geometry.
+- Keep the layout-profile icon compact and readable when a session layout is
+  modified instead of allowing the footer control to expand.
+
 ### 2026-08-23 — v0.18.1
 
 - Restore pointer interaction for every Regional Editor drawing tool after the

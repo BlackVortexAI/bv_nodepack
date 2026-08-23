@@ -12,6 +12,7 @@ import { showBvToast } from "./toastStore";
 export type BvWindowMode = "workspace" | "floating";
 
 const Icon = ({ children, className = "" }: { children: ReactNode; className?: string }) => <svg className={className} viewBox="0 0 24 24" aria-hidden="true">{children}</svg>;
+const CycloneIcon = () => <svg className="bv-brand-cyclone" viewBox="0 0 32 32" aria-hidden="true"><path d="M11.08 2.736a2 2 0 0 1-.286 2.814A12.99 12.99 0 0 0 6 15.64c0 5.525 4.475 10 10 10s10-4.475 10-10a7 7 0 0 0-14 0c0 2.215 1.785 4 4 4s4-1.785 4-4c0-.555-.445-1-1-1s-1 .445-1 1a2 2 0 1 1-4 0c0-2.765 2.235-5 5-5s5 2.235 5 5c0 4.425-3.575 8-8 8s-8-3.575-8-8c0-6.075 4.925-11 11-11s11 4.925 11 11c0 7.735-6.265 14-14 14s-14-6.265-14-14C2 10.313 4.45 5.563 8.266 2.45a2 2 0 0 1 2.814.286"/></svg>;
 
 export type BvWindowHeaderLayout = { narrow:boolean; minimal:boolean; menuOverflow:boolean };
 const BvWindowHeaderLayoutContext=createContext<BvWindowHeaderLayout>({narrow:false,minimal:false,menuOverflow:false});
@@ -23,7 +24,7 @@ export function BvWindowHeader(props: { title: string; shortTitle?: string; cont
     const layout=useMemo<BvWindowHeaderLayout>(()=>({narrow:width<760,minimal:width<620,menuOverflow:width<520}),[width]);
     return <BvWindowHeaderLayoutContext.Provider value={layout}><header ref={header} className={`bv-ui-window-header bv-density-compact ${layout.narrow?"is-narrow":""} ${layout.minimal?"is-minimal":""} ${layout.menuOverflow?"is-menu-overflow":""}`.trim()} onPointerDown={props.onPointerDown}>
         <div className="bv-ui-window-identity">
-            <span className="bv-ui-window-icon"><Icon><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5c0-3.2-2.1-5.7-5.1-5.7-2.4 0-4.1 1.7-4.1 3.8 0 1.7 1.2 2.9 2.8 2.9 1.4 0 2.4-.9 2.4-2.1"/></Icon></span>
+            <span className="bv-ui-window-icon"><CycloneIcon/></span>
             <strong className="bv-ui-window-title"><span className="bv-ui-window-title-full">{props.title}</span>{props.shortTitle&&<span className="bv-ui-window-title-short">{props.shortTitle}</span>}</strong>
             {props.context && <div className="bv-ui-window-context">{props.context}</div>}
         </div>
@@ -111,7 +112,7 @@ export function BvMinimizedWindow({ title, onRestore, onClose }: { title: string
         return () => { mutations.disconnect(); observer.disconnect(); window.removeEventListener("resize", position); };
     }, [host]);
     useEffect(() => () => { requestAnimationFrame(() => { if (!host.childElementCount) host.remove(); }); }, [host]);
-    return createPortal(<div className="bv-ui-window-shelf-item"><button type="button" className="bv-ui-window-shelf-restore" onClick={onRestore} title={`Restore ${title}`}><span className="bv-ui-window-shelf-icon"><Icon><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5c0-3.2-2.1-5.7-5.1-5.7-2.4 0-4.1 1.7-4.1 3.8 0 1.7 1.2 2.9 2.8 2.9 1.4 0 2.4-.9 2.4-2.1"/></Icon></span><span>{title}</span></button>{onClose&&<button type="button" className="bv-ui-window-shelf-close" aria-label={`Close ${title}`} title={`Close ${title}`} onClick={onClose}><Icon><path d="m7 7 10 10M17 7 7 17"/></Icon></button>}</div>, host);
+    return createPortal(<div className="bv-ui-window-shelf-item"><button type="button" className="bv-ui-window-shelf-restore" onClick={onRestore} title={`Restore ${title}`}><span className="bv-ui-window-shelf-icon"><CycloneIcon/></span><span>{title}</span></button>{onClose&&<button type="button" className="bv-ui-window-shelf-close" aria-label={`Close ${title}`} title={`Close ${title}`} onClick={onClose}><Icon><path d="m7 7 10 10M17 7 7 17"/></Icon></button>}</div>, host);
 }
 
 export function BvWindowNavigator({label,value,options,onNavigate}:{label:string;value:string;options:SelectOption[];onNavigate:(value:string,replaceCurrent:boolean)=>void}) {

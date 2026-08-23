@@ -180,6 +180,9 @@ test("regional inspector uses compact controls and a viewport-safe framework col
 test("window chrome keeps title and compact context controls in one refined header row", () => {
     assert.match(windowChrome, /bv-ui-window-title/);
     assert.doesNotMatch(windowChrome, /bv-ui-window-copy/);
+    assert.match(windowChrome, /viewBox="0 0 32 32"/);
+    assert.match(windowChrome, /M11\.08 2\.736a2 2 0 0 1-/);
+    assert.doesNotMatch(windowChrome, /M12 3\.5a8\.5 8\.5/);
     assert.match(styles, /\.bv-ui-window-identity\s*\{[^}]*display:flex[^}]*align-items:center/s);
     assert.match(styles, /\.bv-ui-window-control\s*\{[^}]*width:calc\(24px/s);
     assert.match(editorMenus, /<Button intent="ghost" density="compact"/);
@@ -187,6 +190,11 @@ test("window chrome keeps title and compact context controls in one refined head
     assert.match(styles, /\.bv-managed-window \.bv-ui-window-header\s*\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/s);
     assert.match(styles, /\.bv-window-navigator \.bv-select-trigger\s*\{[^}]*height:22px/s);
     assert.match(styles, /\.bv-window-switch-mode>span:last-child\s*\{\s*display:none/);
+});
+
+test("layout profile footer icon remains compact and readable in modified state", () => {
+    assert.match(styles, /\.bv-ui-window-footer-actions \.bv-button>svg\s*\{[^}]*width:calc\(16px[^}]*height:calc\(16px[^}]*fill:none[^}]*stroke:currentColor/s);
+    assert.match(styles, /\.bv-ui-window-footer-actions \.bv-button\s*\{[^}]*white-space:nowrap/s);
 });
 
 test("regional editor delegates its complete window lifecycle to the shared managed window", () => {
