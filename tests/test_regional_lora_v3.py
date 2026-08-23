@@ -7,6 +7,8 @@ from py.util.regional.lora_v3 import (
     LORA_CAPABILITY,
     LORA_RESOURCE_TYPE,
     build_lora_provider,
+    materialize_lora_capability,
+    materialized_lora_scopes,
     register_lora_contracts,
     resolve_lora_capability,
     transform_lora_capability,
@@ -31,6 +33,36 @@ DOCUMENT = {
 
 
 class RegionalLoraV3Tests(unittest.TestCase):
+    def test_consumer_reads_materialized_scopes_without_a_runtime_provider(self):
+        capabilities, _ = register_lora_contracts()
+        provider = build_lora_provider(
+            "22222222-2222-4222-8222-222222222222",
+            {"skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", 0.8, 0.4]]}},
+        )
+        configured = transform_lora_capability(
+            normalize_context(DOCUMENT),
+            {
+                "version": 2,
+                "entries": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "source": {
+                        "kind": "external",
+                        "collector_id": provider["provider_id"],
+                        "resource_id": "skin",
+                    },
+                    "targets": [{"scope": "global"}],
+                }],
+            },
+            registry=capabilities,
+        )
+
+        materialized = materialize_lora_capability(configured, provider, registry=capabilities)
+
+        self.assertEqual(
+            materialized_lora_scopes(materialized, registry=capabilities),
+            {"global": [["skin.safetensors", 0.8, 0.4]], "background": [["skin.safetensors", 0.8, 0.4]]},
+        )
+
     def test_two_regions_resolve_independent_collectors(self):
         capabilities, _ = register_lora_contracts()
         with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:

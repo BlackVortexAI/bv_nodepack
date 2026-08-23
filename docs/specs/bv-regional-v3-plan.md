@@ -136,10 +136,13 @@ payload as an array with stable entry IDs:
 {
   "capabilities": {
     "bv-nodepack.lora": {
-      "version": 1,
+      "version": 3,
       "entries": [
         { "id": "uuid", "source": {}, "targets": [] }
-      ]
+      ],
+      "scopes": {
+        "global": [["example.safetensors", 1.0, 1.0]]
+      }
     }
   }
 }
@@ -259,20 +262,23 @@ Copy and import behavior:
   custom persisted graph identity;
 - identity collisions are remapped within the copied/imported group.
 
-Resources resolve live on every relevant execution. Source stacks and detectors
-are never snapshotted into the context. Provider resolution is lazy and
-consumer-specific: a missing detector does not block a workflow branch that never
-executes the detailer.
+Resources resolve when a capability-writing node executes. Detector resolution
+may remain lazy and consumer-specific, but LoRA resolution is deliberately owned
+by the Regional Prompt and Regional LoRA transformer boundaries described below.
 
 ### LoRA
 
 A Regional context may reference multiple external LoRA collectors. Every external
 entry owns its stable entry/binding ID and persists both `collector_id` and
-`resource_id`. Each distinct used collector is represented on every executing
-consumer by its own ordinary typed same-graph ComfyUI link; repeated entries may
-reuse that collector link while preserving their independent resources, targets,
-and semantic order. The LoRA capability may mix BV-native serializable LoRAs and
-external live-stack references.
+`resource_id`. Each distinct used collector is represented on the capability
+writer (`BV Regional Prompt` or `BV Regional LoRA`) by its own ordinary typed
+same-graph ComfyUI link. The writer resolves those references once and stores the
+effective per-scope stacks in the immutable Regional context. Attention and
+Conditioning nodes consume only that materialized context; they are never
+resource-provider consumers and expose no Collector, registry, or binding inputs.
+Repeated entries may reuse a writer's collector link while preserving their
+independent resources, targets, and semantic order. The LoRA capability may mix
+BV-native serializable LoRAs and external stack references.
 
 Replacing the capability may switch any number of collectors. Merge and subtract
 operate by stable entry ID; complete per-entry source references remove the former

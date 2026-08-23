@@ -80,13 +80,13 @@ test("collector discovery supports the Nodes 2.0 comfyClass identity",()=>{
   assert.deepEqual(localLoraCollectors(consumer),[collector]);
 });
 
-test("one picker selection materializes links to downstream LoRA executors",()=>{
+test("collector links stop at the Regional LoRA context transformer",()=>{
   const g=graph(),collector=node(1,"BV LoRA Stack Collector",g),transformer=node(2,"BV Regional LoRA",g),consumer=node(3,"BV Regional Native Conditioning",g);g._nodes.push(collector,transformer,consumer);
   transformer.outputs=[{type:"BV_REGIONAL",links:[5]}];g.links.set(5,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
   collector.connect=function(output,target,input){const id=10+target.id;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[...(this.outputs[output].links??[]),id];target.inputs[input].link=id};
-  assert.deepEqual(downstreamLoraConsumers(transformer),[consumer]);
+  assert.deepEqual(downstreamLoraConsumers(transformer),[]);
   assert.equal(connectLoraConsumerTree(transformer,collector),true);
-  assert.equal(linkedLocalLoraCollector(transformer),collector);assert.equal(linkedLocalLoraCollector(consumer),collector);
+  assert.equal(linkedLocalLoraCollector(transformer),collector);assert.equal(linkedLocalLoraCollector(consumer),null);
 });
 
 test("a consumer added later discovers only its linked upstream LoRA transformer",()=>{

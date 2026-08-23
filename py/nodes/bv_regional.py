@@ -29,14 +29,14 @@ from ..util.regional.lora_hooks import (
     parse_registry,
     reconcile_bindings,
     resolve_stack_paths,
-    resolve_scope_stacks,
 )
 from ..util.regional.lora_v3 import (
     LORA_CAPABILITY,
     LORA_CAPABILITY_REGISTRY,
     RUNTIME_PROVIDER,
     build_lora_provider,
-    resolve_lora_capability,
+    materialize_lora_capability,
+    materialized_lora_scopes,
     normalize_lora_prompt_config,
     transform_lora_capability,
     transform_lora_sequence,
@@ -129,8 +129,9 @@ class BVRegionalPromptNode:
             regional = transform_lora_capability(
                 document, normalize_lora_prompt_config(payload), registry=LORA_CAPABILITY_REGISTRY
             )
-            resolve_lora_capability(regional, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
-            regional = regional.to_dict()
+            regional = materialize_lora_capability(
+                regional, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY
+            ).to_dict()
         return regional, reconcile_bindings(lora_bindings_json, document)
 
 
@@ -204,18 +205,15 @@ class BVRegionalLoraNode:
             regional, payload, registry=LORA_CAPABILITY_REGISTRY, fallback_operation=operation
         )
         result = transformed.capabilities.get(LORA_CAPABILITY)
-        if result is not None and any(entry["source"]["kind"] == "external" for entry in result["entries"]):
-            resolve_lora_capability(transformed, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
+        if result is not None:
+            transformed = materialize_lora_capability(
+                transformed, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY
+            )
         return (transformed.to_dict(),)
 
 
-def _consumer_lora_scopes(regional, document, lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
-    if lora_registry is not None or lora_bindings is not None:
-        return resolve_scope_stacks(lora_registry, lora_bindings, document)
-    context = normalize_context(regional, registry=LORA_CAPABILITY_REGISTRY)
-    if LORA_CAPABILITY not in context.capabilities:
-        return {}
-    return resolve_lora_capability(context, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY)
+def _context_lora_scopes(regional):
+    return materialized_lora_scopes(regional, registry=LORA_CAPABILITY_REGISTRY)
 
 
 class BVRegionalDebugNode:
@@ -476,12 +474,6 @@ class BVRegionalNativeConditioningNode:
                     },
                 ),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
@@ -493,11 +485,9 @@ class BVRegionalNativeConditioningNode:
         "mask_bounds requires a 2D image latent and is rejected for Anima with a compatibility error."
     )
 
-    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+    def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35):
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         return compile_native_conditioning(
             document, clip, region_strength_multiplier, hook_groups,
@@ -526,12 +516,6 @@ class BVRegionalSDXLAttentionNode:
                     {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001},
                 ),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -543,12 +527,9 @@ class BVRegionalSDXLAttentionNode:
         "and other SDXL-family checkpoints. Uses a standard KSampler."
     )
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
-              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_sdxl_attention(document, clip)
         positive, negative = apply_attention_hook_passes(
@@ -577,12 +558,6 @@ class BVRegionalZImageAttentionNode:
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -591,12 +566,9 @@ class BVRegionalZImageAttentionNode:
     CATEGORY = CATEGORY_MODEL_ZIMAGE
     DESCRIPTION = "Joint-attention regional routing backend for Z-Image Turbo. Uses a standard KSampler."
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
-              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, _ = compile_zimage_attention(document, clip)
         positive, negative = apply_attention_hook_passes(
@@ -620,12 +592,6 @@ class BVRegionalFlux2KleinAttentionNode:
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -637,12 +603,9 @@ class BVRegionalFlux2KleinAttentionNode:
         "The distilled profile uses zero negative conditioning and a standard KSampler."
     )
 
-    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
-              lora_registry=None, lora_bindings=None, resource_provider=None, **providers):
+    def apply(self, model, clip, regional, attention_strength, start_percent, end_percent):
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_flux2_klein_attention(document, clip)
         positive, negative = apply_attention_hook_passes(
@@ -676,12 +639,6 @@ class BVRegionalKrea2AttentionNode:
                                "Token-gated single-pass is experimental and changes results.",
                 }),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -706,17 +663,11 @@ class BVRegionalKrea2AttentionNode:
         start_percent,
         end_percent,
         regional_lora_mode="token_gated_singlepass",
-        lora_registry=None,
-        lora_bindings=None,
-        resource_provider=None,
-        **providers,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
             document, clip, hook_groups
@@ -777,12 +728,6 @@ class BVRegionalAnimaConditioningNode:
                     "tooltip": "Legacy preserves published Anima results. Single-pass is an experimental token-gated model-LoRA path.",
                 }),
             },
-            "optional": {
-                "lora_registry": (REGISTRY, {}),
-                "lora_bindings": (BINDINGS, {}),
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -809,10 +754,6 @@ class BVRegionalAnimaConditioningNode:
         cross_inject_every_n_blocks,
         self_inject_every_n_blocks,
         regional_lora_mode="multipass_legacy",
-        lora_registry=None,
-        lora_bindings=None,
-        resource_provider=None,
-        **providers,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
@@ -825,9 +766,7 @@ class BVRegionalAnimaConditioningNode:
             ) from error
 
         document = context_document(regional)
-        scope_stacks = resolve_stack_paths(
-            _consumer_lora_scopes(regional, document, lora_registry, lora_bindings, resource_provider, **providers)
-        )
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
         if regional_lora_mode == "multipass_legacy":

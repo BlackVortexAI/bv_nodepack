@@ -140,8 +140,13 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(regional["version"], 3)
         self.assertEqual(regional["core"]["document_id"], document["document_id"])
         self.assertEqual(regional["capabilities"]["bv-nodepack.lora"], {
-            "version": 2,
+            "version": 3,
             "entries": [{**config["entries"][0], "source": {**config["entries"][0]["source"], "collector_id": collector_id}}],
+            "scopes": {
+                "global": [["skin.safetensors", 0.8, 0.6]],
+                "background": [["skin.safetensors", 0.8, 0.6]],
+                **{region["id"]: [["skin.safetensors", 0.8, 0.6]] for region in document["regions"]},
+            },
         })
 
     def test_main_node_accepts_the_frontend_v3_easy_mode_envelope(self):
@@ -166,16 +171,25 @@ class RegionalNodeTests(unittest.TestCase):
         regional, _ = self.module.BVRegionalPromptNode().build(json.dumps(fixture()))
         self.assertEqual(regional["schema"], "bv.regional")
 
-    def test_old_prompt_call_and_native_compiler_inputs_remain_compatible(self):
+    def test_native_compiler_is_not_a_lora_resource_consumer(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
-        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()})
+        self.assertNotIn("optional", inputs)
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
-    def test_regional_lora_nodes_expose_twenty_real_typed_provider_inputs(self):
-        for node_type in (self.module.BVRegionalPromptNode, self.module.BVRegionalLoraNode, self.module.BVRegionalNativeConditioningNode):
+    def test_only_regional_context_writers_expose_typed_provider_inputs(self):
+        for node_type in (self.module.BVRegionalPromptNode, self.module.BVRegionalLoraNode):
             optional = node_type.INPUT_TYPES()["optional"]
             providers = [optional[f"resource_provider_{index}"] for index in range(1, 21)]
             self.assertTrue(all(spec[0] == self.module.RUNTIME_PROVIDER and spec[1]["forceInput"] for spec in providers))
+        for node_type in (
+            self.module.BVRegionalNativeConditioningNode,
+            self.module.BVRegionalSDXLAttentionNode,
+            self.module.BVRegionalZImageAttentionNode,
+            self.module.BVRegionalFlux2KleinAttentionNode,
+            self.module.BVRegionalKrea2AttentionNode,
+            self.module.BVRegionalAnimaConditioningNode,
+        ):
+            self.assertNotIn("optional", node_type.INPUT_TYPES())
 
     def test_named_lora_stack_node_builds_a_chainable_registry(self):
         output = self.module.BVNamedLoraStackNode().register(
@@ -330,13 +344,13 @@ class RegionalNodeTests(unittest.TestCase):
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
 
-    def test_attention_consumers_expose_v3_lora_providers_and_apply_hook_passes(self):
+    def test_attention_nodes_apply_materialized_context_without_consumer_inputs(self):
         cases = (
             (self.module.BVRegionalSDXLAttentionNode, "compile_sdxl_attention", "apply_sdxl_attention_patch", (1.0,)),
             (self.module.BVRegionalZImageAttentionNode, "compile_zimage_attention", "apply_zimage_attention_patch", (1.0,)),
             (self.module.BVRegionalFlux2KleinAttentionNode, "compile_flux2_klein_attention", "apply_flux2_klein_attention_patch", (1.0,)),
         )
-        regional = self.module.normalize_context(fixture()).with_capability(
+        configured = self.module.normalize_context(fixture()).with_capability(
             self.module.LORA_CAPABILITY,
             {
                 "version": 2,
@@ -355,14 +369,13 @@ class RegionalNodeTests(unittest.TestCase):
             "22222222-2222-4222-8222-222222222222",
             {"skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", 0.8, 0.6]]}},
         )
+        regional = self.module.materialize_lora_capability(
+            configured, provider, registry=self.module.LORA_CAPABILITY_REGISTRY
+        ).to_dict()
 
         for node_type, compiler_name, patcher_name, compiler_tail in cases:
             with self.subTest(node=node_type.__name__):
-                optional = node_type.INPUT_TYPES()["optional"]
-                self.assertEqual(
-                    set(optional),
-                    {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()},
-                )
+                self.assertNotIn("optional", node_type.INPUT_TYPES())
                 compiler_result = (["positive"], ["negative"], ["slot"], *compiler_tail)
                 with (
                     unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"global": [["skin.safetensors", 0.8, 0.6]]}),
@@ -376,7 +389,6 @@ class RegionalNodeTests(unittest.TestCase):
                 ):
                     result = node_type().apply(
                         "model", "clip", regional, 1.0, 0.0, 0.5,
-                        resource_provider=provider,
                     )
 
                 hook_passes.assert_called_once_with(
@@ -394,10 +406,7 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalKrea2AttentionNode.RETURN_TYPES,
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
-        self.assertEqual(
-            set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
-            {"lora_registry", "lora_bindings", "resource_provider", *self.module._lora_provider_inputs()},
-        )
+        self.assertNotIn("optional", self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES())
         mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
         self.assertEqual(mode[1]["default"], "token_gated_singlepass")
@@ -405,7 +414,6 @@ class RegionalNodeTests(unittest.TestCase):
     def test_krea2_call_without_mode_uses_singlepass_default(self):
         node = self.module.BVRegionalKrea2AttentionNode()
         with (
-            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
             unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={}),
             unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
             unittest.mock.patch.object(
@@ -429,7 +437,6 @@ class RegionalNodeTests(unittest.TestCase):
     def test_krea2_singlepass_skips_model_hook_passes(self):
         node = self.module.BVRegionalKrea2AttentionNode()
         with (
-            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
             unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
             unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
             unittest.mock.patch.object(
@@ -490,7 +497,6 @@ class RegionalNodeTests(unittest.TestCase):
         fake_patcher.ApplyAnimaRegionalConditioningPatch = FakeApply
         with (
             unittest.mock.patch.dict(sys.modules, {fake_patcher.__name__: fake_patcher}),
-            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
             unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
             unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
             unittest.mock.patch.object(
@@ -523,7 +529,6 @@ class RegionalNodeTests(unittest.TestCase):
         fake_patcher.ApplyAnimaRegionalConditioningPatch = FakeApply
         with (
             unittest.mock.patch.dict(sys.modules, {fake_patcher.__name__: fake_patcher}),
-            unittest.mock.patch.object(self.module, "resolve_scope_stacks", return_value={}),
             unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
             unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
             unittest.mock.patch.object(

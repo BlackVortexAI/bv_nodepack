@@ -102,7 +102,7 @@ export function localLoraCollectors(node:any){
     return (node.graph?._nodes??[]).filter((candidate:any)=>candidate!==node&&candidate.graph===node.graph&&String(candidate.comfyClass??candidate.type)===LORA_COLLECTOR_NODE);
 }
 
-const LORA_EXECUTORS=new Set(["BV Regional Native Conditioning","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"]);
+const LORA_EXECUTORS=new Set<string>();
 
 export function downstreamLoraConsumers(transformer:any){
     const graph=transformer.graph,queue=[transformer],seen=new Set<any>([transformer]),found:any[]=[];

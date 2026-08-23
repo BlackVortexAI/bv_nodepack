@@ -47,8 +47,8 @@ def validate_lora_resource_reference(reference: dict[str, Any]) -> None:
 
 def validate_lora_capability(payload: dict[str, Any]) -> None:
     version = payload.get("version")
-    expected = {"version", "collector_id", "entries"} if version == 1 else {"version", "entries"}
-    if version not in {1, 2} or set(payload) != expected:
+    expected = {"version", "collector_id", "entries"} if version == 1 else ({"version", "entries"} if version == 2 else {"version", "entries", "scopes"})
+    if version not in {1, 2, 3} or set(payload) != expected:
         raise RegionalContextError("LoRA capability has unknown or missing fields")
     collector_id = payload.get("collector_id")
     if version == 1 and collector_id is not None:
@@ -101,6 +101,16 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
                 _required_uuid(target["region_id"], f"{target_path}.region_id")
     if version == 1 and needs_collector and collector_id is None:
         raise RegionalContextError("external LoRA entries require collector_id")
+    if version == 3:
+        scopes = payload["scopes"]
+        if not isinstance(scopes, dict):
+            raise RegionalContextError("LoRA capability scopes must be an object")
+        for scope, stack in scopes.items():
+            if not isinstance(scope, str) or not scope:
+                raise RegionalContextError("LoRA capability scope names must be non-empty strings")
+            parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {
+                scope: {"id": scope, "name": scope, "stack": stack}
+            }})
 
 
 def migrate_lora_capability_v1(payload: dict[str, Any]) -> dict[str, Any]:
@@ -117,10 +127,19 @@ def migrate_lora_capability_v1(payload: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+def migrate_lora_capability_v2(payload: dict[str, Any]) -> dict[str, Any]:
+    validate_lora_capability(payload)
+    migrated = {"version": 3, "entries": payload["entries"], "scopes": {}}
+    validate_lora_capability(migrated)
+    return migrated
+
+
 def normalize_lora_capability(payload: Any) -> dict[str, Any]:
     clean = dict(payload)
     validate_lora_capability(clean)
-    return migrate_lora_capability_v1(clean) if clean["version"] == 1 else clean
+    if clean["version"] == 1:
+        clean = migrate_lora_capability_v1(clean)
+    return migrate_lora_capability_v2(clean) if clean["version"] == 2 else clean
 
 
 def normalize_lora_prompt_config(payload: Any) -> dict[str, Any]:
@@ -154,10 +173,10 @@ def register_lora_contracts() -> tuple[CapabilityRegistry, ResourceRegistry]:
     capabilities.register(
         "bv-nodepack", "lora",
         CapabilityRegistration(
-            version=2,
+            version=3,
             validator=validate_lora_capability,
-            version_validators={1: validate_lora_capability, 2: validate_lora_capability},
-            migrations={1: migrate_lora_capability_v1},
+            version_validators={1: validate_lora_capability, 2: validate_lora_capability, 3: validate_lora_capability},
+            migrations={1: migrate_lora_capability_v1, 2: migrate_lora_capability_v2},
             operations={"replace": _replace_lora, "merge": _merge_lora, "subtract": _subtract_lora, "clear": lambda current, _configured: current},
             metadata={"display_name": "LoRA"},
         ),
@@ -191,6 +210,7 @@ def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityR
     if operation == "clear":
         return context.without_capability(LORA_CAPABILITY)
     clean = normalize_lora_capability(payload)
+    clean = {"version": 3, "entries": clean["entries"], "scopes": {}}
     document_id = context.core["document_id"]
     region_ids = {region["id"] for region in context.core["regions"]}
     for entry in clean["entries"]:
@@ -213,6 +233,7 @@ def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityR
         if handler is None:
             raise RegionalContextError(f"unsupported LoRA operation: {operation}")
         result = handler(current, clean)
+        result = {"version": 3, "entries": result["entries"], "scopes": {}}
         validate_lora_capability(result)
     return context.with_capability(LORA_CAPABILITY, result)
 
@@ -331,3 +352,22 @@ def resolve_lora_capability(value: Any, provider: Any = None, *, registry: Capab
         if combined:
             scopes[region["id"]] = combined
     return scopes
+
+
+def materialize_lora_capability(value: Any, provider: Any = None, *, registry: CapabilityRegistry) -> RegionalContext:
+    context = normalize_context(value, registry=registry)
+    if LORA_CAPABILITY not in context.capabilities:
+        return context
+    scopes = resolve_lora_capability(context, provider, registry=registry)
+    payload = context.require_capability(LORA_CAPABILITY)
+    return context.with_capability(LORA_CAPABILITY, {"version": 3, "entries": payload["entries"], "scopes": scopes})
+
+
+def materialized_lora_scopes(value: Any, *, registry: CapabilityRegistry) -> dict[str, list[list[Any]]]:
+    context = normalize_context(value, registry=registry)
+    payload = context.capabilities.get(LORA_CAPABILITY)
+    if payload is None:
+        return {}
+    if payload.get("version") != 3:
+        raise RegionalContextError("LoRA capability was not materialized by BV Regional Prompt or BV Regional LoRA")
+    return {scope: [list(item) for item in stack] for scope, stack in payload["scopes"].items()}
