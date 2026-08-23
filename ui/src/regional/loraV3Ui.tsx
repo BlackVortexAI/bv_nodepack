@@ -1,6 +1,6 @@
 import { getApp } from "../appHelper.js";
 import type { ResourcePickerCollector } from "../ui/components";
-import type { LoraV3Config, LoraV3Target, LoraV3TargetOption } from "./LoraV3ResourcePickerPanel";
+import { withoutLoraV3Target, type LoraV3Config, type LoraV3Target, type LoraV3TargetOption } from "./LoraV3ResourcePickerPanel";
 import { emptyLoraV3Config, parseLoraV3Config, serializeLoraV3Config } from "./loraV3Config";
 import { connectLoraConsumerTree, ensureLoraCollectorOutput, ensureLoraConsumerInput, linkedLocalLoraCollector, localLoraCollectors, upstreamLoraTransformer } from "./loraV3Graph";
 import { installM0CanvasVisibility } from "./m0VisualProjection";
@@ -37,14 +37,14 @@ export function loraV3TargetOptions(node:any):LoraV3TargetOption[]{
     return [{value:"global",label:"Global",target:{scope:"global"}},...(document.regions??[]).map((region:any)=>({value:`region:${document.document_id}:${region.id}`,label:String(region.name||region.id),target:{scope:"region" as const,document_id:String(document.document_id),region_id:String(region.id)}}))];
 }
 export function loraV3Resolved(node:any,config:LoraV3Config){const linked=linkedLocalLoraCollector(node);return Boolean(linked)&&String(widget(linked,"collector_id")?.value??"")===String(config.collector_id??"");}
-export function setLoraV3Target(node:any,config:LoraV3Config,target:LoraV3Target,collectorId:string|null,resourceId:string|null){
-    const matches=(candidate:Record<string,unknown>)=>candidate.scope===target.scope&&(target.scope==="global"||(candidate.document_id===target.document_id&&candidate.region_id===target.region_id));
-    const collectorChanged=Boolean(collectorId&&collectorId!==config.collector_id),fallbackResource=collectorChanged?loraV3Catalog(node).find(item=>item.id===collectorId)?.resources[0]?.id:null;
-    let entries=config.entries.filter(entry=>!entry.targets.some(matches)).map(entry=>collectorChanged&&entry.source.kind==="external"&&fallbackResource?{...entry,source:{...entry.source,resource_id:fallbackResource}}:entry);
-    if(resourceId)entries=[...entries,{id:crypto.randomUUID(),source:{kind:"external",resource_id:resourceId},targets:[target]}];
-    const next:LoraV3Config={...config,collector_id:entries.some(entry=>entry.source.kind==="external")?collectorId:null,entries};
+function commitLoraV3Config(node:any,next:LoraV3Config){
     const choice=loraV3Catalog(node).find(item=>item.id===next.collector_id);connectLoraConsumerTree(node,choice?.node??null);writeNodeLoraV3Config(node,next);return next;
 }
+export function setLoraV3Collector(node:any,config:LoraV3Config,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"";return commitLoraV3Config(node,{...config,collector_id:collectorId||null,entries:config.entries.map(entry=>entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry)});}
+export function setLoraV3EntryResource(node:any,config:LoraV3Config,entryId:string,resourceId:string){return commitLoraV3Config(node,{...config,entries:config.entries.map(entry=>entry.id===entryId&&entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry)});}
+export function addLoraV3TargetEntry(node:any,config:LoraV3Config,target:LoraV3Target){const choice=loraV3Catalog(node).find(item=>item.id===config.collector_id)??loraV3Catalog(node)[0],resource=choice?.resources[0];if(!choice||!resource)return config;return commitLoraV3Config(node,{...config,collector_id:choice.id,entries:[...config.entries,{id:crypto.randomUUID(),source:{kind:"external",resource_id:resource.id},targets:[target]}]});}
+export function removeLoraV3TargetEntry(node:any,config:LoraV3Config,entryId:string,target:LoraV3Target){return commitLoraV3Config(node,withoutLoraV3Target(config,target,entryId));}
+export function clearLoraV3Target(node:any,config:LoraV3Config,target:LoraV3Target){return commitLoraV3Config(node,withoutLoraV3Target(config,target));}
 
 function installCollector(node:any){ensureCanvasVisibility();const id=widget(node,"collector_id");ensureId(id);const current=String(id?.value??"").trim(),duplicate=(node.graph?._nodes??[]).find((item:any)=>item!==node&&nodeClass(item)==="BV LoRA Stack Collector"&&String(widget(item,"collector_id")?.value??"").trim()===current);if(id&&current&&duplicate){const next=crypto.randomUUID();id.value=next;node.__bvLoraCollectorIdRemap={[current]:next};}hideLoraV3Widget(id);ensureLoraCollectorOutput(node);node.__bvRuntimeResourceProvider=true;}
 export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();const index=ensureLoraConsumerInput(node),input=node.inputs?.[index];if(input){input.hidden=true;input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}if(!linkedLocalLoraCollector(node)){const transformer=upstreamLoraTransformer(node),collector=transformer&&linkedLocalLoraCollector(transformer);if(collector)connectLoraConsumerTree(transformer,collector);}}

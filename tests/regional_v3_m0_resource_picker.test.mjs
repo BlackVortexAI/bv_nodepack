@@ -14,13 +14,13 @@ const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resour
 test("a catalog match without a real link stays visibly unresolved",()=>{
   const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:false,onCollector(){},onResource(){}}));
   assert.match(html,/is-unresolved/);
-  assert.match(html,/Unresolved resource selection/);
+  assert.doesNotMatch(html,/Unresolved resource selection/);
   assert.doesNotMatch(html,/Collector One \/ Alpha/);
 });
 
-test("a linked id selection renders the closed Collector / Resource summary",()=>{
+test("a linked id selection renders both closed BV dropdown values without a duplicate summary",()=>{
   const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,onCollector(){},onResource(){}}));
-  assert.match(html,/Collector One \/ Alpha/);
+  assert.match(html,/>Collector One</);assert.match(html,/>Alpha</);assert.doesNotMatch(html,/Collector One \/ Alpha/);
 });
 
 test("Nodes 2.0 graph slots are repaired idempotently before linking",()=>{
@@ -77,8 +77,7 @@ test("a direct same-graph link resolves its local collector",()=>{
 
 test("the shared resource picker uses BV popover selects and treats empty as neutral",()=>{
   const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"",resourceId:"",resolved:false,onCollector(){},onResource(){}}));
-  assert.match(html,/No resource selected/);
-  assert.doesNotMatch(html,/Unresolved resource selection|<select\b/);
+  assert.doesNotMatch(html,/No resource selected|Unresolved resource selection|bv-resource-picker-summary|<select\b/);
   assert.match(html,/aria-haspopup="listbox"/);
 });
 
@@ -103,7 +102,7 @@ test("the shared picker panel exposes a non-serialized debug control",()=>{
   const html=renderToStaticMarkup(React.createElement(M0ResourcePickerPanel,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,debugVisible:false,onCollector(){},onResource(){},onDebug(){}}));
   assert.match(html,/Hidden link debug/);
   assert.match(html,/role="switch"/);
-  assert.match(html,/Collector One \/ Alpha/);
+  assert.match(html,/>Collector One</);assert.match(html,/>Alpha</);
 });
 
 test("Nodes 2.0 hides every persisted id widget without leaving click overlays",()=>{
