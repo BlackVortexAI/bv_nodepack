@@ -135,6 +135,23 @@ test("the spike uses ordinary graph links without prompt hooks or name fallback"
   assert.doesNotMatch(source,/allM0WorkflowGraphs|planM0CollectorConnection/);
   assert.match(source,/sanitizeSingleSelection/);
   assert.match(source,/draw\(\);setDebug\(node,Boolean\(node\.properties\?\.bvM0DebugVisible\),false\)/);
+  assert.match(source,/getMinHeight:\(\)=>/);
+  assert.match(source,/host\.parentElement\?\.style\.position==="fixed"/);
+  assert.match(source,/translateY\(-\$\{slots\*20\}px\)/);
+  assert.match(source,/\[0,50,150,300\]\.forEach/);
+});
+
+test("a converted subgraph host cannot keep root resource links in debug presentation",()=>{
+  const output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",__bvM0ResourceSlot:true};
+  const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",__bvM0ResourceSlot:true};
+  const collector={id:1,__bvM0ResourceProvider:true,outputs:[output]};
+  const subgraphHost={id:2,properties:{bvM0DebugVisible:true},inputs:[input]};
+  const nodes=new Map([[1,collector],[2,subgraphHost]]),seen={link:false};
+  const canvas={graph:{_nodes:[collector,subgraphHost],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(){}};
+  installM0CanvasVisibility(canvas);
+  const ctx={save(){},restore(){},setLineDash(){},lineDashOffset:0};
+  canvas.renderLink(ctx,null,null,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  assert.equal(seen.link,false);
 });
 
 test("the canvas projection hides links without replacing canonical Nodes 2.0 graph arrays",()=>{
@@ -177,14 +194,14 @@ test("classic canvas suppresses only typed provider slot drawing while still dra
   const input=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7});
   const output=Object.assign(Object.create(slotPrototype),{type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",links:[7]});
   const ordinary={type:"IMAGE",draw(){draws.push("ordinary")}};
-  const collector={id:1,inputs:[],outputs:[output]},consumer={id:2,inputs:[input],outputs:[],properties:{bvM0DebugVisible:true}},seen={};
+  const collector={id:1,inputs:[],outputs:[output]},consumer={id:2,__bvM0ResourceConsumer:true,inputs:[input],outputs:[],properties:{bvM0DebugVisible:true}},seen={};
   const nodes=new Map([[1,collector],[2,consumer]]),ctx={save(){},restore(){},setLineDash(){}};
   collector.outputs.push(ordinary);
   const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(node){seen[node.id]=[node.inputs.length,node.outputs.length];for(const slot of [...node.inputs,...node.outputs]){slot.draw?.();slot.drawCollapsed?.()}}};
   installM0CanvasVisibility(canvas);
   canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
   canvas.drawNode(collector,ctx);canvas.drawNode(consumer,ctx);
-  assert.deepEqual(seen,{1:[0,2],2:[1,0],link:true});
+  assert.deepEqual(seen,{1:[0,1],2:[0,0],link:true});
   assert.deepEqual(draws,["ordinary"]);
   assert.equal(Object.hasOwn(output,"draw"),false);assert.equal(Object.hasOwn(input,"draw"),false);
   assert.equal(output.draw,slotPrototype.draw);assert.equal(input.drawCollapsed,slotPrototype.drawCollapsed);
@@ -193,7 +210,7 @@ test("classic canvas suppresses only typed provider slot drawing while still dra
 
 test("debug rendering gives native M0 links a dashed animated projection",()=>{
   const input={link:7,__bvM0ResourceSlot:true},output={links:[7],__bvM0ResourceSlot:true};
-  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input],properties:{bvM0DebugVisible:true}},seen={};
+  const collector={id:1,outputs:[output]},consumer={id:2,__bvM0ResourceConsumer:true,inputs:[input],properties:{bvM0DebugVisible:true}},seen={};
   const ctx={lineDashOffset:0,save(){seen.saved=true},restore(){seen.restored=true},setLineDash(value){seen.dash=value}};
   const nodes=new Map([[1,collector],[2,consumer]]);
   const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(...args){seen.flow=args[5]},drawNode(){}};
@@ -207,7 +224,7 @@ test("debug rendering gives native M0 links a dashed animated projection",()=>{
 
 test("multi debug projects every native edge onto one visual fan-in anchor",()=>{
   const outputs=[{links:[1],__bvM0ResourceSlot:true},{links:[2],__bvM0ResourceSlot:true}];
-  const target={id:3,__bvM0FanInAnchorSlot:0,properties:{bvM0DebugVisible:true},inputs:[{link:1,__bvM0ResourceSlot:true},{link:2,__bvM0ResourceSlot:true}],getConnectionPos(input,slot){assert.equal(input,true);assert.equal(slot,0);return[9,11]}};
+  const target={id:3,__bvM0ResourceConsumer:true,__bvM0FanInAnchorSlot:0,properties:{bvM0DebugVisible:true},inputs:[{link:1,__bvM0ResourceSlot:true},{link:2,__bvM0ResourceSlot:true}],getConnectionPos(input,slot){assert.equal(input,true);assert.equal(slot,0);return[9,11]}};
   const nodes=new Map([[1,{id:1,outputs:[outputs[0]]}],[2,{id:2,outputs:[outputs[1]]}],[3,target]]),ends=[];
   const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(){}};
   const canvas={graph:{_nodes:[...nodes.values()],getNodeById(id){return nodes.get(id)}},renderLink(ctx,a,b){ends.push(b)},drawNode(){}};
