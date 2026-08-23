@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,migrateLegacyLoraCollectorLink,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
+import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,installLoraSizePolicy,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,migrateLegacyLoraCollectorLink,trimUnusedLoraConsumerInputs,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
 
 const graph=()=>({_nodes:[],links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}});
 const node=(id,type,g)=>({id,type,graph:g,inputs:[],outputs:[],addInput(name,type){this.inputs.push({name,type,link:null})},addOutput(name,type){this.outputs.push({name,type,links:null})}});
@@ -11,8 +11,20 @@ test("production LoRA slots use the permanent typed provider contract",()=>{
   assert.equal(collector.outputs[0].type,"BV_RUNTIME_RESOURCE_PROVIDER");assert.equal(consumer.inputs[0].hidden,true);
 });
 test("twenty hidden provider inputs do not reserve four hundred pixels of node height",()=>{
-  let applied;const consumer={size:[320,500],inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER",hidden:true})),outputs:[{type:"BV_REGIONAL"},{type:"BV_BINDINGS"}],widgets:[{type:"button"},{type:"button"}],setSize:size=>{applied=size}};
-  compactLoraConsumerNode(consumer);assert.deepEqual(applied,[320,120]);
+  let applied;const consumer={size:[320,520],inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER",hidden:true})),computeSize:()=>[300,520],setSize(size){applied=size;this.size=size}};
+  compactLoraConsumerNode(consumer);assert.deepEqual(applied,[320,120]);assert.deepEqual(consumer.computeSize(),[300,120]);
+});
+test("provider compaction remains active when ComfyUI recomputes a new node",()=>{
+  const consumer={size:[320,520],inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER"})),computeSize:()=>[300,520]};
+  installLoraSizePolicy(consumer);assert.deepEqual(consumer.computeSize(),[300,120]);assert.equal(consumer.__bvLoraOriginalComputeSize instanceof Function,true);
+});
+test("a new consumer removes every unused backend provider slot",()=>{
+  const consumer={inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER",link:null})),removeInput(index){this.inputs.splice(index,1)}};
+  trimUnusedLoraConsumerInputs(consumer,0);assert.deepEqual(consumer.inputs,[]);
+});
+test("trimming preserves configured ordinals and any linked later slot",()=>{
+  const consumer={inputs:Array.from({length:5},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER",link:index===3?44:null})),removeInput(index){this.inputs.splice(index,1)}};
+  trimUnusedLoraConsumerInputs(consumer,2);assert.deepEqual(consumer.inputs.map(slot=>slot.name),["resource_provider_1","resource_provider_2","resource_provider_4"]);
 });
 
 test("collector connections are ordinary same-graph links",()=>{

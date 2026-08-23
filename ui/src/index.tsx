@@ -701,7 +701,8 @@ comfyApp.registerExtension({
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         if (installM0ResourceSpike(nodeType, nodeData)) return;
-        if (installLoraV3Ui(nodeType, nodeData)) return;
+        const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData);
+        if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
         if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){
             const created=nodeType.prototype.onNodeCreated,removed=nodeType.prototype.onRemoved;
             nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(nodeData.name!=="BV Control Center"){this.properties??={};if(typeof this.properties.bvWindowMenuVisible!=="boolean")this.properties.bvWindowMenuVisible=!['BV Smart Pipe','BV Smart Pipe Merge'].includes(nodeData.name)}queueMicrotask(refreshBvToolbarCapabilities);return result};

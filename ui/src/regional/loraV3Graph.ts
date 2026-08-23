@@ -3,6 +3,7 @@ export const LORA_PROVIDER_SLOT="resource_provider";
 export const LORA_COLLECTOR_NODE="BV LoRA Stack Collector";
 export const LORA_MAX_COLLECTORS=20;
 export const loraProviderSlot=(ordinal:number)=>`${LORA_PROVIDER_SLOT}_${ordinal}`;
+const LORA_PROVIDER_SLOT_HEIGHT=20;
 
 const graphLink=(graph:any,id:any)=>id==null?null:(graph?._links?.get?.(id)??graph?.links?.get?.(id)??graph?.links?.[id]??null);
 
@@ -27,15 +28,24 @@ export function ensureLoraConsumerInputs(node:any,count=LORA_MAX_COLLECTORS){
     return indexes;
 }
 export function ensureLoraConsumerInput(node:any){return ensureLoraConsumerInputs(node,1)[0];}
+export function trimUnusedLoraConsumerInputs(node:any,keepCount=0){
+    const removable=(node.inputs??[]).map((slot:any,index:number)=>({slot,index,ordinal:Number(slot?.__bvLoraProviderOrdinal??String(slot?.name??"").match(/^resource_provider_(\d+)$/)?.[1]??0)}))
+        .filter((item:any)=>item.ordinal>keepCount&&item.slot?.type===LORA_PROVIDER_TYPE&&item.slot?.link==null).sort((a:any,b:any)=>b.index-a.index);
+    for(const item of removable)node.removeInput?.(item.index);
+}
 
+export function installLoraSizePolicy(node:any){
+    if(node.__bvLoraOriginalComputeSize||typeof node.computeSize!=="function")return;
+    const original=node.computeSize;node.__bvLoraOriginalComputeSize=original;
+    node.computeSize=function(){
+        const computed=original.apply(this,arguments),providerCount=(this.inputs??[]).filter((slot:any)=>slot?.type===LORA_PROVIDER_TYPE).length;
+        return [Number(computed?.[0]??this.size?.[0]??220),Math.max(60,Number(computed?.[1]??this.size?.[1]??60)-providerCount*LORA_PROVIDER_SLOT_HEIGHT)];
+    };
+}
 export function compactLoraConsumerNode(node:any){
-    const current=node.size??[0,0];if(!node.setSize)return;
-    const visibleInputs=(node.inputs??[]).filter((slot:any)=>slot?.type!==LORA_PROVIDER_TYPE&&!slot?.hidden&&!slot?.widget).length;
-    const visibleOutputs=(node.outputs??[]).filter((slot:any)=>!slot?.hidden).length;
-    const visibleWidgets=(node.widgets??[]).filter((item:any)=>!item?.hidden&&item?.type!=="converted-widget").length;
-    const height=Math.max(60,40+Math.max(visibleInputs,visibleOutputs)*20+visibleWidgets*20);
-    const width=Math.max(Number(current[0]??0),220);
-    if(Math.abs(Number(current[0]??0)-width)<0.5&&Math.abs(Number(current[1]??0)-height)<0.5)return;
+    installLoraSizePolicy(node);if(!node.setSize)return;
+    const computed=node.computeSize?.()??node.size??[220,60],width=Math.max(Number(node.size?.[0]??0),Number(computed[0]??0),220),height=Math.max(60,Number(computed[1]??60));
+    if(Math.abs(Number(node.size?.[0]??0)-width)<0.5&&Math.abs(Number(node.size?.[1]??0)-height)<0.5)return;
     node.setSize([width,height]);
 }
 export function scheduleCompactLoraConsumerNode(node:any){
@@ -53,8 +63,8 @@ export function linkedLocalLoraCollector(node:any){
     return source?.graph===node.graph&&(source?.type===LORA_COLLECTOR_NODE||output?.type===LORA_PROVIDER_TYPE)?source:null;
 }
 
-export function linkedLocalLoraCollectors(node:any){return ensureLoraConsumerInputs(node).map(index=>{
-    const input=node.inputs?.[index],link=graphLink(node.graph,input?.link);if(!link||String(link.target_id)!==String(node.id))return null;
+export function linkedLocalLoraCollectors(node:any){return Array.from({length:LORA_MAX_COLLECTORS},(_,index)=>{
+    const input=node.inputs?.find((slot:any)=>slot?.name===loraProviderSlot(index+1)),link=graphLink(node.graph,input?.link);if(!link||String(link.target_id)!==String(node.id))return null;
     const source=node.graph?.getNodeById?.(link.origin_id),output=source?.outputs?.[Number(link.origin_slot)];
     return source?.graph===node.graph&&(source?.type===LORA_COLLECTOR_NODE||source?.comfyClass===LORA_COLLECTOR_NODE||output?.type===LORA_PROVIDER_TYPE)?source:null;
 });}
@@ -72,12 +82,13 @@ export function connectLocalLoraCollector(consumer:any,collector:any|null){
 }
 
 export function connectLocalLoraCollectors(consumer:any,collectors:(any|null)[]){
-    if(collectors.length>LORA_MAX_COLLECTORS)return false;const inputs=ensureLoraConsumerInputs(consumer);
-    for(let ordinal=0;ordinal<inputs.length;ordinal++){
+    if(collectors.length>LORA_MAX_COLLECTORS)return false;const inputs=ensureLoraConsumerInputs(consumer,collectors.length);
+    for(let ordinal=0;ordinal<collectors.length;ordinal++){
         const index=inputs[ordinal],current=consumer.inputs?.[index];if(current?.link!=null)consumer.disconnectInput?.(index);
         const collector=collectors[ordinal];if(!collector)continue;if(collector.graph!==consumer.graph)return false;
         const output=ensureLoraCollectorOutput(collector);if(output<0)return false;collector.connect?.(output,consumer,index);
     }
+    trimUnusedLoraConsumerInputs(consumer,collectors.length);
     return linkedLocalLoraCollectors(consumer).slice(0,collectors.length).every((collector,index)=>collector===collectors[index]);
 }
 
