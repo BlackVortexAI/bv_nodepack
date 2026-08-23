@@ -287,7 +287,9 @@ def serialize_document(document: Any, *, pretty: bool = False) -> str:
 
 
 def select_scope(document: Any, scope: str, region: str = "") -> dict[str, Any]:
-    clean = parse_document(document)
+    from .context import context_document
+
+    clean = context_document(document)
     if scope in {"global", "background"}:
         return {"document": clean, "scope": scope, "region_id": None}
     if scope != "region":

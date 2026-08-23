@@ -6,7 +6,8 @@ from typing import Any, Optional
 import torch
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, region_used_for, selection_prompts
+from .context import context_document
+from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -73,7 +74,7 @@ def compile_anima_adapter(
 ) -> tuple[list, list, AnimaRegionChain, list]:
     """Compile BV_REGIONAL into the Sen-sou Anima patcher's public node contract."""
 
-    clean = parse_document(document)
+    clean = context_document(document)
     scoped_hooks = hooks_by_scope or {}
     width, height = clean["canvas"]["width"], clean["canvas"]["height"]
 

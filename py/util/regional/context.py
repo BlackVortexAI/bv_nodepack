@@ -377,3 +377,24 @@ def normalize_context(value: Any, *, registry: CapabilityRegistry | None = None)
 def serialize_context(value: Any, *, registry: CapabilityRegistry | None = None, pretty: bool = False) -> str:
     clean = normalize_context(value, registry=registry).to_dict()
     return json.dumps(clean, ensure_ascii=False, sort_keys=True, indent=2 if pretty else None, separators=None if pretty else (",", ":"))
+
+
+def context_document(value: Any, *, registry: CapabilityRegistry | None = None) -> dict[str, Any]:
+    """Return the validated v2-compatible document projection used by existing consumers."""
+    core = normalize_context(value, registry=registry).core
+    return {
+        "schema": "bv.regional",
+        "version": 2,
+        **{key: item for key, item in core.items() if key != "version"},
+    }
+
+
+def is_v3_context(value: Any) -> bool:
+    if isinstance(value, RegionalContext):
+        return True
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return False
+    return isinstance(value, dict) and value.get("schema") == "bv.regional" and value.get("version") == ENVELOPE_VERSION

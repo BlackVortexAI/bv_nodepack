@@ -15,6 +15,7 @@ from util.regional.zimage_attention import (  # noqa: E402
     build_joint_attention_bias,
     compile_zimage_attention,
 )
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -48,6 +49,11 @@ def slot(name, mask, strength=1.0, tokens=2):
 
 
 class RegionalZImageAttentionTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        _, _, slots, aspect = compile_zimage_attention(normalize_context(fixture()), FakeClip())
+        self.assertEqual(slots[0].name, "global")
+        self.assertGreater(aspect, 0)
+
     def test_compiler_concatenates_slots_and_always_emits_zero_negative(self):
         positive, negative, slots, aspect = compile_zimage_attention(fixture(), FakeClip())
         self.assertEqual([s.name for s in slots], [

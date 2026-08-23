@@ -19,6 +19,7 @@ from util.regional.krea2_attention import (  # noqa: E402
     build_krea2_joint_attention_bias,
     compile_krea2_attention,
 )
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -67,6 +68,11 @@ def slot(name, mask, strength=1.0, tokens=2):
 
 
 class RegionalKrea2AttentionTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        _, _, slots, aspect = compile_krea2_attention(normalize_context(fixture()), FakeClip())
+        self.assertEqual(slots[0].name, "global")
+        self.assertGreater(aspect, 0)
+
     def test_compiler_treats_missing_krea_attention_mask_as_all_tokens_active(self):
         positive, negative, slots, _ = compile_krea2_attention(
             fixture(), FakeClipWithoutAttentionMask()

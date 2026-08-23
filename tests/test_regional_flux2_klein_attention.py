@@ -18,6 +18,7 @@ from util.regional.flux2_klein_attention import (  # noqa: E402
     build_flux2_joint_attention_bias,
     compile_flux2_klein_attention,
 )
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -49,6 +50,11 @@ def slot(name, mask, strength=1.0, tokens=2):
 
 
 class RegionalFlux2KleinAttentionTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        _, _, slots, aspect = compile_flux2_klein_attention(normalize_context(fixture()), FakeClip())
+        self.assertEqual(slots[0].name, "global")
+        self.assertGreater(aspect, 0)
+
     def test_compiler_trims_per_prompt_padding_then_left_pads_combined_context(self):
         positive, negative, slots, aspect = compile_flux2_klein_attention(fixture(), FakeClip())
         self.assertEqual([item.name for item in slots], [

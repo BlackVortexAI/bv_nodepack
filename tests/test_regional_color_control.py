@@ -10,6 +10,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "py"))
 
 from util.regional.color_control import compile_color_control  # noqa: E402
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def document():
@@ -55,6 +56,12 @@ def document():
 
 
 class RegionalColorControlTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        source = document()
+        image, legend = compile_color_control(normalize_context(source))
+        self.assertEqual(tuple(image.shape[-3:]), (source["canvas"]["height"], source["canvas"]["width"], 3))
+        self.assertEqual(legend["schema"], "bv.regional.color_control")
+
     def test_control_image_is_white_with_solid_priority_winning_regions(self):
         image, legend = compile_color_control(document())
         entries = {entry["name"]: entry for entry in legend["regions"]}

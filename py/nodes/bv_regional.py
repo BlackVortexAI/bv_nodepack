@@ -14,6 +14,7 @@ from ..util.regional.document import (
     selection_prompts,
     serialize_document,
 )
+from ..util.regional.context import context_document, is_v3_context, normalize_context, serialize_context
 from ..util.regional.mask_renderer import mask_bbox, render_selection
 from ..util.regional.anima_adapter import ANIMA_REGIONS, compile_anima_adapter
 from ..util.regional.color_control import compile_color_control
@@ -127,13 +128,14 @@ class BVRegionalDebugNode:
     CATEGORY = CATEGORY_CORE
 
     def run(self, regional, pretty=True):
-        document = parse_document(regional)
+        context = normalize_context(regional)
+        document = context_document(context)
         enabled = sum(1 for region in document["regions"] if region["enabled"])
         summary = (
             f"{document['title']} | {document['canvas']['width']}x{document['canvas']['height']} | "
             f"{len(document['regions'])} regions ({enabled} enabled) | overlap={document['overlap']['mode']}"
         )
-        text = serialize_document(document, pretty=bool(pretty))
+        text = serialize_context(context, pretty=bool(pretty)) if is_v3_context(regional) else serialize_document(document, pretty=bool(pretty))
         return {"ui": {"regional_json": [text], "summary": [summary]}, "result": (text, summary, document["document_id"])}
 
 
@@ -385,7 +387,7 @@ class BVRegionalNativeConditioningNode:
     )
 
     def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35, lora_registry=None, lora_bindings=None):
-        document = parse_document(regional)
+        document = context_document(regional)
         scope_stacks = resolve_stack_paths(
             resolve_scope_stacks(lora_registry, lora_bindings, document)
         )
@@ -555,7 +557,7 @@ class BVRegionalKrea2AttentionNode:
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
-        document = parse_document(regional)
+        document = context_document(regional)
         scope_stacks = resolve_stack_paths(
             resolve_scope_stacks(lora_registry, lora_bindings, document)
         )
@@ -662,7 +664,7 @@ class BVRegionalAnimaConditioningNode:
                 "Update ComfyUI and verify the dependencies reported by the original import error."
             ) from error
 
-        document = parse_document(regional)
+        document = context_document(regional)
         scope_stacks = resolve_stack_paths(
             resolve_scope_stacks(lora_registry, lora_bindings, document)
         )

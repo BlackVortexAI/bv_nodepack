@@ -11,6 +11,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "py"))
 
 from util.regional.native_conditioning import compile_detailer_conditioning, compile_native_conditioning  # noqa: E402
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -81,6 +82,11 @@ class FakeHookGroup:
 
 
 class RegionalNativeConditioningTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        positive, negative = compile_native_conditioning(normalize_context(fixture()), FakeClip())
+        self.assertTrue(positive)
+        self.assertTrue(negative)
+
     def test_detailer_conditioning_weights_region_and_background_independently(self):
         document = fixture()
         document["version"] = 2

@@ -8,7 +8,8 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from .document import parse_document, region_used_for, selection_prompts
+from .context import context_document
+from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -56,7 +57,7 @@ def _prepare_mask(mask: torch.Tensor) -> torch.Tensor:
 
 
 def compile_zimage_attention(document: Any, clip: Any) -> tuple[list, list, list[ZImageRegionalSlot], float]:
-    clean = parse_document(document)
+    clean = context_document(document)
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])
 

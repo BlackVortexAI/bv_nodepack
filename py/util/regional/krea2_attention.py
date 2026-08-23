@@ -8,7 +8,8 @@ import torch
 import torch.nn.functional as F
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, region_used_for, selection_prompts
+from .context import context_document
+from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -99,7 +100,7 @@ def compile_krea2_attention(
     clip: Any,
     hooks_by_scope: dict[str, Any] | None = None,
 ) -> tuple[list, list, list[Krea2RegionalSlot], float]:
-    clean = parse_document(document)
+    clean = context_document(document)
     scoped_hooks = hooks_by_scope or {}
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])

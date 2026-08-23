@@ -11,6 +11,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "py"))
 
 from util.regional.anima_adapter import compile_anima_adapter  # noqa: E402
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -34,6 +35,13 @@ class FakeClip:
 
 
 class RegionalAnimaAdapterTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        positive, negative, chain, background = compile_anima_adapter(normalize_context(fixture()), FakeClip())
+        self.assertTrue(positive)
+        self.assertTrue(negative)
+        self.assertIsNotNone(chain)
+        self.assertTrue(background)
+
     def test_compiles_regions_into_external_patcher_compatible_chain(self):
         positive, negative, chain, background = compile_anima_adapter(fixture(), FakeClip())
         regions = chain.flatten()

@@ -17,6 +17,7 @@ from util.regional.sdxl_attention import (  # noqa: E402
     build_cross_attention_bias,
     compile_sdxl_attention,
 )
+from util.regional.context import normalize_context  # noqa: E402
 
 
 def fixture():
@@ -46,6 +47,13 @@ def _slot(name, mask, strength=1.0, tokens=2):
 
 
 class RegionalSDXLAttentionTests(unittest.TestCase):
+    def test_v3_context_compiles_through_existing_consumer(self):
+        _, _, slots, aspect = compile_sdxl_attention(normalize_context(fixture()), FakeClip())
+        _, _, legacy_slots, legacy_aspect = compile_sdxl_attention(fixture(), FakeClip())
+        self.assertEqual([slot.name for slot in slots], [slot.name for slot in legacy_slots])
+        self.assertEqual(aspect, legacy_aspect)
+        self.assertGreater(aspect, 0)
+
     def test_model_patcher_uses_direct_base_model_member(self):
         class FakeSDXL:
             pass

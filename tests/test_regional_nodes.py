@@ -140,6 +140,20 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(tuple(rendered[0].shape), (1, 100, 100))
         self.assertGreater(rendered[3], 0)
 
+    def test_v3_helper_pipeline_selects_extracts_and_renders(self):
+        context = self.module.normalize_context(fixture()).with_capability(
+            "future-pack.opaque", {"version": 9, "payload": ["untouched"]}
+        ).to_dict()
+        selection, selected_id, selected_name = self.module.BVRegionalSelectNode().select(
+            context, "region", "Face left"
+        )
+        extracted = self.module.BVRegionalPromptExtractNode().extract(selection)
+        rendered = self.module.BVRegionalMaskRenderNode().render(selection, 100, 100)
+        self.assertEqual(selected_id, fixture()["regions"][1]["id"])
+        self.assertEqual(selected_name, "Face left")
+        self.assertIn("green eyes", extracted[1])
+        self.assertEqual(tuple(rendered[0].shape), (1, 100, 100))
+
     def test_detailer_mask_renders_selected_region_at_image_size(self):
         document = fixture()
         document["version"] = 2
@@ -196,6 +210,15 @@ class RegionalNodeTests(unittest.TestCase):
         output = self.module.BVRegionalDebugNode().run(fixture())
         self.assertIn("3 regions", output["result"][1])
         self.assertEqual(json.loads(output["result"][0])["version"], 2)
+
+    def test_debug_preserves_complete_v3_context_and_unknown_capabilities(self):
+        context = self.module.normalize_context(fixture()).with_capability(
+            "future-pack.opaque", {"version": 9, "payload": ["untouched"]}
+        ).to_dict()
+        output = self.module.BVRegionalDebugNode().run(context)
+        serialized = json.loads(output["result"][0])
+        self.assertEqual(serialized["version"], 3)
+        self.assertEqual(serialized["capabilities"]["future-pack.opaque"], context["capabilities"]["future-pack.opaque"])
 
     def test_native_conditioning_node_is_registered_with_standard_outputs(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Native Conditioning"], self.module.BVRegionalNativeConditioningNode)

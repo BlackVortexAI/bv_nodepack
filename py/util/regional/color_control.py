@@ -7,7 +7,8 @@ from typing import Any
 
 import torch
 
-from .document import parse_document, region_used_for
+from .context import context_document
+from .document import region_used_for
 from .mask_renderer import render_region
 
 
@@ -55,7 +56,7 @@ def _stable_region_colors(regions: list[dict[str, Any]]) -> dict[str, tuple[int,
 
 def compile_color_control(regional: Any) -> tuple[torch.Tensor, dict[str, Any]]:
     """Compile BV_REGIONAL into a solid RGB control image and a machine-readable legend."""
-    document = parse_document(regional)
+    document = context_document(regional)
     width = int(document["canvas"]["width"])
     height = int(document["canvas"]["height"])
     regions = [region for region in document["regions"] if region_used_for(region, "generation")]

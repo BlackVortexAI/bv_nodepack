@@ -6,7 +6,8 @@ from typing import Any
 import torch
 
 from .clip_hooks import clip_with_hooks
-from .document import parse_document, region_used_for, selection_prompts
+from .context import context_document
+from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 
 
@@ -171,7 +172,7 @@ def compile_detailer_conditioning(
     global_weight = weight(global_influence, "global_influence")
     background_weight = weight(background_influence, "background_influence")
     primary_weight = weight(primary_region_influence, "primary_region_influence")
-    clean = parse_document(document)
+    clean = context_document(document)
     region = next((item for item in clean["regions"] if item["id"] == region_id), None)
     if region is None:
         raise ValueError(f"unknown detailer region: {region_id}")
@@ -252,7 +253,7 @@ def compile_native_conditioning(
             "this ComfyUI version can calculate conditioning mask bounds only for "
             "2D image latents. Use blend or exclusive instead."
         )
-    clean = parse_document(document)
+    clean = context_document(document)
     scoped_hooks = hooks_by_scope or {}
     if composition_mode == "exclusive":
         compile_branch, branch_options = _compile_exclusive_branch, {}

@@ -17,6 +17,7 @@ from util.regional.context import (  # noqa: E402
     ResourceRegistration,
     ResourceRegistry,
     UnsupportedCapabilityVersionError,
+    context_document,
     normalize_context,
     serialize_context,
 )
@@ -49,6 +50,16 @@ class RegionalContextTests(unittest.TestCase):
     def test_v3_round_trips_canonically(self):
         context = normalize_context(fixture())
         self.assertEqual(normalize_context(serialize_context(context)).to_dict(), context.to_dict())
+
+    def test_existing_consumer_projection_is_deterministic_and_defensive(self):
+        context = normalize_context(fixture()).with_capability(
+            "future-pack.opaque", {"version": 9, "payload": ["preserved"]}
+        )
+        projected = context_document(context)
+        projected["title"] = "mutated projection"
+        self.assertEqual(projected["version"], 2)
+        self.assertNotIn("capabilities", projected)
+        self.assertEqual(context.core["title"], fixture()["title"])
 
     def test_facade_constructor_cannot_bypass_validation(self):
         with self.assertRaisesRegex(RegionalContextError, "requires a BV Regional v3"):
