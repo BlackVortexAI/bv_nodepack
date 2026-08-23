@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Button, ResourcePicker, ResourcePickerCollector, ToggleField, type SelectOption } from "../ui/components";
 
 export type LoraV3Entry={id:string;source:{kind:"external";resource_id:string}|{kind:"native";lora_name:string;model_strength:number;clip_strength:number};targets:Record<string,unknown>[]};
@@ -23,9 +23,8 @@ export function LoraV3ScopePicker({collectors,config,target,resolved,onCollector
 }
 
 export function OptionalLoraV3ScopePicker(props:ScopeProps&{onClear:(target:LoraV3Target)=>void}){
-    const targetKey=loraV3TargetValue(props.target),assigned=externalFor(props.config,props.target).length>0,[enabled,setEnabled]=useState(assigned);
-    useEffect(()=>setEnabled(assigned),[assigned,targetKey]);
-    return <div className="bv-optional-lora-scope"><div className="bv-lora-v3-enable-row"><ToggleField label="" value={enabled} trueLabel="LoRA enabled" falseLabel="LoRA disabled" onValue={next=>{setEnabled(next);if(next&&!assigned)props.onAdd(props.target);if(!next)props.onClear(props.target);}}/>{enabled&&<LoraV3ScopePicker {...props}/>}</div></div>;
+    const enabled=externalFor(props.config,props.target).length>0;
+    return <div className="bv-optional-lora-scope"><div className="bv-lora-v3-enable-row"><ToggleField label="" value={enabled} trueLabel="LoRA enabled" falseLabel="LoRA disabled" onValue={next=>{if(next)props.onAdd(props.target);else props.onClear(props.target);}}/>{enabled&&<LoraV3ScopePicker {...props}/>}</div></div>;
 }
 
 export function LoraV3ResourcePickerPanel({collectors,config,resolved,targetOptions=[],onCollector,onResource,onAddExternal,onRemove}:{collectors:ResourcePickerCollector[];config:LoraV3Config;resolved:boolean;targetOptions?:LoraV3TargetOption[];onCollector:(id:string)=>void;onResource:(entryId:string,resourceId:string)=>void;onAddExternal:(target:LoraV3Target)=>void;onRemove:(entryId:string,target:LoraV3Target)=>void}){

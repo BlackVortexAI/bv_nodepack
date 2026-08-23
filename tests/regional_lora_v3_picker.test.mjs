@@ -8,6 +8,8 @@ import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config} from "../ui/s
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
 const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
+const pickerSource=readFileSync(new URL("../ui/src/regional/LoraV3ResourcePickerPanel.tsx",import.meta.url),"utf8");
+const regionalEditorSource=readFileSync(new URL("../ui/src/regional/RegionalEditor.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
 test("the production picker renders Collector / Resource from persisted ids",()=>{
  const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
@@ -40,6 +42,13 @@ test("Regional Prompt easy mode renders every stack assigned to its scope",()=>{
  const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"global"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(html,/LoRA enabled/);assert.match(html,/LoRA Stack 1/);assert.match(html,/LoRA Stack 2/);assert.match(html,/Add LoRA stack/);
  assert.match(html,/aria-label="Remove LoRA Stack 1"/);assert.doesNotMatch(html,/>Remove</);
+});
+test("Regional Prompt easy mode changes scope immediately when the selected region changes",()=>{
+ assert.doesNotMatch(pickerSource,/\[enabled,setEnabled\]=useState/);
+ assert.match(regionalEditorSource,/OptionalLoraV3ScopePicker key=\{selectedRegion\.id\}/);
+ const config={version:1,collector_id:"collector",entries:[{id:"left-entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]}]};
+ const right=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"region",document_id:"doc",region_id:"right"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
+ assert.match(right,/LoRA disabled/);assert.doesNotMatch(right,/LoRA Stack 1/);
 });
 test("Regional Prompt keeps the LoRA toggle above the stack card without overlap",()=>{
  assert.match(styles,/\.bv-lora-v3-enable-row\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
