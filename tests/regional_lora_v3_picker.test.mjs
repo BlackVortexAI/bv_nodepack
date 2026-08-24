@@ -77,6 +77,11 @@ test("adding an advanced LoRA stack commits through the graph-linking helper",()
  assert.match(editorSource,/commitLoraV3Config\(node,next\)/);
  assert.doesNotMatch(editorSource,/writeNodeLoraV3Config\(node,next\)/);
 });
+test("LoRA config edits defer and coalesce native graph reconciliation",()=>{
+ const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
+ assert.match(source,/writeNodeLoraV3Config\(node,next\);scheduleConfiguredLoraWriterTree\(node,next\)/);
+ assert.match(source,/__bvLoraReconcileScheduled/);assert.match(source,/setTimeout\(\(\)=>/);
+});
 test("the LoRA editor exposes ordered repeatable scope operations and participates in window visibility",()=>{
  assert.match(editorSource,/Add step/);assert.match(editorSource,/<SortableList/);assert.match(editorSource,/onReorder=/);
  assert.match(editorSource,/label="Target"/);assert.match(editorSource,/label="Operation"/);assert.match(editorSource,/crypto\.randomUUID\(\)/);
@@ -89,7 +94,7 @@ test("removing one scope preserves shared assignments and the input config",()=>
 });
 test("production LoRA presentation keeps ComfyUI links authoritative",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
- assert.match(source,/serialize:false/);assert.match(source,/reconcileConfiguredLoraWriterCollectors/);assert.match(source,/downstreamLoraConsumers/);assert.match(source,/__bvLoraCollectorIdRemap/);assert.match(source,/__bvLoraResourceIdRemap/);
+ assert.match(source,/serialize:false/);assert.match(source,/reconcileConfiguredLoraWriterCollectors/);assert.match(source,/reconcileDownstreamLoraWriters/);assert.match(source,/__bvLoraCollectorIdRemap/);assert.match(source,/__bvLoraResourceIdRemap/);
  assert.match(source,/Open LoRA Editor/);assert.doesNotMatch(source,/addDOMWidget|ReactDOM/);
  assert.doesNotMatch(source,/graphToPrompt|queuePrompt|MutationObserver/);
 });

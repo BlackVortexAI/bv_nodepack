@@ -88,6 +88,7 @@ export function connectLocalLoraCollectors(consumer:any,collectors:(any|null)[])
         const collector=collectors[ordinal];if(!collector)continue;if(collector.graph!==consumer.graph)return false;
         const output=ensureLoraCollectorOutput(collector);if(output<0)return false;collector.connect?.(output,consumer,index);
     }
+    for(const {slot,index,ordinal} of (consumer.inputs??[]).map((slot:any,index:number)=>({slot,index,ordinal:Number(slot?.__bvLoraProviderOrdinal??String(slot?.name??"").match(/^resource_provider_(\d+)$/)?.[1]??0)})))if(ordinal>collectors.length&&slot?.type===LORA_PROVIDER_TYPE&&slot.link!=null)consumer.disconnectInput?.(index);
     trimUnusedLoraConsumerInputs(consumer,collectors.length);
     return linkedLocalLoraCollectors(consumer).slice(0,collectors.length).every((collector,index)=>collector===collectors[index]);
 }
@@ -114,7 +115,7 @@ export function downstreamLoraConsumers(transformer:any){
                 const link=graphLink(graph,linkId),target=link&&graph?.getNodeById?.(link.target_id);
                 if(!target||target.graph!==graph||seen.has(target))continue;
                 seen.add(target);
-                if(LORA_EXECUTORS.has(target.type))found.push(target);
+                if(LORA_EXECUTORS.has(String(target.comfyClass??target.type)))found.push(target);
                 if((target.outputs??[]).some((item:any)=>item.type==="BV_REGIONAL")){queue.push(target);}
             }
         }
@@ -148,5 +149,11 @@ export function upstreamLoraTransformer(consumer:any){
 export function reconcileLoraWriterCollectors(writer:any,localCollectors:(any|null)[]){
     const upstream=upstreamLoraTransformer(writer),collectors=upstream?linkedLocalLoraCollectors(upstream).filter(Boolean):[];
     for(const collector of localCollectors)if(collector&&!collectors.includes(collector))collectors.push(collector);
+    const linked=linkedLocalLoraCollectors(writer);
+    if(!linked.slice(collectors.length).some(Boolean)&&collectors.every((collector,index)=>linked[index]===collector))return collectors;
     connectLocalLoraCollectors(writer,collectors);return collectors;
+}
+
+export function reconcileDownstreamLoraWriters(transformer:any,localCollectors:(writer:any)=>(any|null)[]){
+    return downstreamLoraConsumers(transformer).map(writer=>reconcileLoraWriterCollectors(writer,localCollectors(writer)));
 }

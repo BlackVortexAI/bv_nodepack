@@ -2,7 +2,7 @@ import { getApp } from "../appHelper.js";
 import type { ResourcePickerCollector } from "../ui/components";
 import { withoutLoraV3Target, type LoraV3Config, type LoraV3Target, type LoraV3TargetOption } from "./LoraV3ResourcePickerPanel";
 import { emptyLoraV3Config, parseLoraV3Config, serializeLoraV3Config, updateLoraV3EntryCollector } from "./loraV3Config";
-import { compactLoraConsumerNode, downstreamLoraConsumers, ensureLoraCollectorOutput, ensureLoraConsumerInputs, linkedLocalLoraCollectors, localLoraCollectors, migrateLegacyLoraCollectorLink, reconcileLoraWriterCollectors, scheduleCompactLoraConsumerNode, trimUnusedLoraConsumerInputs } from "./loraV3Graph";
+import { compactLoraConsumerNode, ensureLoraCollectorOutput, ensureLoraConsumerInputs, linkedLocalLoraCollectors, localLoraCollectors, migrateLegacyLoraCollectorLink, reconcileDownstreamLoraWriters, reconcileLoraWriterCollectors, scheduleCompactLoraConsumerNode, trimUnusedLoraConsumerInputs } from "./loraV3Graph";
 import { installM0CanvasVisibility } from "./m0VisualProjection";
 import { requestRegionalWindow } from "./windowRequests";
 
@@ -42,7 +42,7 @@ export function loraV3TargetOptions(node:any):LoraV3TargetOption[]{
 export function loraV3Resolved(node:any,config:LoraV3Config){const expected=loraV3CollectorIds(config),linked=linkedLocalLoraCollectors(node);return expected.every((id,index)=>String(widget(linked[index],"collector_id")?.value??"")===id);}
 export function loraV3EntryResolved(node:any,config:LoraV3Config,entry:any){if(entry.source.kind!=="external")return true;const index=loraV3CollectorIds(config).indexOf(entry.source.collector_id),linked=linkedLocalLoraCollectors(node)[index];return index>=0&&String(widget(linked,"collector_id")?.value??"")===entry.source.collector_id;}
 export function commitLoraV3Config(node:any,next:LoraV3Config){
-    writeNodeLoraV3Config(node,next);reconcileConfiguredLoraWriterCollectors(node,next);for(const downstream of downstreamLoraConsumers(node))reconcileConfiguredLoraWriterCollectors(downstream);return next;
+    writeNodeLoraV3Config(node,next);scheduleConfiguredLoraWriterTree(node,next);return next;
 }
 export function setLoraV3Collector(node:any,config:LoraV3Config,entryId:string,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"";return commitLoraV3Config(node,updateLoraV3EntryCollector(config,entryId,collectorId,resourceId));}
 export function setLoraV3EntryResource(node:any,config:LoraV3Config,entryId:string,resourceId:string){const map=(entry:any)=>entry.id===entryId&&entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry;return commitLoraV3Config(node,{...config,entries:config.entries.map(map),steps:config.steps?.map(step=>({...step,entries:step.entries.map(map)}))});}
@@ -56,7 +56,15 @@ function reconcileConfiguredLoraWriterCollectors(node:any,config?:LoraV3Config){
     const localConfig=config??readNodeLoraV3Config(node),catalog=loraV3Catalog(node),local=loraV3CollectorIds(localConfig).map(id=>catalog.find(item=>item.id===id)?.node??null);
     return reconcileLoraWriterCollectors(node,local);
 }
-export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();migrateLegacyLoraCollectorLink(node);reconcileConfiguredLoraWriterCollectors(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;input.label="";input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
+function configuredLoraCollectorNodes(node:any){const config=readNodeLoraV3Config(node),catalog=loraV3Catalog(node);return loraV3CollectorIds(config).map(id=>catalog.find(item=>item.id===id)?.node??null);}
+function reconcileConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
+    const current=reconcileConfiguredLoraWriterCollectors(node,config);reconcileDownstreamLoraWriters(node,configuredLoraCollectorNodes);return current;
+}
+function scheduleConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
+    node.__bvLoraPendingConfig=config??node.__bvLoraPendingConfig;if(node.__bvLoraReconcileScheduled)return;
+    node.__bvLoraReconcileScheduled=true;setTimeout(()=>{const pending=node.__bvLoraPendingConfig;delete node.__bvLoraPendingConfig;node.__bvLoraReconcileScheduled=false;reconcileConfiguredLoraWriterTree(node,pending);},0);
+}
+export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();migrateLegacyLoraCollectorLink(node);scheduleConfiguredLoraWriterTree(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;input.label="";input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
 function installTransformer(node:any){installLoraV3ConsumerSlot(node);hideLoraV3Widget(widget(node,"operation"));hideLoraV3Widget(widget(node,"config_json"));if(!node.widgets?.find((item:any)=>item.name==="open_lora_editor")){const button=node.addWidget?.("button","open_lora_editor",null,()=>requestRegionalWindow("lora",node),{serialize:false});if(button){button.label="Open LoRA Editor";button.serialize=false;}}compactLoraConsumerNode(node);}
 
 export {compactLoraConsumerNode};
