@@ -17,6 +17,7 @@ import { activeWorkflowIdentity, watchActiveWorkflow } from "./regional/workflow
 import { requestRegionalWindow } from "./regional/windowRequests";
 import { emptyLoraBindings, NamedLoraStack, needsFreshStackId, parseLoraBindings, reconcileLoraBindings } from "./regional/loraBindings";
 import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./regional/detailerPersistence";
+import { sourceRegionalDocument as resolveSourceRegionalDocument } from "./regional/regionalSourceDocument";
 import { openDetailerPlanDialog } from "./regional/detailerPlanDialog";
 import { parseDetailerPlanConfig } from "./regional/detailerPlanConfig";
 import { openDetectorRegistryDialog } from "./regional/detectorRegistryDialog";
@@ -115,15 +116,7 @@ const removeDetailerProjectionWidgets = (node: any) => {
     node.__bvDetailerContextWidgets = [];
 };
 
-const sourceRegionalDocument = (node: any) => {
-    const input = node.inputs?.find((item: any) => item.name === "regional" || item.name === "regional_prompt");
-    const graph = node.graph ?? (comfyApp as any).graph;
-    const link = input?.link == null ? null : graph?.links?.[input.link] ?? graph?._links?.get?.(input.link);
-    const source = link ? graph?.getNodeById?.(link.origin_id) : null;
-    if (source?.type !== "BV Regional Prompt") return null;
-    const value = source.widgets?.find((widget: any) => widget.name === "regional_json")?.value;
-    try { return parseDocument(value); } catch { return null; }
-};
+const sourceRegionalDocument = (node: any) => resolveSourceRegionalDocument(node, (comfyApp as any).graph);
 
 const detailerGraphOwner=(node:any)=>{const root=(comfyApp as any).canvas?.graph??(comfyApp as any).graph;return collectScopedNodes(root,candidate=>candidate===node)[0]?.graph??node?.graph??null};
 const detectorCollectorsForPlan = (node: any) => {

@@ -269,6 +269,21 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(result[13], document["regions"][1]["id"])
         self.assertEqual(result[14], "Face left")
 
+    def test_detailer_mask_accepts_a_v3_regional_context(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        document["regions"][1]["usage"] = "detailer"
+        context = self.module.normalize_context(document).to_dict()
+
+        result = self.module.BVRegionalDetailerMaskNode().render(
+            context, torch.zeros((1, 120, 200, 3)), object(), DetailerClip(), object(), "Face left"
+        )
+
+        self.assertEqual(tuple(result[1].shape), (1, 120, 200))
+        self.assertEqual(result[13], document["regions"][1]["id"])
+
     def test_detailer_mask_rejects_generation_only_region(self):
         with self.assertRaisesRegex(ValueError, "not enabled for detailer"):
             self.module.BVRegionalDetailerMaskNode().render(
