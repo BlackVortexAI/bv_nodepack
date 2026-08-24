@@ -70,8 +70,10 @@ export function installM0CanvasVisibility(canvas: any) {
     };
     canvas.drawNode = function (node:M0Node,ctx:CanvasRenderingContext2D) {
         const restores:Array<()=>void>=[];
+        const dragType=String(this.connecting_output?.type??this.connecting_input?.type??"");
         for(const slot of [...(node.inputs??[]),...(node.outputs??[])]){
-            if(!providerType(slot.type))continue;
+            if((slot as any).__bvLegacyPort&&dragType&&slot.type===dragType)continue;
+            if(!providerType(slot.type)&&!slot.__bvM0PortHidden)continue;
             for(const field of ["name","label","localized_name"] as const){
                 const own=Object.prototype.hasOwnProperty.call(slot,field),value=slot[field];
                 Object.defineProperty(slot,field,{configurable:true,writable:true,value:""});

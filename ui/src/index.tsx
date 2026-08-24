@@ -32,8 +32,10 @@ import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
+import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationReport, regionalEditorDraft, REGIONAL_MIGRATION_EVENT, REGIONAL_VALIDATION_EVENT } from "./regional/milestoneE";
+import { clearLegacyPortSticky, installLegacyPorts, legacyUsage, refreshLegacyPorts, setLegacyPortsVisible, SHOW_LEGACY_PORTS_SETTING_ID } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
-import { BvGlobalToastStack, collectScopedNodes, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
+import { BvGlobalToastStack, collectScopedNodes, dismissBvToast, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -489,6 +491,9 @@ function BVRoot() {
     useEffect(()=>{const open=(node:any|null)=>{if(node){bindActiveWorkflow();rememberBvWindowInstance("lora",scopedNodeKey(node));}setLoraV3Node(node)},legacy=(event:Event)=>open((event as CustomEvent<{node?:any}>).detail?.node??null);window.addEventListener(OPEN_LORA_V3_EDITOR_EVENT,legacy);return()=>window.removeEventListener(OPEN_LORA_V3_EDITOR_EVENT,legacy)},[]);
     useEffect(()=>{const update=(event:Event)=>setHasControlNodes(Boolean((event as CustomEvent).detail?.control));window.addEventListener("bv-toolbar-capabilities-changed",update);refreshBvToolbarCapabilities();return()=>window.removeEventListener("bv-toolbar-capabilities-changed",update)},[]);
     useEffect(()=>{const refresh=()=>refreshBvToolbarCapabilities();window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh)},[]);
+    useEffect(()=>{const report=(event:Event)=>{const reports=(event as CustomEvent).detail?.reports??[];if(!reports.length)return;const copy=migrationReportMessage(reports);showBvToast({...copy,id:"bv-regional-migration-report",duration:10000})};window.addEventListener(REGIONAL_MIGRATION_EVENT,report);return()=>window.removeEventListener(REGIONAL_MIGRATION_EVENT,report)},[]);
+    useEffect(()=>{const validation=(event:Event)=>{const node=(event as CustomEvent).detail?.node,draft=node&&regionalEditorDraft(node),id=`bv-regional-validation:${scopedNodeKey(node)}`;if(!draft?.issues.length){dismissBvToast(id);return}const first=draft.issues[0];showBvToast({id,title:"Regional fallbacks are active",message:`${draft.issues.length} invalid field${draft.issues.length===1?"":"s"}. ${first.message}`,tone:"warning",duration:0,actionLabel:"Open field",onAction:()=>{requestRegionalWindow("regional",node);window.setTimeout(()=>{const field=document.querySelector<HTMLElement>(`[data-bv-regional-field="${CSS.escape(first.field)}"]`);field?.scrollIntoView({block:"center"});field?.querySelector<HTMLElement>("input,textarea,button")?.focus()},100)}})};window.addEventListener(REGIONAL_VALIDATION_EVENT,validation);return()=>window.removeEventListener(REGIONAL_VALIDATION_EVENT,validation)},[]);
+    useEffect(()=>{const warned=new Set<unknown>(),queued=()=>{const owner=activeWorkflowIdentity(comfyApp);if(warned.has(owner))return;const affected=(comfyApp as any).graph?._nodes?.filter((item:any)=>legacyUsage(item).length)??[];if(!affected.length)return;warned.add(owner);const target=affected[0];showBvToast({id:"bv-regional-legacy-usage",title:"Legacy Regional wiring detected",message:`${affected.length} node${affected.length===1?"":"s"} still use deprecated Regional ports. Existing execution remains active; migrate the wiring manually.`,tone:"warning",duration:0,actionLabel:"Open migration target",onAction:()=>{if(String(target?.comfyClass??target?.type)==="BV Regional Prompt")requestRegionalWindow("regional",target);else{(comfyApp as any).canvas?.selectNode?.(target);(comfyApp as any).canvas?.centerOnNode?.(target)}}})};comfyApi.addEventListener("execution_start",queued);return()=>comfyApi.removeEventListener("execution_start",queued)},[]);
 
     useEffect(() => {
         const open = (event: Event) => {
@@ -597,6 +602,7 @@ comfyApp.registerExtension({
         ensureMountedOnce();
         installM0CanvasVisibility((comfyApp as any).canvas);
         applyUiPreferences((comfyApp as any).ui?.settings);
+        setLegacyPortsVisible(Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(SHOW_LEGACY_PORTS_SETTING_ID, false)),(comfyApp as any).graph);
         installGlobalTextareaCompletion();
         debugBridgeEnabled = Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(DEBUG_BRIDGE_SETTING_ID, false));
         setDebugBridgeSession(debugBridgeEnabled)
@@ -642,6 +648,14 @@ comfyApp.registerExtension({
         category: ["BV Node Pack", "Appearance", "Window switching"],
         tooltip: "Choose whether changing the node in a BV editor minimizes or closes the current window. Hold Shift to invert the mode once.",
         onChange: (value: string) => setWindowSwitchMode(value, false),
+    }, {
+        id: SHOW_LEGACY_PORTS_SETTING_ID as any,
+        name: "Show BV Regional Legacy Ports",
+        type: "boolean",
+        defaultValue: false,
+        category: ["BV Node Pack", "Regional", "Show Legacy ports"],
+        tooltip: "Temporarily reveal every deprecated BV Regional port in the active workflow.",
+        onChange: (value: boolean) => setLegacyPortsVisible(Boolean(value),(comfyApp as any).graph),
     }, {
         id: DEBUG_BRIDGE_SETTING_ID as any,
         name: "Enable BV Debug Bridge",
@@ -776,7 +790,7 @@ comfyApp.registerExtension({
             };
             nodeType.prototype.onConfigure = function () {
                 const result = originalConfigure?.apply(this, arguments);
-                queueMicrotask(() => upgradeDetailerPlanNode(this));
+                queueMicrotask(() => { queueRegionalMigrationReport(migrateRegionalNode(this)); upgradeDetailerPlanNode(this); });
                 return result;
             };
             nodeType.prototype.onConnectionsChange = function () {
@@ -877,6 +891,8 @@ comfyApp.registerExtension({
         if (nodeData.name !== "BV Regional Prompt") return;
         const original = nodeType.prototype.onNodeCreated;
         const originalConfigure = nodeType.prototype.onConfigure;
+        const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
+        const originalDeselected = nodeType.prototype.onDeselected;
         nodeType.prototype.onNodeCreated = function () {
             const result = original?.apply(this, arguments);
             ensureUniqueDocument(this, true);
@@ -912,11 +928,13 @@ comfyApp.registerExtension({
                 button.serialize = false;
             }
             compactLoraConsumerNode(this);
+            installLegacyPorts(this,[{direction:"output",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use the BV_REGIONAL context output and v3 capability editors."}]);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };
         nodeType.prototype.onConfigure = function () {
             const result = originalConfigure?.apply(this, arguments);
+            queueRegionalMigrationReport(migrateRegionalNode(this));
             ensureUniqueDocument(this, false);
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
             const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
@@ -927,9 +945,12 @@ comfyApp.registerExtension({
             installLoraV3ConsumerSlot(this);
             prepareDetailerPromptV3(this,detailerGraphOwner(this));
             compactLoraConsumerNode(this);
+            installLegacyPorts(this,[{direction:"output",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use the BV_REGIONAL context output and v3 capability editors."}]);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };
+        nodeType.prototype.onConnectionsChange = function () { const result=originalConnectionsChange?.apply(this,arguments);queueMicrotask(()=>refreshLegacyPorts(this));return result; };
+        nodeType.prototype.onDeselected = function () { const result=originalDeselected?.apply(this,arguments);clearLegacyPortSticky(this);return result; };
         const originalRemoved = nodeType.prototype.onRemoved;
         nodeType.prototype.onRemoved = function () {
             const result = originalRemoved?.apply(this, arguments);

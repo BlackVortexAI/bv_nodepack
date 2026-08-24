@@ -29,3 +29,5 @@ export function setSessionLayoutDraft(key:string,layout:unknown,status:BvLayoutS
 export function getSessionLayoutDraft(key:string){const draft=sessionDrafts.get(key);return draft?structuredClone(draft):undefined}
 export function clearSessionLayoutDraft(key:string){sessionDrafts.delete(key)}
 export function isCompatibleLayoutProfile(profile:BvLayoutProfile,input:{editorType:string;editorVersion:string;library:string;signature:string}){return profile.editorType===input.editorType&&profile.editorVersion===input.editorVersion&&profile.library===input.library&&profile.signature===input.signature}
+export function layoutPanelIds(layout:any):Set<string>{const ids=new Set<string>();const visit=(node:any)=>{if(!node||typeof node!=="object")return;if(node.type==="tab"&&typeof node.id==="string")ids.add(node.id);for(const child of node.children??[])visit(child)};visit(layout?.layout);for(const border of layout?.borders??[])visit(border);return ids}
+export function missingLayoutPanels(layout:unknown,registeredIds:string[]){const present=layoutPanelIds(layout);return registeredIds.filter(id=>!present.has(id))}

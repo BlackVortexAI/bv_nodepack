@@ -38,9 +38,13 @@ Control Center is never an overview entry and never changes last-editor history.
 | Named FlexLayout profiles | browser user preferences, per editor type | user/browser |
 | Window geometry and session layout drafts | local presentation/session state | session or local UI state |
 | Undo/redo history | RAM only, maximum 100 entries | open editor session |
-| Dirty editor draft | RAM only until Save/Discard/close decision | open editor session |
+| Regional editor draft and validation state | named node property `bvRegionalEditorDraftV1` | workflow |
+| Other dirty editor drafts | RAM only until Save/Discard/close decision | open editor session |
 
 Undo history, layout working drafts, and conflict snapshots must never inflate workflow JSON.
+Regional v3 deliberately persists the raw editor draft separately from executable
+canonical configuration. Invalid raw values therefore survive save/reload while
+runtime widgets continue to contain only validated values or declared fallbacks.
 
 ## Draft and history contract
 
