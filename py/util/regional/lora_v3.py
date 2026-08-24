@@ -245,6 +245,51 @@ def _same_lora_target(left: dict[str, Any], right: dict[str, Any]) -> bool:
     )
 
 
+def _without_lora_target(
+    entries: list[dict[str, Any]],
+    target: dict[str, Any],
+    *,
+    matching_sources: list[dict[str, Any]] | None = None,
+    matching_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    result = []
+    for entry in entries:
+        matches_entry = matching_sources is None or entry["source"] in matching_sources or entry["id"] in (matching_ids or set())
+        targets = [item for item in entry["targets"] if not (matches_entry and _same_lora_target(item, target))]
+        if targets:
+            result.append({**entry, "targets": targets})
+    return result
+
+
+def _transform_lora_scope(
+    context: RegionalContext,
+    configured: dict[str, Any],
+    target: dict[str, Any],
+    operation: str,
+) -> RegionalContext:
+    current = context.capabilities.get(LORA_CAPABILITY)
+    current_entries = list(current["entries"]) if current else []
+    incoming = list(configured["entries"])
+    if operation == "clear":
+        entries = _without_lora_target(current_entries, target)
+    elif operation == "subtract":
+        entries = _without_lora_target(
+            current_entries,
+            target,
+            matching_sources=[entry["source"] for entry in incoming],
+            matching_ids={entry["id"] for entry in incoming},
+        )
+    else:
+        base = _without_lora_target(current_entries, target) if operation == "replace" else current_entries
+        incoming_ids = {entry["id"] for entry in incoming}
+        entries = [entry for entry in base if entry["id"] not in incoming_ids] + incoming
+    if not entries:
+        return context.without_capability(LORA_CAPABILITY)
+    payload = {"version": 3, "entries": entries, "scopes": {}}
+    validate_lora_capability(payload)
+    return context.with_capability(LORA_CAPABILITY, payload)
+
+
 def transform_lora_sequence(
     value: Any,
     config: Any,
@@ -292,7 +337,7 @@ def transform_lora_sequence(
         scoped = normalize_lora_capability(scoped)
         if any(len(entry["targets"]) != 1 or not _same_lora_target(entry["targets"][0], target) for entry in scoped["entries"]):
             raise RegionalContextError(f"{path}.entries must target only the step scope")
-        context = transform_lora_capability(context, scoped, registry=registry, operation=operation)
+        context = _transform_lora_scope(context, scoped, target, operation)
     return context
 
 

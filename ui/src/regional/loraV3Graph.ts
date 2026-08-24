@@ -102,7 +102,7 @@ export function localLoraCollectors(node:any){
     return (node.graph?._nodes??[]).filter((candidate:any)=>candidate!==node&&candidate.graph===node.graph&&String(candidate.comfyClass??candidate.type)===LORA_COLLECTOR_NODE);
 }
 
-const LORA_EXECUTORS=new Set<string>();
+const LORA_EXECUTORS=new Set(["BV Regional LoRA"]);
 
 export function downstreamLoraConsumers(transformer:any){
     const graph=transformer.graph,queue=[transformer],seen=new Set<any>([transformer]),found:any[]=[];
@@ -143,4 +143,10 @@ export function upstreamLoraTransformer(consumer:any){
         }
     }
     return null;
+}
+
+export function reconcileLoraWriterCollectors(writer:any,localCollectors:(any|null)[]){
+    const upstream=upstreamLoraTransformer(writer),collectors=upstream?linkedLocalLoraCollectors(upstream).filter(Boolean):[];
+    for(const collector of localCollectors)if(collector&&!collectors.includes(collector))collectors.push(collector);
+    connectLocalLoraCollectors(writer,collectors);return collectors;
 }

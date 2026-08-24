@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,installLoraSizePolicy,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,migrateLegacyLoraCollectorLink,trimUnusedLoraConsumerInputs,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
+import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,installLoraSizePolicy,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,migrateLegacyLoraCollectorLink,reconcileLoraWriterCollectors,trimUnusedLoraConsumerInputs,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
 
 const graph=()=>({_nodes:[],links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}});
 const node=(id,type,g)=>({id,type,graph:g,inputs:[],outputs:[],addInput(name,type){this.inputs.push({name,type,link:null})},addOutput(name,type){this.outputs.push({name,type,links:null})}});
@@ -87,6 +87,25 @@ test("collector links stop at the Regional LoRA context transformer",()=>{
   assert.deepEqual(downstreamLoraConsumers(transformer),[]);
   assert.equal(connectLoraConsumerTree(transformer,collector),true);
   assert.equal(linkedLocalLoraCollector(transformer),collector);assert.equal(linkedLocalLoraCollector(consumer),null);
+});
+
+test("an upstream Prompt collector is propagated to a downstream Regional LoRA writer",()=>{
+  const g=graph(),collector=node(1,"BV LoRA Stack Collector",g),prompt=node(2,"BV Regional Prompt",g),transformer=node(3,"BV Regional LoRA",g);g._nodes.push(collector,prompt,transformer);
+  prompt.outputs=[{type:"BV_REGIONAL",links:[5]}];transformer.inputs=[{name:"regional",type:"BV_REGIONAL",link:5}];g.links.set(5,{origin_id:2,origin_slot:0,target_id:3,target_slot:0});
+  collector.connect=function(output,target,input){const id=10+target.id;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[...(this.outputs[output].links??[]),id];target.inputs[input].link=id};
+  assert.deepEqual(downstreamLoraConsumers(prompt),[transformer]);
+  assert.equal(connectLoraConsumerTree(prompt,collector),true);
+  assert.equal(linkedLocalLoraCollector(prompt),collector);assert.equal(linkedLocalLoraCollector(transformer),collector);
+});
+
+test("a Regional LoRA writer keeps inherited and locally configured collectors",()=>{
+  const g=graph(),inherited=node(1,"BV LoRA Stack Collector",g),local=node(2,"BV LoRA Stack Collector",g),prompt=node(3,"BV Regional Prompt",g),writer=node(4,"BV Regional LoRA",g);g._nodes.push(inherited,local,prompt,writer);
+  prompt.outputs=[{type:"BV_REGIONAL",links:[5]}];writer.inputs=[{name:"regional",type:"BV_REGIONAL",link:5}];g.links.set(5,{origin_id:3,origin_slot:0,target_id:4,target_slot:0});
+  let next=20;for(const collector of [inherited,local])collector.connect=function(output,target,input){const id=next++;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[...(this.outputs[output].links??[]),id];target.inputs[input].link=id};
+  writer.disconnectInput=function(index){const id=this.inputs[index].link;if(id!=null)g.links.delete(id);this.inputs[index].link=null};
+  assert.equal(connectLocalLoraCollectors(prompt,[inherited]),true);
+  assert.deepEqual(reconcileLoraWriterCollectors(writer,[local]),[inherited,local]);
+  assert.deepEqual(linkedLocalLoraCollectors(writer).slice(0,2),[inherited,local]);
 });
 
 test("a consumer added later discovers only its linked upstream LoRA transformer",()=>{

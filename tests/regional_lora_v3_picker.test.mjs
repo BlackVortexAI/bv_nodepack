@@ -89,7 +89,7 @@ test("removing one scope preserves shared assignments and the input config",()=>
 });
 test("production LoRA presentation keeps ComfyUI links authoritative",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
- assert.match(source,/serialize:false/);assert.match(source,/connectLoraConsumerTree/);assert.match(source,/__bvLoraCollectorIdRemap/);assert.match(source,/__bvLoraResourceIdRemap/);
+ assert.match(source,/serialize:false/);assert.match(source,/reconcileConfiguredLoraWriterCollectors/);assert.match(source,/downstreamLoraConsumers/);assert.match(source,/__bvLoraCollectorIdRemap/);assert.match(source,/__bvLoraResourceIdRemap/);
  assert.match(source,/Open LoRA Editor/);assert.doesNotMatch(source,/addDOMWidget|ReactDOM/);
  assert.doesNotMatch(source,/graphToPrompt|queuePrompt|MutationObserver/);
 });

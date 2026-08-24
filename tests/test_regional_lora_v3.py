@@ -253,6 +253,112 @@ class RegionalLoraV3Tests(unittest.TestCase):
         transformed = transform_lora_sequence(upstream, config, registry=self.capabilities)
         self.assertEqual([entry["id"] for entry in transformed.require_capability(LORA_CAPABILITY)["entries"]], [added_id])
 
+    def test_scoped_clear_matches_an_upstream_context_that_never_had_that_region_lora(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=self.capabilities)
+        first_region, second_region = [region["id"] for region in context.core["regions"][:2]]
+        first = {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "source": {"kind": "native", "lora_name": "first.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}],
+        }
+        second = {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "source": {"kind": "native", "lora_name": "second.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}],
+        }
+        upstream = transform_lora_capability(context, {"version": 2, "entries": [first, second]}, registry=self.capabilities)
+        baseline = materialize_lora_capability(
+            transform_lora_capability(context, {"version": 2, "entries": [first]}, registry=self.capabilities),
+            registry=self.capabilities,
+        )
+        cleared = transform_lora_sequence(upstream, {"version": 3, "entries": [], "steps": [{
+            "id": "55555555-5555-4555-8555-555555555555",
+            "operation": "clear",
+            "target": {"scope": "region", "document_id": context.core["document_id"], "region_id": second_region},
+            "entries": [second],
+        }]}, registry=self.capabilities)
+        cleared = materialize_lora_capability(cleared, registry=self.capabilities)
+
+        self.assertEqual(cleared.require_capability(LORA_CAPABILITY), baseline.require_capability(LORA_CAPABILITY))
+
+    def test_scoped_subtract_matches_source_even_when_editor_entry_id_is_new(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=self.capabilities)
+        first_region, second_region = [region["id"] for region in context.core["regions"][:2]]
+        source = {"kind": "native", "lora_name": "second.safetensors", "model_strength": 1.0, "clip_strength": 1.0}
+        retained = {
+            "id": "33333333-3333-4333-8333-333333333333", "source": source,
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}],
+        }
+        removed = {
+            "id": "44444444-4444-4444-8444-444444444444", "source": source,
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}],
+        }
+        upstream = transform_lora_capability(context, {"version": 2, "entries": [retained, removed]}, registry=self.capabilities)
+        subtract_entry = {**removed, "id": "66666666-6666-4666-8666-666666666666"}
+        transformed = transform_lora_sequence(upstream, {"version": 3, "entries": [], "steps": [{
+            "id": "55555555-5555-4555-8555-555555555555",
+            "operation": "subtract",
+            "target": subtract_entry["targets"][0],
+            "entries": [subtract_entry],
+        }]}, registry=self.capabilities)
+
+        self.assertEqual(transformed.require_capability(LORA_CAPABILITY)["entries"], [retained])
+
+    def test_scoped_merge_adds_only_to_the_selected_region(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=self.capabilities)
+        first_region, second_region = [region["id"] for region in context.core["regions"][:2]]
+        retained = {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "source": {"kind": "native", "lora_name": "first.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}],
+        }
+        added = {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "source": {"kind": "native", "lora_name": "second.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": second_region}],
+        }
+        upstream = transform_lora_capability(context, {"version": 2, "entries": [retained]}, registry=self.capabilities)
+        transformed = transform_lora_sequence(upstream, {"version": 3, "entries": [], "steps": [{
+            "id": "55555555-5555-4555-8555-555555555555", "operation": "merge", "target": added["targets"][0], "entries": [added],
+        }]}, registry=self.capabilities)
+        scopes = materialized_lora_scopes(materialize_lora_capability(transformed, registry=self.capabilities), registry=self.capabilities)
+
+        self.assertEqual(transformed.require_capability(LORA_CAPABILITY)["entries"], [retained, added])
+        self.assertEqual(scopes, {
+            first_region: [["first.safetensors", 1.0, 1.0]],
+            second_region: [["second.safetensors", 1.0, 1.0]],
+        })
+
+    def test_scoped_merge_adds_only_to_global_when_global_is_selected(self):
+        with (Path(__file__).parent / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
+            context = normalize_context(json.load(handle), registry=self.capabilities)
+        first_region = context.core["regions"][0]["id"]
+        retained = {
+            "id": "33333333-3333-4333-8333-333333333333",
+            "source": {"kind": "native", "lora_name": "first.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "region", "document_id": context.core["document_id"], "region_id": first_region}],
+        }
+        global_entry = {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "source": {"kind": "native", "lora_name": "global.safetensors", "model_strength": 1.0, "clip_strength": 1.0},
+            "targets": [{"scope": "global"}],
+        }
+        upstream = transform_lora_capability(context, {"version": 2, "entries": [retained]}, registry=self.capabilities)
+        transformed = transform_lora_sequence(upstream, {"version": 3, "entries": [], "steps": [{
+            "id": "55555555-5555-4555-8555-555555555555", "operation": "merge", "target": {"scope": "global"}, "entries": [global_entry],
+        }]}, registry=self.capabilities)
+        scopes = materialized_lora_scopes(materialize_lora_capability(transformed, registry=self.capabilities), registry=self.capabilities)
+
+        self.assertEqual(transformed.require_capability(LORA_CAPABILITY)["entries"], [retained, global_entry])
+        self.assertEqual(scopes["global"], [["global.safetensors", 1.0, 1.0]])
+        self.assertEqual(scopes["background"], [["global.safetensors", 1.0, 1.0]])
+        self.assertEqual(scopes[first_region], [["global.safetensors", 1.0, 1.0], ["first.safetensors", 1.0, 1.0]])
+        for region in context.core["regions"][1:]:
+            self.assertEqual(scopes[region["id"]], [["global.safetensors", 1.0, 1.0]])
+
     def test_same_region_can_appear_twice_and_order_remains_semantic(self):
         target = {"scope": "global"}
         entry = {"id": "33333333-3333-4333-8333-333333333333", "source": {"kind": "native", "lora_name": "style.safetensors", "model_strength": 1.0, "clip_strength": 1.0}, "targets": [target]}
@@ -261,7 +367,7 @@ class RegionalLoraV3Tests(unittest.TestCase):
             {"id": "55555555-5555-4555-8555-555555555555", "operation": "subtract", "target": target, "entries": [entry]},
         ]}
         transformed = transform_lora_sequence(self.context, config, registry=self.capabilities)
-        self.assertEqual(transformed.require_capability(LORA_CAPABILITY)["entries"], [])
+        self.assertNotIn(LORA_CAPABILITY, transformed.capabilities)
 
     def test_registered_resource_type_rejects_runtime_objects(self):
         provider = build_lora_provider("22222222-2222-4222-8222-222222222222", {})

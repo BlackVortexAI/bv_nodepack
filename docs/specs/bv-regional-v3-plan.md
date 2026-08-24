@@ -208,9 +208,12 @@ and its own ordered LoRA entries. Targets are repeatable, and drag-and-drop orde
 is execution order. The backend applies each step through the ordinary registered
 capability handler, so one node with `merge(region A)` followed by
 `subtract(region B)` is semantically identical to two transformer nodes in that
-order. `replace` and `clear` therefore retain their normal capability-wide effect
-at their position in the sequence. The original single-operation configuration
-remains accepted and is normalized deterministically as the Legacy fallback.
+order. Every ordered step is target-scoped: `replace` and `clear` affect only the
+selected global or regional target, while preserving entries assigned to other
+targets. `subtract` matches the selected target by stable entry ID or by identical
+source reference, so a freshly created editor entry can remove its upstream
+counterpart. The original single-operation configuration remains accepted and is
+normalized deterministically as the Legacy fallback.
 
 If a downstream configuration references a region removed upstream, that
 transformer fails before emitting an output. It reports its node, missing
@@ -280,9 +283,11 @@ Repeated entries may reuse a writer's collector link while preserving their
 independent resources, targets, and semantic order. The LoRA capability may mix
 BV-native serializable LoRAs and external stack references.
 
-Replacing the capability may switch any number of collectors. Merge and subtract
-operate by stable entry ID; complete per-entry source references remove the former
-global same-collector restriction. Clear removes the capability and all bindings.
+Replacing a target may switch any number of collectors. Merge and subtract use
+complete per-entry source references; subtract additionally accepts a stable entry
+ID. Clear removes assignments for the selected target and removes the capability
+only when no assignments remain. This removes the former global same-collector
+restriction without altering unrelated regional assignments.
 Legacy single-collector payloads migrate deterministically by copying their global
 collector ID into every external entry without changing entry IDs or order.
 
