@@ -40,15 +40,15 @@ test("published brand graphics no longer contain the hand-drawn spiral", async (
   }
 });
 
-test("UI accent tokens use the approved CI palette without changing semantic colors", async () => {
+test("UI tokens use the approved Cool Graphite palette with independent semantic colors", async () => {
   const css = await read("ui/src/index.css");
-  assert.match(css, /--bv-ui-accent:#1345b7;/);
-  assert.match(css, /--bv-ui-accent-hover:#4c74c9;/);
-  assert.match(css, /--bv-ui-accent-light:#5a7dcd;/);
-  assert.match(css, /--bv-ui-accent-soft:#b2c2e6;/);
-  assert.match(css, /--bv-ui-danger:#d35d71;/);
-  assert.match(css, /--bv-ui-warning:#e9b65f;/);
-  assert.match(css, /--bv-ui-success:#55c994;/);
+  assert.match(css, /--bv-ui-brand:#1345b7;/);
+  assert.match(css, /--bv-ui-action:#2d518f;/);
+  assert.match(css, /--bv-ui-border-strong:#424d5c;/);
+  assert.match(css, /--bv-ui-danger:#7b3f4b;/);
+  assert.match(css, /--bv-ui-warning:#80612e;/);
+  assert.match(css, /--bv-ui-success:#356f59;/);
+  assert.match(css, /--bv-ui-info:#355f78;/);
 });
 
 test("third-party notices include the Fluent Emoji MIT attribution", async () => {

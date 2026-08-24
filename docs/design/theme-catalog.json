@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "productionThemes": [{"id":"cool-graphite","name":"03C · Cool Graphite","status":"active-default","intent":"Cool technical graphite chrome with restrained Cyclone-blue brand anchors.","palette":{"background":"#0F1217","raisedSurface":"#1D222A","strongBorder":"#424D5C","primaryAction":"#2D518F","brandCyclone":"#1345B7","success":"#356F59","warning":"#80612E","danger":"#7B3F4B","info":"#355F78"}}],
+  "draftConcepts": [
+    {"id":"precision-white","name":"Precision White","status":"catalog-spec-only","intent":"Light, factual and engineering-oriented.","palette":["#E8EDF5","#FFFFFF","#CBD4E0","#234A99","#1345B7"]},
+    {"id":"industrial-atelier","name":"Industrial Atelier","status":"catalog-spec-only","intent":"Warm, material and focused studio hardware.","palette":["#211F1C","#34302B","#514A41","#31558F","#1345B7"]},
+    {"id":"technical-glass","name":"Technical Glass","status":"catalog-spec-only","intent":"Deep petrol glass with fine instrument-like edges.","palette":["#0A1720","#1A313C","#355260","#1746A5","#1345B7"]},
+    {"id":"monochrome-studio","name":"Monochrome Studio","status":"catalog-spec-only","intent":"Radically quiet high contrast with blue reserved for branding.","palette":["#090A0C","#171A1F","#333842","#E9EDF5","#1345B7"]},
+    {"id":"comfy-native","name":"Comfy Native","status":"catalog-spec-only","intent":"Neutral host-adjacent ComfyUI character.","palette":["#202020","#353535","#4E4E4E","#222222","#1345B7"]},
+    {"id":"github-dark","name":"GitHub Dark","status":"catalog-spec-only","intent":"Compact developer-tool hierarchy inspired by Primer.","palette":["#0D1117","#161B22","#30363D","#1F6FEB","#1345B7"]}
+  ]
+}

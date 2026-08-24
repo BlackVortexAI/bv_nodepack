@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { applyBvTheme } from "./ui/theme";
 import { getApi, getApp } from "./appHelper.js";
 import BVPortal from "./components/BVPortal";
 import SmartPipeEditorWindow from "./components/SmartPipeEditorWindow";
@@ -572,6 +573,7 @@ function resetBvRootForWorkflow(){
 }
 
 function ensureMountedOnce() {
+    applyBvTheme();
     if (!document.getElementById(STYLE_ID)) {
         const style = document.createElement("style");
         style.id = STYLE_ID;

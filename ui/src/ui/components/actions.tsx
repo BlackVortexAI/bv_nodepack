@@ -1,7 +1,7 @@
 import React, { ReactNode, useRef, useState } from "react";
 import { AnchoredPopover } from "./floating";
 
-export type ButtonIntent="primary"|"secondary"|"ghost"|"danger"|"warning"|"success";
+export type ButtonIntent="primary"|"secondary"|"ghost"|"danger"|"warning"|"success"|"info";
 export type ControlDensity="comfortable"|"compact";
 export function UiDensity({density="compact",className="",children}:{density?:ControlDensity;className?:string;children:ReactNode}){return <div className={`bv-density-${density} ${className}`.trim()}>{children}</div>}
 export type ButtonProps=React.ButtonHTMLAttributes<HTMLButtonElement>&{intent?:ButtonIntent;icon?:ReactNode;iconOnly?:boolean;loading?:boolean;density?:ControlDensity};

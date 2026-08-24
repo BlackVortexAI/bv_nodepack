@@ -1,6 +1,7 @@
 export * from "./components";
 export * from "./mount";
 export * from "./preferences";
+export * from "./theme";
 export * from "./window";
 export * from "./ToolbarWindowLauncher";
 export * from "./windowActivity";
