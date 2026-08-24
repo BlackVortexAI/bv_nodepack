@@ -1,7 +1,7 @@
 import type { BrushSettings, Tool } from "../ui/components";
 
 export type EditorMode = "workspace" | "floating";
-export type EditorMenu = "file" | "edit" | "view" | "artboard" | "layers" | "help" | null;
+export type EditorMenu = "file" | "edit" | "view" | "artboard" | "help" | null;
 export type WindowGeometry = { x: number; y: number; width: number; height: number };
 export type ArtboardView = { zoom: number; panX: number; panY: number; fit: boolean };
 export type EditorViewState = {
@@ -138,7 +138,7 @@ export function normalizeEditorState(value: unknown, viewport = { width: window.
             shape: brush.shape === "square" ? "square" : "round",
             pressureMode: brush.pressureMode === "stylus" ? "stylus" : "constant",
         },
-        openMenu: (["file", "edit", "view", "artboard", "layers", "help"] as EditorMenu[]).includes(input.openMenu as EditorMenu) ? input.openMenu as EditorMenu : null,
+        openMenu: (["file", "edit", "view", "artboard", "help"] as EditorMenu[]).includes(input.openMenu as EditorMenu) ? input.openMenu as EditorMenu : null,
         promptSections: {
             region: input.promptSections?.region === true,
             global: input.promptSections?.global === true,

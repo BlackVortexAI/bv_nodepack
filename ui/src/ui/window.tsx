@@ -90,7 +90,7 @@ export function BvFooterActions({primary,secondary,overflow=[]}:{primary:ReactNo
 export function BvMinimizedWindow({ title, onRestore, onClose }: { title: string; onRestore: () => void; onClose?: () => void }) {
     const host = useMemo(() => {
         let node = document.getElementById("bv-ui-window-shelf");
-        if (!node) { node = document.createElement("div"); node.id = "bv-ui-window-shelf"; node.className = "bv-ui-window-shelf"; document.body.append(node); }
+        if (!node) { node = document.createElement("div"); node.id = "bv-ui-window-shelf"; node.className = "bv-ui-window-shelf bv-ui bv-density-compact"; document.body.append(node); }
         return node;
     }, []);
     useEffect(() => {

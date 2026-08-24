@@ -27,6 +27,8 @@ type Props = {
     onDuplicateLayer: (id: string) => void;
     canSplitDisconnectedAreas: boolean;
     onSplitDisconnectedAreas: () => void;
+    canMergeLayers: boolean;
+    onMergeLayers: () => void;
     onTreeMove: (move: TreeMove) => void;
 };
 
@@ -37,7 +39,7 @@ function EditableName({ value, onCommit }: { value: string; onCommit: (name: str
     return <InlineTextEdit className="inline-name" autoFocus value={draft} onChange={event => setDraft(event.target.value)} onBlur={commit} onClick={event => event.stopPropagation()} onKeyDown={event => { event.stopPropagation(); if (event.key === "Enter") commit(); if (event.key === "Escape") setEditing(false); }}/>
 }
 
-type TreeIconName = "chevron-right" | "chevron-down" | "eye" | "eye-off" | "lock" | "unlock" | "check" | "more" | "plus" | "split" | "trash";
+type TreeIconName = "chevron-right" | "chevron-down" | "eye" | "eye-off" | "lock" | "unlock" | "check" | "more" | "plus" | "merge" | "separate" | "trash";
 function TreeIcon({ name }: { name: TreeIconName }) {
     const paths: Record<TreeIconName, React.ReactNode> = {
         "chevron-right": <path d="m9 6 6 6-6 6"/>,
@@ -49,7 +51,8 @@ function TreeIcon({ name }: { name: TreeIconName }) {
         check: <path d="m6 12 4 4 8-9"/>,
         more: <><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>,
         plus: <path d="M12 5v14M5 12h14"/>,
-        split: <><path d="M7 5v5a2 2 0 0 0 2 2h6a2 2 0 0 1 2 2v5"/><path d="m4 8 3 3 3-3M14 16l3 3 3-3"/></>,
+        merge: <><path d="M5 6h3a4 4 0 0 1 4 4v8"/><path d="M19 6h-3a4 4 0 0 0-4 4"/><path d="m9 15 3 3 3-3"/></>,
+        separate: <><rect x="3.5" y="7" width="6" height="10" rx="1.5"/><rect x="14.5" y="7" width="6" height="10" rx="1.5"/><path d="M12 5v14M9.5 7.5 12 5l2.5 2.5M9.5 16.5 12 19l2.5-2.5"/></>,
         trash: <><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></>,
     };
     return <svg className="tree-control-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
@@ -78,7 +81,8 @@ export default function RegionLayerTree(props: Props) {
     return <aside className="layers">
         <div className="panel-toolbar">
             <TreeButton className="panel-tool primary" title="Add region" aria-label="Add region" onClick={props.onAddRegion}><TreeIcon name="plus"/><span>Region</span></TreeButton>
-            <TreeButton className="panel-tool" title="Split disconnected areas in the selected layer" aria-label="Split disconnected areas" disabled={!props.canSplitDisconnectedAreas} onClick={props.onSplitDisconnectedAreas}><TreeIcon name="split"/></TreeButton>
+            <TreeButton className="panel-tool" title="Merge selected layers (Ctrl E)" aria-label="Merge selected layers" disabled={!props.canMergeLayers} onClick={props.onMergeLayers}><TreeIcon name="merge"/><span>Merge</span></TreeButton>
+            <TreeButton className="panel-tool" title="Separate disconnected areas into individual layers" aria-label="Split disconnected areas" disabled={!props.canSplitDisconnectedAreas} onClick={props.onSplitDisconnectedAreas}><TreeIcon name="separate"/><span>Split</span></TreeButton>
             <span className="panel-toolbar-spacer"/>
             <TreeButton className="panel-tool danger" title="Delete selected region" aria-label="Delete selected region" disabled={!selectedRegion} onClick={() => selectedRegion && props.onDeleteRegion(selectedRegion.id)}><TreeIcon name="trash"/></TreeButton>
         </div>

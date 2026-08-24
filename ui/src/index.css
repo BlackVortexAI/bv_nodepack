@@ -285,6 +285,15 @@
 .bv-regional-error { margin: 20px; padding: 15px; color: #ffaca6; border: 1px solid #ff756d; border-radius: var(--bv-ui-radius); }
 
 .editor-menus { display: flex; align-items: center; gap: 2px; }
+.bv-anchored-popover.bv-popover { min-width: 260px; }
+.bv-anchored-popover.bv-popover:has(.bv-menu-stack) { width: min(320px, calc(100vw - 16px)); }
+.bv-anchored-popover.bv-popover:has(.help-menu) { width: min(560px, calc(100vw - 16px)); }
+.bv-menu-stack { display: grid; gap: 8px; width: 100%; }
+.bv-menu-stack > .bv-button { justify-content: space-between; width: 100%; text-align: left; }
+.bv-menu-stack > hr { width: 100%; margin: 2px 0; border: 0; border-top: 1px solid var(--bv-ui-border); }
+.bv-menu-stack > small { color: var(--bv-ui-muted); }
+.bv-anchored-popover.bv-popover:has(.editor-menus-overflow-panel) { width: min(320px, calc(100vw - 16px)); }
+.editor-menus-overflow-panel { display: grid; gap: 3px; }
 .menu-item { position: relative; }
 .editor-menus > .menu-item > button { padding: 4px 7px; border-color: transparent; background: transparent; }
 .menu-popover, .toolbar-popover { position: absolute; z-index: 20; top: calc(100% + 5px); left: 0; display: grid; min-width: 230px; padding: 7px; border: 1px solid var(--bv-border-color); border-radius: var(--bv-ui-radius); background: var(--comfy-menu-bg, #20242a); box-shadow: 0 12px 35px #000b; }
