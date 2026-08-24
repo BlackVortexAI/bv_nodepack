@@ -82,6 +82,11 @@ test("LoRA config edits defer and coalesce native graph reconciliation",()=>{
  assert.match(source,/writeNodeLoraV3Config\(node,next\);scheduleConfiguredLoraWriterTree\(node,next\)/);
  assert.match(source,/__bvLoraReconcileScheduled/);assert.match(source,/setTimeout\(\(\)=>/);
 });
+test("a temporarily missing collector cannot crash Regional Prompt reactivation",()=>{
+ const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
+ assert.match(source,/const widget=\(node:any,name:string\)=>node\?\.widgets\?\.find/);
+ assert.match(source,/linkedLocalLoraCollectors\(node\).*expected\.every/s);
+});
 test("the LoRA editor exposes ordered repeatable scope operations and participates in window visibility",()=>{
  assert.match(editorSource,/Add step/);assert.match(editorSource,/<SortableList/);assert.match(editorSource,/onReorder=/);
  assert.match(editorSource,/label="Target"/);assert.match(editorSource,/label="Operation"/);assert.match(editorSource,/crypto\.randomUUID\(\)/);

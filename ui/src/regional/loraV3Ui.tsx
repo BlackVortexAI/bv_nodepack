@@ -8,7 +8,7 @@ import { requestRegionalWindow } from "./windowRequests";
 
 export const OPEN_LORA_V3_EDITOR_EVENT="bv-open-regional-lora-editor";
 export const LORA_V3_INVENTORY_CHANGED_EVENT="bv-regional-lora-inventory-changed";
-const widget=(node:any,name:string)=>node.widgets?.find((item:any)=>item.name===name);
+const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 const nodeClass=(node:any)=>String(node?.comfyClass??node?.type??"");
 const graphLink=(graph:any,id:any)=>id==null?null:(graph?._links?.get?.(id)??graph?.links?.get?.(id)??graph?.links?.[id]??null);
 export const hideLoraV3Widget=(item:any)=>{if(!item)return;item.type="converted-widget";item.hidden=true;item.computeSize=()=>[0,-4];if(item.element)item.element.style.display="none";item.serializeValue=item.serializeValue??function(this:any){return this.value};};
