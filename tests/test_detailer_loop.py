@@ -341,6 +341,18 @@ class DetailerLoopTests(unittest.TestCase):
         self.assertIs(result, planned)
         self.assertEqual(count, 1)
 
+    def test_detailer_plan_materializes_inherited_regional_prompt_easy_mode(self):
+        provider = {"schema": "bv.runtime_resource_provider", "provider_id": "collector-a"}
+        context = {"schema": "bv.regional", "version": 3, "capabilities": {"bv-nodepack.detailer-plan": {"version": 1, "jobs": []}}}
+        planned = {"schema": "bv.detailer_plan", "jobs": [{"region_names": ["Face"], "detector_id": "face"}]}
+        with mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.materialize_detailer_plan", return_value=planned,
+        ) as materialize:
+            result, count, _ = BVRegionalDetailerPlanNode().build(context, resource_provider=provider)
+        self.assertEqual(materialize.call_args.args[1], {"collector-a": provider})
+        self.assertIs(result, planned)
+        self.assertEqual(count, 1)
+
     def test_detailer_plan_exposes_twenty_one_typed_runtime_provider_inputs(self):
         optional = BVRegionalDetailerPlanNode.INPUT_TYPES()["optional"]
         providers = [name for name in optional if name.startswith("resource_provider")]

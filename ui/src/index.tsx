@@ -25,7 +25,7 @@ import { parseDetectorRegistryConfig, serializeDetectorRegistryConfig } from "./
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
 import { compactNodeToComputedHeight } from "./regional/nodeLayout";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
-import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
+import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetailerPromptV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
@@ -881,9 +881,12 @@ comfyApp.registerExtension({
             const jsonWidget = this.widgets?.find((widget: any) => widget.name === "regional_json");
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
             const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
+            const detailerV3Widget = this.widgets?.find((widget: any) => widget.name === "detailer_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
+            if (detailerV3Widget) hideLoraV3Widget(detailerV3Widget);
             installLoraV3ConsumerSlot(this);
+            prepareDetailerPromptV3(this,detailerGraphOwner(this));
             if (jsonWidget) {
                 hideRegionalWidget(jsonWidget);
                 if (!jsonWidget.__bvRegionalDocumentHooked) {
@@ -915,9 +918,12 @@ comfyApp.registerExtension({
             ensureUniqueDocument(this, false);
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
             const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
+            const detailerV3Widget = this.widgets?.find((widget: any) => widget.name === "detailer_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
+            if (detailerV3Widget) hideLoraV3Widget(detailerV3Widget);
             installLoraV3ConsumerSlot(this);
+            prepareDetailerPromptV3(this,detailerGraphOwner(this));
             compactLoraConsumerNode(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;

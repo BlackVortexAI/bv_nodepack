@@ -41,6 +41,8 @@ from ..util.regional.lora_v3 import (
     transform_lora_capability,
     transform_lora_sequence,
 )
+from ..util.regional.detailer_v3 import transform_detailer_capability
+from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
 from ..util.regional.flux2_klein_attention import (
@@ -67,7 +69,9 @@ CATEGORY_MODEL_ANIMA = f"{CATEGORY_MODELS}/Anima"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_V3_JSON = '{"version":3,"entries":[],"steps":[]}'
+DEFAULT_DETAILER_V3_JSON = '{"version":1,"jobs":[]}'
 MAX_LORA_COLLECTORS = 20
+MAX_DETECTOR_COLLECTORS = 20
 
 
 def _lora_provider_inputs():
@@ -111,8 +115,16 @@ class BVRegionalPromptNode:
                     "STRING",
                     {"default": DEFAULT_LORA_V3_JSON, "multiline": True, "dynamicPrompts": False},
                 ),
+                "detailer_v3_config_json": (
+                    "STRING",
+                    {"default": DEFAULT_DETAILER_V3_JSON, "multiline": True, "dynamicPrompts": False},
+                ),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
                 **_lora_provider_inputs(),
+                **{
+                    f"detailer_resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
+                    for index in range(1, MAX_DETECTOR_COLLECTORS + 1)
+                },
             },
         }
 
@@ -121,16 +133,21 @@ class BVRegionalPromptNode:
     FUNCTION = "build"
     CATEGORY = CATEGORY_CORE
 
-    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, resource_provider=None, **providers):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, resource_provider=None, **providers):
         document = parse_document(regional_json)
         payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
         regional = document
         if payload.get("entries"):
             regional = transform_lora_capability(
-                document, normalize_lora_prompt_config(payload), registry=LORA_CAPABILITY_REGISTRY
+                document, normalize_lora_prompt_config(payload), registry=REGIONAL_V3_CAPABILITY_REGISTRY
             )
             regional = materialize_lora_capability(
-                regional, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY
+                regional, _lora_provider_map(resource_provider, **providers), registry=REGIONAL_V3_CAPABILITY_REGISTRY
+            ).to_dict()
+        detailer_payload = json.loads(detailer_v3_config_json or DEFAULT_DETAILER_V3_JSON)
+        if detailer_payload.get("jobs"):
+            regional = transform_detailer_capability(
+                regional, detailer_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             ).to_dict()
         return regional, reconcile_bindings(lora_bindings_json, document)
 

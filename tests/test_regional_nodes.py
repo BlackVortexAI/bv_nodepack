@@ -171,6 +171,25 @@ class RegionalNodeTests(unittest.TestCase):
         regional, _ = self.module.BVRegionalPromptNode().build(json.dumps(fixture()))
         self.assertEqual(regional["schema"], "bv.regional")
 
+    def test_main_node_combines_lora_and_detailer_easy_mode_capabilities(self):
+        document = fixture()
+        document["version"] = 2
+        for item in document["regions"]:
+            item["usage"] = "generation"
+        region = document["regions"][0]
+        region["usage"] = "both"
+        region["enabled"] = True
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        lora_entry = {"id": "33333333-3333-4333-8333-333333333333", "source": {"kind": "external", "collector_id": collector_id, "resource_id": "skin"}, "targets": [{"scope": "global"}]}
+        detailer_job = {"id": "face-job", "region_ids": [region["id"]], "primary_region_id": region["id"], "mask_composition": "union", "prompt_composition": "context", "conditioning": {"global_influence": 1, "background_influence": .35, "primary_region_influence": 1, "context_region_influence": 1}, "detector_assignments": []}
+        provider = self.module.build_lora_provider(collector_id, {"skin": {"id": "skin", "name": "Skin", "stack": [["skin.safetensors", .8, .6]]}})
+        regional, _ = self.module.BVRegionalPromptNode().build(
+            json.dumps(document), lora_v3_config_json=json.dumps({"version": 3, "entries": [lora_entry], "steps": []}),
+            detailer_v3_config_json=json.dumps({"version": 1, "jobs": [detailer_job]}), resource_provider_1=provider,
+        )
+        self.assertIn("bv-nodepack.lora", regional["capabilities"])
+        self.assertEqual(regional["capabilities"]["bv-nodepack.detailer-plan"]["jobs"], [detailer_job])
+
     def test_native_compiler_is_not_a_lora_resource_consumer(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
         self.assertNotIn("optional", inputs)

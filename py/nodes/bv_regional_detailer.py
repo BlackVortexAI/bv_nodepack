@@ -22,7 +22,7 @@ from ..util.regional.detailer import (
     validate_detailer_loop_state,
 )
 from ..util.regional.detailer_v3 import (
-    DETAILER_CAPABILITY_REGISTRY,
+    DETAILER_CAPABILITY,
     RUNTIME_PROVIDER,
     build_detector_provider,
     materialize_detailer_plan,
@@ -32,6 +32,7 @@ from ..util.regional.document import REGIONAL
 from ..util.regional.lora_hooks import create_hook_groups, resolve_stack_paths
 from ..util.regional.lora_v3 import LORA_CAPABILITY_REGISTRY, materialized_lora_scopes
 from ..util.regional.native_conditioning import compile_detailer_conditioning
+from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
 
 
 CATEGORY = "🌀 BV Node Pack/regional/detailer"
@@ -91,10 +92,20 @@ class BVRegionalDetailerPlanNode:
             "detector_assignments" in job for job in configured.get("jobs", []) if isinstance(job, dict)
         ):
             context = transform_detailer_capability(
-                regional_prompt, configured, registry=DETAILER_CAPABILITY_REGISTRY,
+                regional_prompt, configured, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             )
             plan = materialize_detailer_plan(
-                context, _detector_provider_map(resource_provider, **providers), registry=DETAILER_CAPABILITY_REGISTRY,
+                context, _detector_provider_map(resource_provider, **providers), registry=REGIONAL_V3_CAPABILITY_REGISTRY,
+            )
+            summary = "\n".join(
+                f"{index + 1}. {' + '.join(job['region_names'])}"
+                + (f" [{job['detector_id']}]" if job["detector_id"] else "")
+                for index, job in enumerate(plan["jobs"])
+            ) or "No enabled detailer regions"
+            return plan, len(plan["jobs"]), summary
+        if configured is None and isinstance(regional_prompt, dict) and DETAILER_CAPABILITY in regional_prompt.get("capabilities", {}):
+            plan = materialize_detailer_plan(
+                regional_prompt, _detector_provider_map(resource_provider, **providers), registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             )
             summary = "\n".join(
                 f"{index + 1}. {' + '.join(job['region_names'])}"
