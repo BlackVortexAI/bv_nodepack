@@ -1,0 +1,280 @@
+{
+  "last_node_id": 14,
+  "last_link_id": 21,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "CheckpointLoaderSimple",
+      "pos": [40, 40],
+      "size": [330, 100],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"name": "MODEL", "type": "MODEL", "links": [1, 8], "slot_index": 0},
+        {"name": "CLIP", "type": "CLIP", "links": [2, 3, 9], "slot_index": 1},
+        {"name": "VAE", "type": "VAE", "links": [4, 10], "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "CheckpointLoaderSimple"},
+      "widgets_values": ["Illustrious\\waiIllustriousSDXL_v170.safetensors"]
+    },
+    {
+      "id": 2,
+      "type": "CLIPTextEncode",
+      "pos": [40, 180],
+      "size": [410, 200],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 2}],
+      "outputs": [{"name": "CONDITIONING", "type": "CONDITIONING", "links": [5], "slot_index": 0}],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["masterpiece, best quality, one woman, upper body portrait, face visible, one raised hand visible, simple studio background"]
+    },
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "pos": [40, 420],
+      "size": [410, 180],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [{"name": "clip", "type": "CLIP", "link": 3}],
+      "outputs": [{"name": "CONDITIONING", "type": "CONDITIONING", "links": [6], "slot_index": 0}],
+      "properties": {"Node name for S&R": "CLIPTextEncode"},
+      "widgets_values": ["worst quality, low quality, blurry, malformed face, malformed hands, extra fingers"]
+    },
+    {
+      "id": 4,
+      "type": "EmptyLatentImage",
+      "pos": [80, 650],
+      "size": [300, 110],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [{"name": "LATENT", "type": "LATENT", "links": [7], "slot_index": 0}],
+      "properties": {"Node name for S&R": "EmptyLatentImage"},
+      "widgets_values": [512, 768, 1]
+    },
+    {
+      "id": 5,
+      "type": "KSampler",
+      "pos": [530, 250],
+      "size": [330, 470],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {"name": "model", "type": "MODEL", "link": 1},
+        {"name": "positive", "type": "CONDITIONING", "link": 5},
+        {"name": "negative", "type": "CONDITIONING", "link": 6},
+        {"name": "latent_image", "type": "LATENT", "link": 7}
+      ],
+      "outputs": [{"name": "LATENT", "type": "LATENT", "links": [11], "slot_index": 0}],
+      "properties": {"Node name for S&R": "KSampler"},
+      "widgets_values": [824731905, "randomize", 16, 6, "dpmpp_2m", "karras", 1]
+    },
+    {
+      "id": 6,
+      "type": "VAEDecode",
+      "pos": [930, 360],
+      "size": [220, 80],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {"name": "samples", "type": "LATENT", "link": 11},
+        {"name": "vae", "type": "VAE", "link": 4}
+      ],
+      "outputs": [{"name": "IMAGE", "type": "IMAGE", "links": [12], "slot_index": 0}],
+      "properties": {"Node name for S&R": "VAEDecode"},
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "BV Regional Prompt",
+      "pos": [930, 40],
+      "size": [390, 120],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [{"label": "regional json", "name": "regional_json", "type": "STRING", "widget": {"name": "regional_json"}, "link": null}],
+      "outputs": [
+        {"label": "regional", "name": "regional", "type": "BV_REGIONAL", "links": [13], "slot_index": 0},
+        {"label": "lora bindings", "name": "lora_bindings", "type": "BV_LORA_BINDINGS", "links": null, "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "BV Regional Prompt", "bvWindowMenuVisible": true},
+      "widgets_values": ["{\"schema\":\"bv.regional\",\"version\":2,\"document_id\":\"83085d58-2472-48ec-88e3-0767565065e4\",\"title\":\"Detailer Loop Two Jobs\",\"canvas\":{\"width\":512,\"height\":768},\"prompts\":{\"global\":{\"positive_source\":\"masterpiece, best quality\",\"negative_source\":\"worst quality, low quality\"},\"background\":{\"positive_source\":\"clean studio background\",\"negative_source\":\"cluttered background\"}},\"negative_mode\":\"auto\",\"overlap\":{\"mode\":\"joint\"},\"regions\":[{\"id\":\"6ee983f7-6a0b-44cf-b05c-64810741449c\",\"name\":\"Face\",\"parent_region_id\":null,\"enabled\":true,\"usage\":\"detailer\",\"strength\":1,\"priority\":0,\"prompts\":{\"positive_source\":\"detailed symmetrical face, sharp eyes, refined facial features\",\"negative_source\":\"asymmetrical eyes, distorted face\"},\"mask\":{\"feather\":0.03},\"geometry\":[{\"id\":\"81349ef1-4ce3-497c-8164-3909a030cd0d\",\"layer_id\":\"81349ef1-4ce3-497c-8164-3909a030cd0d\",\"type\":\"rect\",\"operation\":\"add\",\"enabled\":true,\"x\":0.25,\"y\":0.08,\"width\":0.5,\"height\":0.36,\"authoring\":{\"name\":\"Face area\",\"visible\":true,\"locked\":false}}],\"authoring\":{\"visible\":true,\"locked\":false,\"color\":\"#e85d75\"}},{\"id\":\"835b5c7b-29f4-451f-ac2e-948527b8c51d\",\"name\":\"Hand\",\"parent_region_id\":null,\"enabled\":true,\"usage\":\"detailer\",\"strength\":1,\"priority\":1,\"prompts\":{\"positive_source\":\"anatomically correct hand, five distinct fingers, detailed fingers\",\"negative_source\":\"extra fingers, fused fingers, malformed hand\"},\"mask\":{\"feather\":0.025},\"geometry\":[{\"id\":\"56443bfc-26a0-407a-a685-4ab0db98417d\",\"layer_id\":\"56443bfc-26a0-407a-a685-4ab0db98417d\",\"type\":\"rect\",\"operation\":\"add\",\"enabled\":true,\"x\":0.58,\"y\":0.34,\"width\":0.32,\"height\":0.42,\"authoring\":{\"name\":\"Hand area\",\"visible\":true,\"locked\":false}}],\"authoring\":{\"visible\":true,\"locked\":false,\"color\":\"#55b9d1\"}}]}"]
+    },
+    {
+      "id": 8,
+      "type": "BV Regional Detailer Plan",
+      "pos": [1390, 40],
+      "size": [390, 130],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"label": "regional prompt", "name": "regional_prompt", "type": "BV_REGIONAL", "link": 13},
+        {"label": "detector registry", "name": "detector_registry", "type": "BV_DETECTOR_REGISTRY", "link": null},
+        {"label": "config json", "name": "config_json", "type": "STRING", "widget": {"name": "config_json"}, "link": null}
+      ],
+      "outputs": [
+        {"label": "detailer plan", "name": "detailer_plan", "type": "BV_DETAILER_PLAN", "links": [14], "slot_index": 0},
+        {"label": "job count", "name": "job_count", "type": "INT", "links": null, "slot_index": 1},
+        {"label": "plan summary", "name": "plan_summary", "type": "STRING", "links": null, "slot_index": 2}
+      ],
+      "properties": {"Node name for S&R": "BV Regional Detailer Plan", "bvWindowMenuVisible": true},
+      "widgets_values": ["{\"version\":1,\"jobs\":[{\"id\":\"job-face\",\"region_ids\":[\"6ee983f7-6a0b-44cf-b05c-64810741449c\"],\"primary_region_id\":\"6ee983f7-6a0b-44cf-b05c-64810741449c\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[]},{\"id\":\"job-hand\",\"region_ids\":[\"835b5c7b-29f4-451f-ac2e-948527b8c51d\"],\"primary_region_id\":\"835b5c7b-29f4-451f-ac2e-948527b8c51d\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[]}]}" ]
+    },
+    {
+      "id": 9,
+      "type": "BV Detailer Loop Start",
+      "pos": [1390, 300],
+      "size": [330, 120],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"label": "detailer plan", "name": "detailer_plan", "type": "BV_DETAILER_PLAN", "link": 14},
+        {"label": "initial image", "name": "initial_image", "type": "IMAGE", "link": 12}
+      ],
+      "outputs": [
+        {"label": "flow", "name": "flow", "type": "FLOW_CONTROL", "links": [15], "slot_index": 0},
+        {"label": "loop state", "name": "loop_state", "type": "BV_DETAILER_LOOP_STATE", "links": [16], "slot_index": 1}
+      ],
+      "properties": {"Node name for S&R": "BV Detailer Loop Start"},
+      "widgets_values": []
+    },
+    {
+      "id": 10,
+      "type": "BV Detailer Loop Job Resolver",
+      "pos": [1800, 230],
+      "size": [390, 250],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {"label": "loop state", "name": "loop_state", "type": "BV_DETAILER_LOOP_STATE", "link": 16},
+        {"label": "model", "name": "model", "type": "MODEL", "link": 8},
+        {"label": "clip", "name": "clip", "type": "CLIP", "link": 9},
+        {"label": "vae", "name": "vae", "type": "VAE", "link": 10},
+        {"label": "global influence", "name": "global_influence", "type": "FLOAT", "widget": {"name": "global_influence"}, "link": null},
+        {"label": "background influence", "name": "background_influence", "type": "FLOAT", "widget": {"name": "background_influence"}, "link": null},
+        {"label": "primary region influence", "name": "primary_region_influence", "type": "FLOAT", "widget": {"name": "primary_region_influence"}, "link": null}
+      ],
+      "outputs": [
+        {"label": "detailer job", "name": "detailer_job", "type": "BV_DETAILER_JOB", "links": null, "slot_index": 0},
+        {"label": "current image", "name": "current_image", "type": "IMAGE", "links": [17], "slot_index": 1},
+        {"label": "region mask", "name": "region_mask", "type": "MASK", "links": [18], "slot_index": 2},
+        {"label": "basic pipe", "name": "basic_pipe", "type": "BASIC_PIPE", "links": [19], "slot_index": 3}
+      ],
+      "properties": {"Node name for S&R": "BV Detailer Loop Job Resolver"},
+      "widgets_values": [1, 0.25, 1]
+    },
+    {
+      "id": 11,
+      "type": "MaskDetailerPipe",
+      "pos": [2270, 170],
+      "size": [570, 720],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {"name": "image", "type": "IMAGE", "link": 17},
+        {"name": "mask", "type": "MASK", "link": 18},
+        {"name": "basic_pipe", "type": "BASIC_PIPE", "link": 19, "slot_index": 2},
+        {"name": "refiner_basic_pipe_opt", "type": "BASIC_PIPE", "shape": 7, "link": null},
+        {"name": "detailer_hook", "type": "DETAILER_HOOK", "shape": 7, "link": null},
+        {"name": "scheduler_func_opt", "type": "SCHEDULER_FUNC", "shape": 7, "link": null}
+      ],
+      "outputs": [
+        {"name": "image", "type": "IMAGE", "shape": 3, "links": [20], "slot_index": 0},
+        {"name": "cropped_refined", "type": "IMAGE", "shape": 6, "links": null, "slot_index": 1},
+        {"name": "cropped_enhanced_alpha", "type": "IMAGE", "shape": 6, "links": null, "slot_index": 2},
+        {"name": "basic_pipe", "type": "BASIC_PIPE", "shape": 3, "links": null, "slot_index": 3},
+        {"name": "refiner_basic_pipe_opt", "type": "BASIC_PIPE", "shape": 3, "links": null, "slot_index": 4}
+      ],
+      "properties": {"Node name for S&R": "MaskDetailerPipe"},
+      "widgets_values": [384, true, 768, true, 1003, "fixed", 6, 5, "dpmpp_2m", "karras", 0.4, 5, 3, 10, 0.2, 1, 1, false, 20, false, false],
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 12,
+      "type": "BV Detailer Loop End",
+      "pos": [2940, 300],
+      "size": [330, 110],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {"label": "flow", "name": "flow", "type": "FLOW_CONTROL", "link": 15},
+        {"label": "processed image", "name": "processed_image", "type": "IMAGE", "link": 20}
+      ],
+      "outputs": [{"label": "final image", "name": "final_image", "type": "IMAGE", "links": [21], "slot_index": 0}],
+      "properties": {"Node name for S&R": "BV Detailer Loop End"},
+      "widgets_values": []
+    },
+    {
+      "id": 13,
+      "type": "PreviewImage",
+      "pos": [3360, 220],
+      "size": [420, 480],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [{"name": "images", "type": "IMAGE", "link": 21}],
+      "outputs": [{"name": "images", "type": "IMAGE", "links": null, "slot_index": 0}],
+      "properties": {"Node name for S&R": "PreviewImage"},
+      "widgets_values": []
+    },
+    {
+      "id": 14,
+      "type": "Note",
+      "pos": [1390, 510],
+      "size": [760, 190],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": ["BV Regional V3 Detailer Loop – 2 Jobs\n\nJob 1 verfeinert die Face-Region, Job 2 übernimmt dieses Ergebnis und verfeinert anschließend die Hand-Region.\nDie Rechtecke sind absichtlich gut sichtbar und können im Regional Editor an das generierte Motiv angepasst werden.\nFalls der angegebene Checkpoint lokal nicht existiert, einfach im Checkpoint Loader einen vorhandenen SDXL/Illustrious-Checkpoint wählen."]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 5, 0, "MODEL"],
+    [2, 1, 1, 2, 0, "CLIP"],
+    [3, 1, 1, 3, 0, "CLIP"],
+    [4, 1, 2, 6, 1, "VAE"],
+    [5, 2, 0, 5, 1, "CONDITIONING"],
+    [6, 3, 0, 5, 2, "CONDITIONING"],
+    [7, 4, 0, 5, 3, "LATENT"],
+    [8, 1, 0, 10, 1, "MODEL"],
+    [9, 1, 1, 10, 2, "CLIP"],
+    [10, 1, 2, 10, 3, "VAE"],
+    [11, 5, 0, 6, 0, "LATENT"],
+    [12, 6, 0, 9, 1, "IMAGE"],
+    [13, 7, 0, 8, 0, "BV_REGIONAL"],
+    [14, 8, 0, 9, 0, "BV_DETAILER_PLAN"],
+    [15, 9, 0, 12, 0, "FLOW_CONTROL"],
+    [16, 9, 1, 10, 0, "BV_DETAILER_LOOP_STATE"],
+    [17, 10, 1, 11, 0, "IMAGE"],
+    [18, 10, 2, 11, 1, "MASK"],
+    [19, 10, 3, 11, 2, "BASIC_PIPE"],
+    [20, 11, 0, 12, 1, "IMAGE"],
+    [21, 12, 0, 13, 0, "IMAGE"]
+  ],
+  "groups": [
+    {"id": 1, "title": "1 · Base image", "bounding": [10, 0, 1180, 800], "color": "#3f789e", "font_size": 24, "flags": {}},
+    {"id": 2, "title": "2 · Regional V3 plan", "bounding": [890, 0, 930, 190], "color": "#8f6c3d", "font_size": 24, "flags": {}},
+    {"id": 3, "title": "3 · Two-job detailer loop", "bounding": [1340, 130, 1980, 790], "color": "#5f4d91", "font_size": 24, "flags": {}},
+    {"id": 4, "title": "4 · Final accumulated image", "bounding": [3320, 170, 500, 570], "color": "#3f8f68", "font_size": 24, "flags": {}}
+  ],
+  "config": {},
+  "extra": {"ds": {"scale": 0.55, "offset": [70, 210]}},
+  "version": 0.4
+}
