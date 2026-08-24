@@ -1,6 +1,6 @@
 {
-  "last_node_id": 14,
-  "last_link_id": 21,
+  "last_node_id": 16,
+  "last_link_id": 27,
   "nodes": [
     {
       "id": 1,
@@ -119,7 +119,8 @@
       "inputs": [
         {"label": "regional prompt", "name": "regional_prompt", "type": "BV_REGIONAL", "link": 13},
         {"label": "detector registry", "name": "detector_registry", "type": "BV_DETECTOR_REGISTRY", "link": null},
-        {"label": "config json", "name": "config_json", "type": "STRING", "widget": {"name": "config_json"}, "link": null}
+        {"label": "config json", "name": "config_json", "type": "STRING", "widget": {"name": "config_json"}, "link": null},
+        {"label": "resource provider", "name": "resource_provider", "type": "BV_RUNTIME_RESOURCE_PROVIDER", "shape": 7, "link": 22}
       ],
       "outputs": [
         {"label": "detailer plan", "name": "detailer_plan", "type": "BV_DETAILER_PLAN", "links": [14], "slot_index": 0},
@@ -127,7 +128,7 @@
         {"label": "plan summary", "name": "plan_summary", "type": "STRING", "links": null, "slot_index": 2}
       ],
       "properties": {"Node name for S&R": "BV Regional Detailer Plan", "bvWindowMenuVisible": true},
-      "widgets_values": ["{\"version\":1,\"jobs\":[{\"id\":\"job-face\",\"region_ids\":[\"6ee983f7-6a0b-44cf-b05c-64810741449c\"],\"primary_region_id\":\"6ee983f7-6a0b-44cf-b05c-64810741449c\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[]},{\"id\":\"job-hand\",\"region_ids\":[\"835b5c7b-29f4-451f-ac2e-948527b8c51d\"],\"primary_region_id\":\"835b5c7b-29f4-451f-ac2e-948527b8c51d\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[]}]}" ]
+      "widgets_values": ["{\"version\":1,\"jobs\":[{\"id\":\"job-face\",\"region_ids\":[\"6ee983f7-6a0b-44cf-b05c-64810741449c\"],\"primary_region_id\":\"6ee983f7-6a0b-44cf-b05c-64810741449c\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[{\"id\":\"assignment-face\",\"source\":{\"collector_id\":\"f3993446-d59a-49a3-9918-14817cadcdb9\",\"resource_id\":\"Face\"},\"options\":{\"roi_padding\":0.15,\"threshold\":0.35,\"dilation\":8,\"crop_factor\":1.5,\"drop_size\":10}}]},{\"id\":\"job-hand\",\"region_ids\":[\"835b5c7b-29f4-451f-ac2e-948527b8c51d\"],\"primary_region_id\":\"835b5c7b-29f4-451f-ac2e-948527b8c51d\",\"mask_composition\":\"union\",\"prompt_composition\":\"context\",\"conditioning\":{\"global_influence\":1,\"background_influence\":0.25,\"primary_region_influence\":1,\"context_region_influence\":1},\"detector_assignments\":[{\"id\":\"assignment-hand\",\"source\":{\"collector_id\":\"f3993446-d59a-49a3-9918-14817cadcdb9\",\"resource_id\":\"Hand\"},\"options\":{\"roi_padding\":0.2,\"threshold\":0.3,\"dilation\":8,\"crop_factor\":1.5,\"drop_size\":10}}]}]}" ]
     },
     {
       "id": 9,
@@ -166,9 +167,9 @@
         {"label": "primary region influence", "name": "primary_region_influence", "type": "FLOAT", "widget": {"name": "primary_region_influence"}, "link": null}
       ],
       "outputs": [
-        {"label": "detailer job", "name": "detailer_job", "type": "BV_DETAILER_JOB", "links": null, "slot_index": 0},
-        {"label": "current image", "name": "current_image", "type": "IMAGE", "links": [17], "slot_index": 1},
-        {"label": "region mask", "name": "region_mask", "type": "MASK", "links": [18], "slot_index": 2},
+        {"label": "detailer job", "name": "detailer_job", "type": "BV_DETAILER_JOB", "links": [23], "slot_index": 0},
+        {"label": "current image", "name": "current_image", "type": "IMAGE", "links": [17, 24], "slot_index": 1},
+        {"label": "region mask", "name": "region_mask", "type": "MASK", "links": [25], "slot_index": 2},
         {"label": "basic pipe", "name": "basic_pipe", "type": "BASIC_PIPE", "links": [19], "slot_index": 3}
       ],
       "properties": {"Node name for S&R": "BV Detailer Loop Job Resolver"},
@@ -176,7 +177,7 @@
     },
     {
       "id": 11,
-      "type": "MaskDetailerPipe",
+      "type": "DetailerForEachPipe",
       "pos": [2270, 170],
       "size": [570, 720],
       "flags": {},
@@ -184,21 +185,20 @@
       "mode": 0,
       "inputs": [
         {"name": "image", "type": "IMAGE", "link": 17},
-        {"name": "mask", "type": "MASK", "link": 18},
+        {"name": "segs", "type": "SEGS", "link": 26},
         {"name": "basic_pipe", "type": "BASIC_PIPE", "link": 19, "slot_index": 2},
-        {"name": "refiner_basic_pipe_opt", "type": "BASIC_PIPE", "shape": 7, "link": null},
         {"name": "detailer_hook", "type": "DETAILER_HOOK", "shape": 7, "link": null},
+        {"name": "refiner_basic_pipe_opt", "type": "BASIC_PIPE", "shape": 7, "link": null},
         {"name": "scheduler_func_opt", "type": "SCHEDULER_FUNC", "shape": 7, "link": null}
       ],
       "outputs": [
         {"name": "image", "type": "IMAGE", "shape": 3, "links": [20], "slot_index": 0},
-        {"name": "cropped_refined", "type": "IMAGE", "shape": 6, "links": null, "slot_index": 1},
-        {"name": "cropped_enhanced_alpha", "type": "IMAGE", "shape": 6, "links": null, "slot_index": 2},
-        {"name": "basic_pipe", "type": "BASIC_PIPE", "shape": 3, "links": null, "slot_index": 3},
-        {"name": "refiner_basic_pipe_opt", "type": "BASIC_PIPE", "shape": 3, "links": null, "slot_index": 4}
+        {"name": "segs", "type": "SEGS", "shape": 3, "links": null, "slot_index": 1},
+        {"name": "basic_pipe", "type": "BASIC_PIPE", "shape": 3, "links": null, "slot_index": 2},
+        {"name": "cnet_images", "type": "IMAGE", "shape": 6, "links": null, "slot_index": 3}
       ],
-      "properties": {"Node name for S&R": "MaskDetailerPipe"},
-      "widgets_values": [384, true, 768, true, 1003, "fixed", 6, 5, "dpmpp_2m", "karras", 0.4, 5, 3, 10, 0.2, 1, 1, false, 20, false, false],
+      "properties": {"Node name for S&R": "DetailerForEachPipe"},
+      "widgets_values": [384, true, 768, 1003, "fixed", 6, 5, "dpmpp_2m", "karras", 0.4, 5, true, true, "", 0.2, 1, false, 20, false, false],
       "color": "#322",
       "bgcolor": "#533"
     },
@@ -242,7 +242,49 @@
       "inputs": [],
       "outputs": [],
       "properties": {},
-      "widgets_values": ["BV Regional V3 Detailer Loop – 2 Jobs\n\nJob 1 verfeinert die Face-Region, Job 2 übernimmt dieses Ergebnis und verfeinert anschließend die Hand-Region.\nDie Rechtecke sind absichtlich gut sichtbar und können im Regional Editor an das generierte Motiv angepasst werden.\nFalls der angegebene Checkpoint lokal nicht existiert, einfach im Checkpoint Loader einen vorhandenen SDXL/Illustrious-Checkpoint wählen."]
+      "widgets_values": ["BV Regional V3 Detector Loop – 2 Jobs\n\nJob 1 verwendet Face YOLO, Job 2 übernimmt dieses Ergebnis und verwendet anschließend Hand YOLO.\nDer BV Detect-to-SEGS-Adapter beschränkt jeden Detector auf seine Regionalmaske und liefert SEGS an Detailer (SEGS/pipe).\nFalls der angegebene Checkpoint lokal nicht existiert, einfach im Checkpoint Loader einen vorhandenen SDXL/Illustrious-Checkpoint wählen."]
+    },
+    {
+      "id": 15,
+      "type": "BV Detector Registry",
+      "pos": [930, 190],
+      "size": [390, 130],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [{"label": "config json", "name": "config_json", "type": "STRING", "widget": {"name": "config_json"}, "link": null}],
+      "outputs": [
+        {"label": "detector registry", "name": "detector_registry", "type": "BV_DETECTOR_REGISTRY", "links": null, "slot_index": 0},
+        {"label": "detector count", "name": "detector_count", "type": "INT", "links": null, "slot_index": 1},
+        {"label": "registry summary", "name": "registry_summary", "type": "STRING", "links": null, "slot_index": 2},
+        {"label": "resource provider", "name": "resource_provider", "type": "BV_RUNTIME_RESOURCE_PROVIDER", "links": [22], "slot_index": 3}
+      ],
+      "properties": {"Node name for S&R": "BV Detector Registry", "bvWindowMenuVisible": true},
+      "widgets_values": ["{\"schema\":\"bv.detector_registry_config\",\"version\":2,\"collector_id\":\"f3993446-d59a-49a3-9918-14817cadcdb9\",\"detectors\":[{\"id\":\"Face\",\"provider\":\"ultralytics\",\"model_name\":\"bbox/face_yolov8m.pt\"},{\"id\":\"Hand\",\"provider\":\"ultralytics\",\"model_name\":\"bbox/hand_yolov8s.pt\"}]}"]
+    },
+    {
+      "id": 16,
+      "type": "BV Detailer Loop Detect to SEGS (Impact)",
+      "pos": [2210, 20],
+      "size": [390, 330],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {"label": "detailer job", "name": "detailer_job", "type": "BV_DETAILER_JOB", "link": 23},
+        {"label": "current image", "name": "current_image", "type": "IMAGE", "link": 24},
+        {"label": "region mask", "name": "region_mask", "type": "MASK", "link": 25},
+        {"label": "roi padding", "name": "roi_padding", "type": "FLOAT", "widget": {"name": "roi_padding"}, "link": null},
+        {"label": "threshold", "name": "threshold", "type": "FLOAT", "widget": {"name": "threshold"}, "link": null},
+        {"label": "dilation", "name": "dilation", "type": "INT", "widget": {"name": "dilation"}, "link": null},
+        {"label": "crop factor", "name": "crop_factor", "type": "FLOAT", "widget": {"name": "crop_factor"}, "link": null},
+        {"label": "drop size", "name": "drop_size", "type": "INT", "widget": {"name": "drop_size"}, "link": null},
+        {"label": "detector query", "name": "detector_query", "type": "STRING", "widget": {"name": "detector_query"}, "link": null},
+        {"label": "detector labels", "name": "detector_labels", "type": "STRING", "widget": {"name": "detector_labels"}, "link": null}
+      ],
+      "outputs": [{"label": "segs", "name": "segs", "type": "SEGS", "links": [26], "slot_index": 0}],
+      "properties": {"Node name for S&R": "BV Detailer Loop Detect to SEGS (Impact)"},
+      "widgets_values": [0.15, 0.35, 8, 1.5, 10, "", ""]
     }
   ],
   "links": [
@@ -263,10 +305,14 @@
     [15, 9, 0, 12, 0, "FLOW_CONTROL"],
     [16, 9, 1, 10, 0, "BV_DETAILER_LOOP_STATE"],
     [17, 10, 1, 11, 0, "IMAGE"],
-    [18, 10, 2, 11, 1, "MASK"],
     [19, 10, 3, 11, 2, "BASIC_PIPE"],
     [20, 11, 0, 12, 1, "IMAGE"],
-    [21, 12, 0, 13, 0, "IMAGE"]
+    [21, 12, 0, 13, 0, "IMAGE"],
+    [22, 15, 3, 8, 3, "BV_RUNTIME_RESOURCE_PROVIDER"],
+    [23, 10, 0, 16, 0, "BV_DETAILER_JOB"],
+    [24, 10, 1, 16, 1, "IMAGE"],
+    [25, 10, 2, 16, 2, "MASK"],
+    [26, 16, 0, 11, 1, "SEGS"]
   ],
   "groups": [
     {"id": 1, "title": "1 · Base image", "bounding": [10, 0, 1180, 800], "color": "#3f789e", "font_size": 24, "flags": {}},
