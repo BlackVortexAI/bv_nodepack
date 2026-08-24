@@ -1,18 +1,19 @@
 import React from "react";
 import { SelectField } from "./forms";
 
-export type ResourcePickerCollector = { id:string; label:string; resources:Array<{id:string;label:string}> };
+export type ResourcePickerCollector = { id:string; nodeId?:string; label:string; resources:Array<{id:string;label:string}> };
 export type ResourcePickerOption={value:string;collectorId:string;resourceId:string;label:string};
 
 const selectionValue=(collectorId:string,resourceId:string)=>JSON.stringify([collectorId,resourceId]);
 
 export function resourcePickerOptions(collectors:ResourcePickerCollector[]):ResourcePickerOption[]{
-    const labels=new Map<string,number>();
+    const labels=new Map<string,number>(),collectorLabels=new Map<string,number>();
+    for(const collector of collectors)collectorLabels.set(collector.label,(collectorLabels.get(collector.label)??0)+1);
     for(const collector of collectors)for(const resource of collector.resources)labels.set(resource.label,(labels.get(resource.label)??0)+1);
-    return collectors.flatMap(collector=>collector.resources.map(resource=>({
+    return collectors.flatMap(collector=>collector.resources.map(resource=>{const collectorLabel=(collectorLabels.get(collector.label)??0)>1&&collector.nodeId?`${collector.label} · #${collector.nodeId}`:collector.label;return({
         value:selectionValue(collector.id,resource.id),collectorId:collector.id,resourceId:resource.id,
-        label:(labels.get(resource.label)??0)>1?`${resource.label} · ${collector.label}`:resource.label,
-    })));
+        label:(labels.get(resource.label)??0)>1?`${resource.label} · ${collectorLabel}`:resource.label,
+    })}));
 }
 
 export function ResourcePicker({collectors,collectorId,resourceId,resolved=true,onSelection,label="Resource",emptyLabel="Select resource"}:{collectors:ResourcePickerCollector[];collectorId:string;resourceId:string;resolved?:boolean;onSelection:(collectorId:string,resourceId:string)=>void;label?:string;emptyLabel?:string}) {

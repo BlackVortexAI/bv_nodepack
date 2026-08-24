@@ -5,6 +5,7 @@ import React from "../ui/node_modules/react/index.js";
 import {renderToStaticMarkup} from "../ui/node_modules/react-dom/server.node.js";
 import {LoraV3ResourcePickerPanel,OptionalLoraV3ScopePicker,withoutLoraV3Target} from "../ui/src/regional/LoraV3ResourcePickerPanel.tsx";
 import {emptyLoraV3Config,parseLoraV3Config,serializeLoraV3Config,updateLoraV3EntryCollector} from "../ui/src/regional/loraV3Config.ts";
+import {resourcePickerOptions} from "../ui/src/ui/components/ResourcePicker.tsx";
 
 const collectors=[{id:"collector",label:"Styles",resources:[{id:"skin",label:"Skin"}]}];
 const editorSource=readFileSync(new URL("../ui/src/regional/LoraV3EditorWindow.tsx",import.meta.url),"utf8");
@@ -12,6 +13,13 @@ const pickerSource=readFileSync(new URL("../ui/src/regional/LoraV3ResourcePicker
 const regionalEditorSource=readFileSync(new URL("../ui/src/regional/RegionalEditor.tsx",import.meta.url),"utf8");
 const dockSource=readFileSync(new URL("../ui/src/ui/dock.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
+test("same-named LoRA resources include their collector node ids",()=>{
+ const options=resourcePickerOptions([
+  {id:"collector-a",nodeId:"10",label:"BV LoRA Stack Collector",resources:[{id:"stack-a",label:"LoRA Stack"}]},
+  {id:"collector-b",nodeId:"20",label:"BV LoRA Stack Collector",resources:[{id:"stack-b",label:"LoRA Stack"}]},
+ ]);
+ assert.deepEqual(options.map(item=>item.label),["LoRA Stack · BV LoRA Stack Collector · #10","LoRA Stack · BV LoRA Stack Collector · #20"]);
+});
 test("the production picker renders one resource choice from persisted ids",()=>{
  const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]});
  const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onSelection(){},onAddExternal(){}}));

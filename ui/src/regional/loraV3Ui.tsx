@@ -22,7 +22,7 @@ function upstreamNamedStacks(collector:any){
 }
 
 export type LoraV3CollectorChoice=ResourcePickerCollector&{node:any};
-export function loraV3Catalog(node:any):LoraV3CollectorChoice[]{return localLoraCollectors(node).map((collector:any)=>({id:String(widget(collector,"collector_id")?.value??"").trim(),label:String(collector.title||"BV LoRA Stack Collector"),resources:upstreamNamedStacks(collector),node:collector})).filter((item:any)=>item.id);}
+export function loraV3Catalog(node:any):LoraV3CollectorChoice[]{return localLoraCollectors(node).map((collector:any)=>({id:String(widget(collector,"collector_id")?.value??"").trim(),nodeId:String(collector.id),label:String(collector.title||"BV LoRA Stack Collector"),resources:upstreamNamedStacks(collector),node:collector})).filter((item:any)=>item.id);}
 export function loraV3CollectorIds(config:LoraV3Config){const ids:string[]=[];for(const entry of [...config.entries,...(config.steps??[]).flatMap(step=>step.entries)])if(entry.source.kind==="external"&&entry.source.collector_id&&!ids.includes(entry.source.collector_id))ids.push(entry.source.collector_id);return ids;}
 export function readNodeLoraV3Config(node:any,name=nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json"){
     try{
