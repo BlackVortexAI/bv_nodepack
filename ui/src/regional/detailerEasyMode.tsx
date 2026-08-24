@@ -1,4 +1,4 @@
-import { DetailerResourcePicker, type DetailerResourceCollector } from "./DetailerResourcePicker";
+import { ResourcePicker, type ResourcePickerCollector } from "../ui/components";
 import { defaultConditioning, defaultDetection, parseDetailerPlanConfig, serializeDetailerPlanConfig, type DetailerPlanConfig, type DetailerPlanRegion } from "./detailerPlanConfig";
 import { detailerV3Catalog, scheduleDetailerPromptV3Reconcile } from "./detailerV3Graph";
 
@@ -19,10 +19,10 @@ export function writeDetailerEasyConfig(node:any,config:DetailerPlanConfig){
     scheduleDetailerPromptV3Reconcile(node);return config;
 }
 
-export function DetailerEasyRegionPicker({node,config,regionId,collectors,onConfig}:{node:any;config:DetailerPlanConfig;regionId:string;collectors:DetailerResourceCollector[];onConfig:(config:DetailerPlanConfig)=>void}){
+export function DetailerEasyRegionPicker({node,config,regionId,collectors,onConfig}:{node:any;config:DetailerPlanConfig;regionId:string;collectors:ResourcePickerCollector[];onConfig:(config:DetailerPlanConfig)=>void}){
     const job=config.jobs.find(item=>item.region_ids.length===1&&item.region_ids[0]===regionId),assignment=job?.detector_assignments[0];
     if(!job)return null;
-    return <DetailerResourcePicker label="Detailer detector" collectors={collectors} collectorId={assignment?.source.collector_id??""} resourceId={assignment?.source.resource_id??""} onValue={(collectorId,resourceId)=>{
+    return <ResourcePicker label="Detailer detector" emptyLabel="No detector · use composed region mask" collectors={collectors} collectorId={assignment?.source.collector_id??""} resourceId={assignment?.source.resource_id??""} onSelection={(collectorId,resourceId)=>{
         const next={...config,jobs:config.jobs.map(item=>item.id!==job.id?item:{...item,detector_assignments:collectorId&&resourceId?[{id:assignment?.id??crypto.randomUUID(),source:{collector_id:collectorId,resource_id:resourceId},options:assignment?.options??defaultDetection()}]:[]})};
         onConfig(writeDetailerEasyConfig(node,next));
     }}/>;

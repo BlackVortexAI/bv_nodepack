@@ -12,8 +12,7 @@ export function M0MultiResourcePickerPanel({collectors,bindings,debugVisible,onB
         {bindings.map((binding,index)=><section className="bv-m0-binding" key={binding.binding_id}>
             <header><strong>Binding {index+1}</strong><Button type="button" iconOnly icon="×" onClick={()=>onRemove(index)} aria-label={`Remove binding ${index+1}`}/></header>
             <ResourcePicker collectors={collectors} collectorId={binding.collector_id} resourceId={binding.resource_id} resolved={binding.resolved}
-                onCollector={collectorId=>{const first=collectors.find(item=>item.id===collectorId)?.resources[0];onBinding(index,collectorId,first?.id??"");}}
-                onResource={resourceId=>onBinding(index,binding.collector_id,resourceId)}/>
+                onSelection={(collectorId,resourceId)=>onBinding(index,collectorId,resourceId)}/>
         </section>)}
         <Button type="button" className="bv-m0-add-binding" disabled={bindings.length>=20} onClick={onAdd}>Add collector binding</Button>
     </div>;

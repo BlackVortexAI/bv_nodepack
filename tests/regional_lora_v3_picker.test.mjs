@@ -12,14 +12,14 @@ const pickerSource=readFileSync(new URL("../ui/src/regional/LoraV3ResourcePicker
 const regionalEditorSource=readFileSync(new URL("../ui/src/regional/RegionalEditor.tsx",import.meta.url),"utf8");
 const dockSource=readFileSync(new URL("../ui/src/ui/dock.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
-test("the production picker renders Collector / Resource from persisted ids",()=>{
- const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
- const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){}}));
- assert.match(html,/Global/);assert.match(html,/LoRA Stack 1/);assert.doesNotMatch(html,/Styles \/ Skin/);
+test("the production picker renders one resource choice from persisted ids",()=>{
+ const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]});
+ const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onSelection(){},onAddExternal(){}}));
+ assert.match(html,/Global/);assert.match(html,/LoRA Stack 1/);assert.match(html,/>Skin</);assert.doesNotMatch(html,/>Styles</);
 });
 test("an unresolved production selection remains explicit",()=>{
- const config={version:1,collector_id:"missing",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
- const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:false,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){},onRemove(){}}));
+ const config=parseLoraV3Config({version:1,collector_id:"missing",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]});
+ const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:false,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onSelection(){},onAddExternal(){},onRemove(){}}));
  assert.match(html,/is-unresolved/);assert.doesNotMatch(html,/Unresolved resource selection/);
 });
 test("config serialization is named and deterministic outside positional visual widgets",()=>{
@@ -38,29 +38,29 @@ test("changing region two collector leaves region one collector and resource unc
  const next=updateLoraV3EntryCollector(config,"right","collector-c","resource-c");assert.deepEqual(next.entries[0],config.entries[0]);assert.deepEqual(next.entries[1].source,{kind:"external",collector_id:"collector-c",resource_id:"resource-c"});
 });
 test("external entries cannot be created without a live collector resource",()=>{
- const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors:[],config:emptyLoraV3Config(),resolved:false,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onCollector(){},onResource(){},onAddExternal(){},onRemove(){}}));
+ const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors:[],config:emptyLoraV3Config(),resolved:false,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}}],onSelection(){},onAddExternal(){},onRemove(){}}));
  assert.match(html,/disabled=""/);
 });
 test("the advanced LoRA editor groups multiple stacks below every assignment target",()=>{
- const config={version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"},{scope:"region",document_id:"doc",region_id:"left"}]}]};
- const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}},{value:"region:doc:left",label:"Left",target:{scope:"region",document_id:"doc",region_id:"left"}}],onCollector(){},onResource(){},onAddExternal(){}}));
+ const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"},{scope:"region",document_id:"doc",region_id:"left"}]}]});
+ const html=renderToStaticMarkup(React.createElement(LoraV3ResourcePickerPanel,{collectors,config,resolved:true,targetOptions:[{value:"global",label:"Global",target:{scope:"global"}},{value:"region:doc:left",label:"Left",target:{scope:"region",document_id:"doc",region_id:"left"}}],onSelection(){},onAddExternal(){}}));
  assert.match(html,/Global/);assert.match(html,/Left/);assert.match(html,/Add LoRA stack/);assert.doesNotMatch(html,/Assignment targets/);
 });
 test("Regional Prompt easy mode starts with a BV toggle and hides an unassigned picker",()=>{
- const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config:emptyLoraV3Config(),target:{scope:"global"},resolved:false,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
+ const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config:emptyLoraV3Config(),target:{scope:"global"},resolved:false,onSelection(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(html,/role="switch"/);assert.match(html,/LoRA disabled/);assert.doesNotMatch(html,/No resource selected|Collector/);
 });
 test("Regional Prompt easy mode renders every stack assigned to its scope",()=>{
- const config={version:1,collector_id:"collector",entries:[{id:"first",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]},{id:"second",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]};
- const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"global"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
+ const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"first",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]},{id:"second",source:{kind:"external",resource_id:"skin"},targets:[{scope:"global"}]}]});
+ const html=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"global"},resolved:true,onSelection(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(html,/LoRA enabled/);assert.match(html,/LoRA Stack 1/);assert.match(html,/LoRA Stack 2/);assert.match(html,/Add LoRA stack/);
  assert.match(html,/aria-label="Remove LoRA Stack 1"/);assert.doesNotMatch(html,/>Remove</);
 });
 test("Regional Prompt easy mode changes scope immediately when the selected region changes",()=>{
  assert.doesNotMatch(pickerSource,/\[enabled,setEnabled\]=useState/);
  assert.match(regionalEditorSource,/OptionalLoraV3ScopePicker key=\{selectedRegion\.id\}/);
- const config={version:1,collector_id:"collector",entries:[{id:"left-entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]}]};
- const right=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"region",document_id:"doc",region_id:"right"},resolved:true,onCollector(){},onResource(){},onAdd(){},onRemove(){},onClear(){}}));
+ const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"left-entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]}]});
+ const right=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"region",document_id:"doc",region_id:"right"},resolved:true,onSelection(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(right,/LoRA disabled/);assert.doesNotMatch(right,/LoRA Stack 1/);
 });
 test("dock panels resolve their latest content after FlexLayout has mounted the tab",()=>{

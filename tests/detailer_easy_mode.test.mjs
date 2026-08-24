@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {detailerResourceOptions} from "../ui/src/regional/DetailerResourcePicker.tsx";
+import {resourcePickerOptions} from "../ui/src/ui/components/ResourcePicker.tsx";
 import {reconcileDetailerEasyConfig} from "../ui/src/regional/detailerEasyMode.tsx";
 
 test("detailer resources use one choice and disambiguate duplicate names only",()=>{
- const options=detailerResourceOptions([
+ const options=resourcePickerOptions([
   {id:"registry-a",label:"Registry #10",resources:[{id:"face",label:"Face"},{id:"hand",label:"Hand"}]},
   {id:"registry-b",label:"Registry #20",resources:[{id:"face-2",label:"Face"}]},
  ]);

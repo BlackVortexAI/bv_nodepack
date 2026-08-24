@@ -12,15 +12,15 @@ import { resolveM0LocalLinkedCollector } from "../ui/src/regional/m0LocalGraph.t
 const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resource-1",label:"Alpha"}]}];
 
 test("a catalog match without a real link stays visibly unresolved",()=>{
-  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:false,onCollector(){},onResource(){}}));
+  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:false,onSelection(){}}));
   assert.match(html,/is-unresolved/);
   assert.doesNotMatch(html,/Unresolved resource selection/);
   assert.doesNotMatch(html,/Collector One \/ Alpha/);
 });
 
-test("a linked id selection renders both closed BV dropdown values without a duplicate summary",()=>{
-  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,onCollector(){},onResource(){}}));
-  assert.match(html,/>Collector One</);assert.match(html,/>Alpha</);assert.doesNotMatch(html,/Collector One \/ Alpha/);
+test("a linked id selection renders one closed BV resource dropdown",()=>{
+  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,onSelection(){}}));
+  assert.match(html,/>Alpha</);assert.doesNotMatch(html,/>Collector One</);assert.doesNotMatch(html,/Collector One \/ Alpha/);
 });
 
 test("Nodes 2.0 graph slots are repaired idempotently before linking",()=>{
@@ -80,7 +80,7 @@ test("M0 multi fan-in removes hidden provider rows from the persisted node heigh
 });
 
 test("the shared resource picker uses BV popover selects and treats empty as neutral",()=>{
-  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"",resourceId:"",resolved:false,onCollector(){},onResource(){}}));
+  const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"",resourceId:"",resolved:false,onSelection(){}}));
   assert.doesNotMatch(html,/No resource selected|Unresolved resource selection|bv-resource-picker-summary|<select\b/);
   assert.match(html,/aria-haspopup="listbox"/);
 });
@@ -103,10 +103,10 @@ test("renderer migration resolves a typed provider before its UI upgrade marker 
 });
 
 test("the shared picker panel exposes a non-serialized debug control",()=>{
-  const html=renderToStaticMarkup(React.createElement(M0ResourcePickerPanel,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,debugVisible:false,onCollector(){},onResource(){},onDebug(){}}));
+  const html=renderToStaticMarkup(React.createElement(M0ResourcePickerPanel,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:true,debugVisible:false,onSelection(){},onDebug(){}}));
   assert.match(html,/Hidden link debug/);
   assert.match(html,/role="switch"/);
-  assert.match(html,/>Collector One</);assert.match(html,/>Alpha</);
+  assert.doesNotMatch(html,/>Collector One</);assert.match(html,/>Alpha</);
 });
 
 test("Nodes 2.0 hides every persisted id widget without leaving click overlays",()=>{
