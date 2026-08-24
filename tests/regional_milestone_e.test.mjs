@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applyRegionalPrimitiveDraft, migrateRegionalNode, migrationReportMessage, parseRegionalEditorDraft, persistRegionalEditorDraft, regionalEditorDraft } from "../ui/src/regional/milestoneE.ts";
 import { layoutPanelIds, missingLayoutPanels } from "../ui/src/ui/layoutProfiles.ts";
-import { clearLegacyPortSticky, installLegacyPorts, legacyPortShouldShow, refreshLegacyPorts, setLegacyPortsVisible } from "../ui/src/regional/legacyPorts.ts";
+import { canvasLegacyDragType, clearLegacyPortSticky, installLegacyPorts, legacyPortShouldShow, refreshLegacyDragPorts, refreshLegacyPorts, setLegacyPortsVisible } from "../ui/src/regional/legacyPorts.ts";
 
 const document = {schema:"bv.regional",version:2,document_id:"doc",title:"Original",canvas:{width:1024,height:1024},prompts:{global:{positive_source:"",negative_source:""},background:{positive_source:"",negative_source:""}},negative_mode:"auto",overlap:{mode:"joint"},regions:[]};
 
@@ -46,4 +46,16 @@ test("Legacy ports hide by default, reveal for compatible drag, and occupied lin
   node.outputs[0].links=[];refreshLegacyPorts(node);assert.equal(node.outputs[0].hidden,false);
   clearLegacyPortSticky(node);assert.equal(node.outputs[0].hidden,true);
   setLegacyPortsVisible(true);refreshLegacyPorts(node);assert.equal(node.outputs[0].hidden,false);setLegacyPortsVisible(false);
+});
+
+test("Nodes 2.0 link drags reveal compatible Legacy port labels before drop",()=>{
+  const node={outputs:[{name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",links:null}]};
+  const canvas={graph:{_nodes:[node]},linkConnector:{renderLinks:[{fromSlot:{type:"BV_REGIONAL_LORA_BINDINGS"}}]}};
+  installLegacyPorts(node,[{direction:"output",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use BV Regional context"}]);
+  assert.equal(node.outputs[0].hidden,true);
+  assert.equal(canvasLegacyDragType(canvas),"BV_REGIONAL_LORA_BINDINGS");
+  refreshLegacyDragPorts(canvas);
+  assert.equal(node.outputs[0].hidden,false);
+  canvas.linkConnector.renderLinks=[];refreshLegacyDragPorts(canvas);
+  assert.equal(node.outputs[0].hidden,true);
 });

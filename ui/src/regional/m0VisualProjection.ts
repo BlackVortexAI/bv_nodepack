@@ -1,3 +1,5 @@
+import { canvasLegacyDragType, refreshLegacyDragPorts } from "./legacyPorts";
+
 const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
 const V3_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
 const providerType=(value:unknown)=>value===M0_PROVIDER_TYPE||value===V3_PROVIDER_TYPE;
@@ -47,6 +49,15 @@ export function syncM0DebugRoot(graph:any){
 export function installM0CanvasVisibility(canvas: any) {
     if (!canvas || canvas.__bvM0VisibilityInstalled) return;
     canvas.__bvM0VisibilityInstalled = true;
+    let previousDragType:string|null=null,frame=0;
+    const syncLegacyDrag=()=>{frame=0;const dragType=canvasLegacyDragType(canvas);if(dragType===previousDragType)return;previousDragType=dragType;refreshLegacyDragPorts(canvas);};
+    const scheduleLegacyDrag=()=>{if(!frame)frame=requestAnimationFrame(syncLegacyDrag);};
+    const finishLegacyDrag=()=>requestAnimationFrame(scheduleLegacyDrag);
+    if(typeof window!=="undefined"){
+        window.addEventListener("pointermove",scheduleLegacyDrag,true);
+        window.addEventListener("pointerup",finishLegacyDrag,true);
+        window.addEventListener("pointercancel",finishLegacyDrag,true);
+    }
     const drawNode = canvas.drawNode;
     const renderLink = canvas.renderLink;
     canvas.renderLink = function (...args:any[]) {
@@ -70,7 +81,7 @@ export function installM0CanvasVisibility(canvas: any) {
     };
     canvas.drawNode = function (node:M0Node,ctx:CanvasRenderingContext2D) {
         const restores:Array<()=>void>=[];
-        const dragType=String(this.connecting_output?.type??this.connecting_input?.type??"");
+        const dragType=canvasLegacyDragType(this)??"";
         for(const slot of [...(node.inputs??[]),...(node.outputs??[])]){
             if((slot as any).__bvLegacyPort&&dragType&&slot.type===dragType)continue;
             if(!providerType(slot.type)&&!slot.__bvM0PortHidden)continue;

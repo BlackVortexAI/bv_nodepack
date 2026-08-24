@@ -10,6 +10,12 @@ const connected=(slot:Slot,direction:"input"|"output")=>direction==="input"?slot
 export function setLegacyPortsVisible(value:boolean,graph?:any){showAll=Boolean(value);for(const node of graph?._nodes??[])refreshLegacyPorts(node);}
 export function legacyPortsVisible(){return showAll}
 export function legacyPortShouldShow(slot:Slot,direction:"input"|"output",dragType?:string|null){return showAll||connected(slot,direction)||slot.__bvLegacySticky===true||Boolean(dragType&&slot.type===dragType)}
+export function canvasLegacyDragType(canvas:any){
+    const legacy=canvas?.connecting_output?.type??canvas?.connecting_input?.type;
+    if(legacy)return String(legacy);
+    const modern=canvas?.linkConnector?.renderLinks?.[0]?.fromSlot?.type;
+    return modern==null?null:String(modern);
+}
 
 export function installLegacyPorts(node:Node,descriptors:LegacyPortDescriptor[]){
     for(const descriptor of descriptors){
@@ -28,6 +34,12 @@ export function refreshLegacyPorts(node:Node,dragType?:string|null){
         slot.hidden=!visible;slot.__bvM0PortHidden=!visible;slot.__bvM0VisualHidden=!visible;
     }
     node.setDirtyCanvas?.(true,true);
+}
+
+export function refreshLegacyDragPorts(canvas:any){
+    const dragType=canvasLegacyDragType(canvas);
+    for(const node of canvas?.graph?._nodes??[])refreshLegacyPorts(node,dragType);
+    return dragType;
 }
 
 export function clearLegacyPortSticky(node:Node){for(const slot of [...(node.inputs??[]),...(node.outputs??[])])if(slot.__bvLegacyPort)slot.__bvLegacySticky=false;refreshLegacyPorts(node)}
