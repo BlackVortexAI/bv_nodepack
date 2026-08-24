@@ -22,8 +22,9 @@ import { parseDetailerPlanConfig } from "./regional/detailerPlanConfig";
 import { openDetectorRegistryDialog } from "./regional/detectorRegistryDialog";
 import { parseDetectorRegistryConfig, serializeDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
+import { compactNodeToComputedHeight } from "./regional/nodeLayout";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
-import { prepareDetailerPlanV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
+import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
@@ -124,13 +125,11 @@ const sourceRegionalDocument = (node: any) => {
     try { return parseDocument(value); } catch { return null; }
 };
 
+const detailerGraphOwner=(node:any)=>{const root=(comfyApp as any).canvas?.graph??(comfyApp as any).graph;return collectScopedNodes(root,candidate=>candidate===node)[0]?.graph??node?.graph??null};
 const detectorCollectorsForPlan = (node: any) => {
-    const graph=node.graph??(comfyApp as any).graph;
-    return (graph?._nodes??[]).filter((registryNode:any)=>registryNode!==node&&registryNode.graph===graph&&String(registryNode.comfyClass??registryNode.type)==="BV Detector Registry").map((registryNode:any)=>{
-        const config=parseDetectorRegistryConfig(registryNode.widgets?.find((widget:any)=>widget.name==="config_json")?.value),resources=config.detectors.map(entry=>({id:entry.id,label:entry.id}));
-        for(const input of registryNode.inputs??[]){if(!String(input.name).startsWith("external_detector_")||input.link==null)continue;const link=graph?.links?.[input.link]??graph?._links?.get?.(input.link),binding=link?graph?.getNodeById?.(link.origin_id):null,id=String(binding?.widgets?.find((widget:any)=>widget.name==="detector_id")?.value??"").trim();if(id&&!resources.some(item=>item.id===id))resources.push({id,label:id});}
-        return{id:config.collector_id,label:`${String(registryNode.title||"BV Detector Registry")} · #${registryNode.id}`,resources};
-    }).filter((item:any)=>item.id);
+    const root=(comfyApp as any).canvas?.graph??(comfyApp as any).graph,graph=detailerGraphOwner(node);bindDetailerV3Graph(node,graph);
+    for(const entry of collectScopedNodes(root,candidate=>String(candidate?.comfyClass??candidate?.type)==="BV Detector Registry"))if(entry.graph===graph)bindDetailerV3Graph(entry.node,graph);
+    return detailerV3Catalog(node);
 };
 
 const syncDetectorExternalInputs = (node: any) => {
@@ -149,8 +148,7 @@ const syncDetectorExternalInputs = (node: any) => {
         if (!node.inputs?.some((input: any) => input.name === name)) node.addInput(name, "BV_DETECTOR_BINDING", { label: `external detector ${index}`, nameLocked: true });
     }
     const compact = () => {
-        const computed = node.computeSize?.();
-        if (computed && node.setSize) node.setSize([Math.max(Number(node.size?.[0] ?? 0), Number(computed[0] ?? 0), 220), Math.max(Number(computed[1] ?? 60), 60)]);
+        compactNodeToComputedHeight(node);
     };
     compact();
     setTimeout(compact, 0);
@@ -179,7 +177,7 @@ const refreshDetailerPlanNode = (node: any) => {
 };
 
 const upgradeDetailerPlanNode = (node: any) => {
-    prepareDetailerPlanV3(node);
+    prepareDetailerPlanV3(node,detailerGraphOwner(node));
     const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
     if (!hidden) return;
     hideRegionalWidget(hidden);
@@ -191,7 +189,7 @@ const upgradeDetailerPlanNode = (node: any) => {
             rememberBvWindowInstance("detailer",scopedNodeKey(node));
             openDetailerPlanDialog(document.regions, detectorCollectorsForPlan(node), hidden.value, value => {
                 hidden.value = value;
-                prepareDetailerPlanV3(node);
+                prepareDetailerPlanV3(node,detailerGraphOwner(node));
                 refreshDetailerPlanNode(node);
                 node.graph?.setDirtyCanvas?.(true, true);
             }, `detailer-plan:${scopedNodeKey(node)}`, workflowNodesOfType("BV Regional Detailer Plan").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV Regional Detailer Plan"} · #${item.id}`})), (targetId,replaceCurrent)=>{
@@ -744,7 +742,7 @@ comfyApp.registerExtension({
                 hideRegionalWidget(hidden);
                 const normalized = parseDetectorRegistryConfig(hidden.value), serialized = serializeDetectorRegistryConfig(normalized);
                 if (String(hidden.value ?? "") !== serialized) { hidden.value = serialized; hidden.callback?.(serialized); }
-                prepareDetectorCollectorV3(node);
+                prepareDetectorCollectorV3(node,detailerGraphOwner(node));
                 let action = node.widgets?.find((widget: any) => widget.name === "configure_detector_registry");
                 if (!action) {
                     action = node.addWidget("button", "configure_detector_registry", null, () => {
@@ -788,7 +786,7 @@ comfyApp.registerExtension({
             };
             nodeType.prototype.onConnectionsChange = function () {
                 const result = originalConnectionsChange?.apply(this, arguments);
-                queueMicrotask(() => { prepareDetailerPlanV3(this); refreshDetailerPlanNode(this); });
+                queueMicrotask(() => { prepareDetailerPlanV3(this,detailerGraphOwner(this)); refreshDetailerPlanNode(this); });
                 return result;
             };
             return;

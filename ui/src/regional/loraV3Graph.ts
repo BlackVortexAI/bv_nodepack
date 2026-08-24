@@ -44,9 +44,11 @@ export function installLoraSizePolicy(node:any){
 }
 export function compactLoraConsumerNode(node:any){
     installLoraSizePolicy(node);if(!node.setSize)return;
-    const computed=node.computeSize?.()??node.size??[220,60],width=Math.max(Number(node.size?.[0]??0),Number(computed[0]??0),220),height=Math.max(60,Number(computed[1]??60));
-    if(Math.abs(Number(node.size?.[0]??0)-width)<0.5&&Math.abs(Number(node.size?.[1]??0)-height)<0.5)return;
-    node.setSize([width,height]);
+    const current=node.size??[220,60],width=Math.max(Number(current[0]??0),220);
+    node.setSize([width,60]);
+    const computed=node.computeSize?.()??node.size??[220,60],height=Math.max(60,Number(computed[1]??60)),finalWidth=Math.max(width,Number(computed[0]??0),220);
+    if(Math.abs(Number(node.size?.[0]??0)-finalWidth)<0.5&&Math.abs(Number(node.size?.[1]??0)-height)<0.5)return;
+    node.setSize([finalWidth,height]);
 }
 export function scheduleCompactLoraConsumerNode(node:any){
     if(node.__bvLoraCompactScheduled)return;

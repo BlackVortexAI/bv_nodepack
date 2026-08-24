@@ -14,6 +14,10 @@ test("twenty hidden provider inputs do not reserve four hundred pixels of node h
   let applied;const consumer={size:[320,520],inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER",hidden:true})),computeSize:()=>[300,520],setSize(size){applied=size;this.size=size}};
   compactLoraConsumerNode(consumer);assert.deepEqual(applied,[320,120]);assert.deepEqual(consumer.computeSize(),[300,120]);
 });
+test("consumer compaction does not preserve an oversized renderer height floor",()=>{
+  let applied;const consumer={size:[330,260],inputs:[],computeSize(){return[300,Math.max(Number(this.size?.[1]??0),110)]},setSize(size){applied=size;this.size=size}};
+  compactLoraConsumerNode(consumer);assert.deepEqual(applied,[330,110]);
+});
 test("provider compaction remains active when ComfyUI recomputes a new node",()=>{
   const consumer={size:[320,520],inputs:Array.from({length:20},(_,index)=>({name:`resource_provider_${index+1}`,type:"BV_RUNTIME_RESOURCE_PROVIDER"})),computeSize:()=>[300,520]};
   installLoraSizePolicy(consumer);assert.deepEqual(consumer.computeSize(),[300,120]);assert.equal(consumer.__bvLoraOriginalComputeSize instanceof Function,true);
