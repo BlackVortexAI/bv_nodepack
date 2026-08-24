@@ -21,3 +21,15 @@ test("detector registry config drops incomplete entries", () => {
     ] }));
     assert.deepEqual(config.detectors.map(entry => entry.id), ["face"]);
 });
+
+test("legacy registry config receives a persisted collector identity", () => {
+    const migrated = parseDetectorRegistryConfig(JSON.stringify({
+        schema: "bv.detector_registry_config", version: 1, detectors: [],
+    }));
+    assert.equal(migrated.version, 2);
+    assert.match(migrated.collector_id, /^[0-9a-f-]{36}$/i);
+    assert.equal(
+        parseDetectorRegistryConfig(serializeDetectorRegistryConfig(migrated)).collector_id,
+        migrated.collector_id,
+    );
+});

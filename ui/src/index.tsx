@@ -20,9 +20,10 @@ import { detailerBackendWidgetValues, normalizeDetailerWidgetValues } from "./re
 import { openDetailerPlanDialog } from "./regional/detailerPlanDialog";
 import { parseDetailerPlanConfig } from "./regional/detailerPlanConfig";
 import { openDetectorRegistryDialog } from "./regional/detectorRegistryDialog";
-import { parseDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
+import { parseDetectorRegistryConfig, serializeDetectorRegistryConfig } from "./regional/detectorRegistryConfig";
 import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
+import { prepareDetailerPlanV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
@@ -123,22 +124,13 @@ const sourceRegionalDocument = (node: any) => {
     try { return parseDocument(value); } catch { return null; }
 };
 
-const detectorIdsForPlan = (node: any) => {
-    const graph = node.graph ?? (comfyApp as any).graph;
-    const registryInput = node.inputs?.find((input: any) => input.name === "detector_registry");
-    const registryLink = registryInput?.link == null ? null : graph?.links?.[registryInput.link] ?? graph?._links?.get?.(registryInput.link);
-    const registryNode = registryLink ? graph?.getNodeById?.(registryLink.origin_id) : null;
-    if (registryNode?.type !== "BV Detector Registry") return [];
-    const value = registryNode.widgets?.find((widget: any) => widget.name === "config_json")?.value;
-    const ids = parseDetectorRegistryConfig(value).detectors.map(entry => entry.id);
-    for (const input of registryNode.inputs ?? []) {
-        if (!String(input.name).startsWith("external_detector_") || input.link == null) continue;
-        const link = graph?.links?.[input.link] ?? graph?._links?.get?.(input.link);
-        const bindingNode = link ? graph?.getNodeById?.(link.origin_id) : null;
-        const detectorId = String(bindingNode?.widgets?.find((widget: any) => widget.name === "detector_id")?.value ?? "").trim();
-        if (detectorId) ids.push(detectorId);
-    }
-    return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+const detectorCollectorsForPlan = (node: any) => {
+    const graph=node.graph??(comfyApp as any).graph;
+    return (graph?._nodes??[]).filter((registryNode:any)=>registryNode!==node&&registryNode.graph===graph&&String(registryNode.comfyClass??registryNode.type)==="BV Detector Registry").map((registryNode:any)=>{
+        const config=parseDetectorRegistryConfig(registryNode.widgets?.find((widget:any)=>widget.name==="config_json")?.value),resources=config.detectors.map(entry=>({id:entry.id,label:entry.id}));
+        for(const input of registryNode.inputs??[]){if(!String(input.name).startsWith("external_detector_")||input.link==null)continue;const link=graph?.links?.[input.link]??graph?._links?.get?.(input.link),binding=link?graph?.getNodeById?.(link.origin_id):null,id=String(binding?.widgets?.find((widget:any)=>widget.name==="detector_id")?.value??"").trim();if(id&&!resources.some(item=>item.id===id))resources.push({id,label:id});}
+        return{id:config.collector_id,label:`${String(registryNode.title||"BV Detector Registry")} · #${registryNode.id}`,resources};
+    }).filter((item:any)=>item.id);
 };
 
 const syncDetectorExternalInputs = (node: any) => {
@@ -156,6 +148,12 @@ const syncDetectorExternalInputs = (node: any) => {
         const name = `external_detector_${index}`;
         if (!node.inputs?.some((input: any) => input.name === name)) node.addInput(name, "BV_DETECTOR_BINDING", { label: `external detector ${index}`, nameLocked: true });
     }
+    const compact = () => {
+        const computed = node.computeSize?.();
+        if (computed && node.setSize) node.setSize([Math.max(Number(node.size?.[0] ?? 0), Number(computed[0] ?? 0), 220), Math.max(Number(computed[1] ?? 60), 60)]);
+    };
+    compact();
+    setTimeout(compact, 0);
     node.setDirtyCanvas?.(true, true);
 };
 
@@ -181,6 +179,7 @@ const refreshDetailerPlanNode = (node: any) => {
 };
 
 const upgradeDetailerPlanNode = (node: any) => {
+    prepareDetailerPlanV3(node);
     const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
     if (!hidden) return;
     hideRegionalWidget(hidden);
@@ -190,8 +189,9 @@ const upgradeDetailerPlanNode = (node: any) => {
             const document = sourceRegionalDocument(node);
             if (!document) return;
             rememberBvWindowInstance("detailer",scopedNodeKey(node));
-            openDetailerPlanDialog(document.regions, detectorIdsForPlan(node), hidden.value, value => {
+            openDetailerPlanDialog(document.regions, detectorCollectorsForPlan(node), hidden.value, value => {
                 hidden.value = value;
+                prepareDetailerPlanV3(node);
                 refreshDetailerPlanNode(node);
                 node.graph?.setDirtyCanvas?.(true, true);
             }, `detailer-plan:${scopedNodeKey(node)}`, workflowNodesOfType("BV Regional Detailer Plan").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV Regional Detailer Plan"} · #${item.id}`})), (targetId,replaceCurrent)=>{
@@ -742,6 +742,9 @@ comfyApp.registerExtension({
                 const hidden = node.widgets?.find((widget: any) => widget.name === "config_json");
                 if (!hidden) return;
                 hideRegionalWidget(hidden);
+                const normalized = parseDetectorRegistryConfig(hidden.value), serialized = serializeDetectorRegistryConfig(normalized);
+                if (String(hidden.value ?? "") !== serialized) { hidden.value = serialized; hidden.callback?.(serialized); }
+                prepareDetectorCollectorV3(node);
                 let action = node.widgets?.find((widget: any) => widget.name === "configure_detector_registry");
                 if (!action) {
                     action = node.addWidget("button", "configure_detector_registry", null, () => {
@@ -758,7 +761,7 @@ comfyApp.registerExtension({
                     }, { serialize: false });
                     action.serialize = false;
                 }
-                const count = parseDetectorRegistryConfig(hidden.value).detectors.length;
+                const count = normalized.detectors.length;
                 action.label = `Configure Detector Registry · ${count} Detector${count === 1 ? "" : "s"}`;
                 node.setDirtyCanvas?.(true, true);
             };
@@ -785,7 +788,7 @@ comfyApp.registerExtension({
             };
             nodeType.prototype.onConnectionsChange = function () {
                 const result = originalConnectionsChange?.apply(this, arguments);
-                queueMicrotask(() => refreshDetailerPlanNode(this));
+                queueMicrotask(() => { prepareDetailerPlanV3(this); refreshDetailerPlanNode(this); });
                 return result;
             };
             return;

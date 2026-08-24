@@ -20,12 +20,28 @@ from ..util.regional.detailer import (
     register_detector,
     resolve_detector,
 )
+from ..util.regional.detailer_v3 import (
+    DETAILER_CAPABILITY_REGISTRY,
+    RUNTIME_PROVIDER,
+    build_detector_provider,
+    materialize_detailer_plan,
+    transform_detailer_capability,
+)
 from ..util.regional.document import REGIONAL
 from ..util.regional.native_conditioning import compile_detailer_conditioning
 
 
 CATEGORY = "🌀 BV Node Pack/regional/detailer"
 CATEGORY_IMPACT = "🌀 BV Node Pack/regional/integrations/Impact Pack"
+MAX_DETECTOR_COLLECTORS = 20
+
+
+def _detector_provider_map(resource_provider=None, **providers):
+    values = [resource_provider, *(providers.get(f"resource_provider_{index}") for index in range(1, MAX_DETECTOR_COLLECTORS + 1))]
+    return {
+        value["provider_id"]: value for value in values
+        if isinstance(value, dict) and value.get("schema") == "bv.runtime_resource_provider" and value.get("provider_id")
+    }
 
 
 class _AnyType(str):
@@ -49,6 +65,11 @@ class BVRegionalDetailerPlanNode:
             },
             "optional": {
                 "detector_registry": (DETECTOR_REGISTRY, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+                **{
+                    f"resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
+                    for index in range(1, MAX_DETECTOR_COLLECTORS + 1)
+                },
             },
         }
 
@@ -58,7 +79,26 @@ class BVRegionalDetailerPlanNode:
     CATEGORY = CATEGORY
     DESCRIPTION = "Builds an ordered detailer plan from DET/BOTH regions, optionally grouping them through JSON configuration."
 
-    def build(self, regional_prompt, config_json="", detector_registry=None):
+    def build(self, regional_prompt, config_json="", detector_registry=None, resource_provider=None, **providers):
+        try:
+            configured = json.loads(config_json) if str(config_json).strip() else None
+        except json.JSONDecodeError:
+            configured = None
+        if isinstance(configured, dict) and configured.get("version") == 1 and any(
+            "detector_assignments" in job for job in configured.get("jobs", []) if isinstance(job, dict)
+        ):
+            context = transform_detailer_capability(
+                regional_prompt, configured, registry=DETAILER_CAPABILITY_REGISTRY,
+            )
+            plan = materialize_detailer_plan(
+                context, _detector_provider_map(resource_provider, **providers), registry=DETAILER_CAPABILITY_REGISTRY,
+            )
+            summary = "\n".join(
+                f"{index + 1}. {' + '.join(job['region_names'])}"
+                + (f" [{job['detector_id']}]" if job["detector_id"] else "")
+                for index, job in enumerate(plan["jobs"])
+            ) or "No enabled detailer regions"
+            return plan, len(plan["jobs"]), summary
         plan = build_detailer_plan(regional_prompt, config_json)
         for job in plan["jobs"]:
             detector_id = job.get("detector_id")
@@ -108,10 +148,11 @@ class BVRegionalDetailerJobNode:
             raise ValueError("BV Detailer Loop Job Resolver requires a single IMAGE shaped B,H,W,C")
         job = detailer_job_at(detailer_plan, job_index)
         detector_id = job.get("detector_id")
-        job["detector_binding"] = (
-            resolve_detector(detailer_plan.get("detector_registry"), detector_id)
-            if detector_id is not None else None
-        )
+        if "detector_binding" not in job:
+            job["detector_binding"] = (
+                resolve_detector(detailer_plan.get("detector_registry"), detector_id)
+                if detector_id is not None else None
+            )
         mask = compose_job_mask(job, int(shape[2]), int(shape[1]))
         contexts = job_context_regions(job)
         conditioning = job.get("conditioning", {})
@@ -172,8 +213,8 @@ class BVDetectorRegistryNode:
             },
         }
 
-    RETURN_TYPES = (DETECTOR_REGISTRY, "INT", "STRING")
-    RETURN_NAMES = ("detector_registry", "detector_count", "registry_summary")
+    RETURN_TYPES = (DETECTOR_REGISTRY, "INT", "STRING", RUNTIME_PROVIDER)
+    RETURN_NAMES = ("detector_registry", "detector_count", "registry_summary", "resource_provider")
     FUNCTION = "collect"
     CATEGORY = CATEGORY
     DESCRIPTION = "Loads several named Impact-compatible detector models in one node; external bindings remain optional advanced inputs."
@@ -193,8 +234,9 @@ class BVDetectorRegistryNode:
             }
         except json.JSONDecodeError as error:
             raise ValueError("detector registry configuration is invalid JSON") from error
-        if not isinstance(parsed, dict) or parsed.get("schema") != "bv.detector_registry_config" or parsed.get("version") != 1:
-            raise ValueError("detector registry configuration must be bv.detector_registry_config v1")
+        if not isinstance(parsed, dict) or parsed.get("schema") != "bv.detector_registry_config" or parsed.get("version") not in {1, 2}:
+            raise ValueError("detector registry configuration must be bv.detector_registry_config v1 or v2")
+        collector_id = str(parsed.get("collector_id", "")).strip() if parsed.get("version") == 2 else ""
         configured = parsed.get("detectors")
         if not isinstance(configured, list):
             raise ValueError("detector registry detectors must be an array")
@@ -238,7 +280,8 @@ class BVDetectorRegistryNode:
             names.append(detector_id)
         if registry is None:
             registry = {"schema": "bv.detector_registry", "version": 1, "entries": {}}
-        return registry, len(names), "\n".join(names) or "No detectors connected"
+        provider = build_detector_provider(collector_id, registry["entries"]) if collector_id else None
+        return registry, len(names), "\n".join(names) or "No detectors connected", provider
 
 
 class BVImpactDetailerDetectNode:
