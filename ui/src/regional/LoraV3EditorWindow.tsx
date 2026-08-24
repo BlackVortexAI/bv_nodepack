@@ -3,7 +3,7 @@ import { Button, ResourcePicker, SelectField, SortableList, type SortableItem } 
 import { BvManagedWindow } from "../ui/window";
 import { setWindowMenuVisible, useWindowMenuVisibility } from "../ui/windowRegistry";
 import { type LoraV3Config, type LoraV3Operation, type LoraV3Step, loraV3TargetValue } from "./LoraV3ResourcePickerPanel";
-import { commitLoraV3Config, loraV3Catalog, loraV3EntryResolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3Collector, setLoraV3EntryResource } from "./loraV3Ui";
+import { commitLoraV3Config, LORA_V3_INVENTORY_CHANGED_EVENT, loraV3Catalog, loraV3EntryResolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3Collector, setLoraV3EntryResource } from "./loraV3Ui";
 
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 const operations=["replace","merge","subtract","clear"].map(value=>({value,label:value[0].toUpperCase()+value.slice(1)}));
@@ -11,6 +11,7 @@ const operations=["replace","merge","subtract","clear"].map(value=>({value,label
 export default function LoraV3EditorWindow({open,node,onClose}:{open:boolean;node:any|null;onClose:()=>void}){
     const [config,setConfig]=useState<LoraV3Config>(()=>readNodeLoraV3Config(node)),menuVisible=useWindowMenuVisibility(node);
     useEffect(()=>{if(open&&node)setConfig(readNodeLoraV3Config(node));},[node,open]);
+    useEffect(()=>{if(!open||!node)return;const refresh=()=>setConfig(readNodeLoraV3Config(node));window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);},[node,open]);
     if(!node)return null;
     const collectors=loraV3Catalog(node).filter(item=>item.resources.length>0),targets=loraV3TargetOptions(node);
     const legacyOperation=String(widget(node,"operation")?.value??"replace") as LoraV3Operation;

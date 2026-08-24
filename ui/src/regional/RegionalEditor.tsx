@@ -21,7 +21,7 @@ import { getWindowSwitchMode } from "../ui/preferences";
 import { showBvToast } from "../ui/toastStore";
 import { rememberBvWindowInstance } from "../ui/windowActivity";
 import { OptionalLoraV3ScopePicker, type LoraV3Config, type LoraV3Target } from "./LoraV3ResourcePickerPanel";
-import { addLoraV3TargetEntry, clearLoraV3Target, loraV3Catalog, loraV3EntryResolved, loraV3Resolved, readNodeLoraV3Config, removeLoraV3TargetEntry, setLoraV3Collector, setLoraV3EntryResource } from "./loraV3Ui";
+import { addLoraV3TargetEntry, clearLoraV3Target, LORA_V3_INVENTORY_CHANGED_EVENT, loraV3Catalog, loraV3EntryResolved, loraV3Resolved, readNodeLoraV3Config, removeLoraV3TargetEntry, setLoraV3Collector, setLoraV3EntryResource } from "./loraV3Ui";
 
 type NodeRef = { id: number | string; title?: string; widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>; graph?: { setDirtyCanvas?: (a: boolean, b: boolean) => void } };
 const keyFor=(node:NodeRef|null|undefined)=>scopedNodeKey((getApp() as any).rootGraph??(getApp() as any).graph,node);
@@ -92,6 +92,7 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
         transferredWindow.current=wasOpen?{mode:viewState.mode,geometry:activeWindowGeometry(viewState,{width:window.innerWidth,height:window.innerHeight})}:null;setNode(requested);
     },[activationToken,initialNode,nodes,open]);
     useEffect(() => { setSelectedGeometryId(null); }, [node, open]);
+    useEffect(()=>{if(!open||!node)return;const refresh=()=>setLoraV3Config(readNodeLoraV3Config(node));window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);},[node,open]);
     useEffect(() => {
         if (!open || !node) return;
         try {

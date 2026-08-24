@@ -85,7 +85,14 @@ test("LoRA config edits defer and coalesce native graph reconciliation",()=>{
 test("a temporarily missing collector cannot crash Regional Prompt reactivation",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
  assert.match(source,/const widget=\(node:any,name:string\)=>node\?\.widgets\?\.find/);
- assert.match(source,/linkedLocalLoraCollectors\(node\).*expected\.every/s);
+ assert.match(source,/linkedLocalLoraCollectors\(node\).*linkedIds\.has\(id\)/s);
+});
+test("collector reconciliation refreshes unresolved state in both LoRA editors",()=>{
+ const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
+ assert.match(source,/reconcileConfiguredLoraWriterTree\(node,pending\);window\.dispatchEvent\(new CustomEvent\(LORA_V3_INVENTORY_CHANGED_EVENT/);
+ assert.match(source,/linkedLoraCollectorIds\(node\)\.has\(entry\.source\.collector_id\)/);
+ assert.match(editorSource,/addEventListener\(LORA_V3_INVENTORY_CHANGED_EVENT,refresh\)/);
+ assert.match(regionalEditorSource,/addEventListener\(LORA_V3_INVENTORY_CHANGED_EVENT,refresh\)/);
 });
 test("the LoRA editor exposes ordered repeatable scope operations and participates in window visibility",()=>{
  assert.match(editorSource,/Add step/);assert.match(editorSource,/<SortableList/);assert.match(editorSource,/onReorder=/);
