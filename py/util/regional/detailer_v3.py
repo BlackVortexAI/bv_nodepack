@@ -276,6 +276,7 @@ def materialize_detailer_plan(
         plan_job["detector_binding"] = (
             _resolve_detector_binding(provider_map, assignment["source"]) if assignment else None
         )
+    plan["regional_context"] = context.to_dict()
     return plan
 
 

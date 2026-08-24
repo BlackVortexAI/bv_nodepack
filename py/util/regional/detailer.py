@@ -7,7 +7,8 @@ from typing import Any
 
 import torch
 
-from .document import parse_document, region_used_for
+from .context import context_document, normalize_context
+from .document import region_used_for
 from .mask_renderer import mask_bbox, render_selection
 
 
@@ -46,7 +47,8 @@ def _stable_job_id(document_id: str, ordinal: int, region_ids: list[str]) -> str
 
 
 def build_detailer_plan(regional: Any, config: Any = None) -> dict[str, Any]:
-    document = parse_document(regional)
+    context = normalize_context(regional)
+    document = context_document(context)
     regions = _detailer_regions(document)
     available = {region["id"]: region for region in regions}
     parsed = _parse_config(config)
@@ -107,6 +109,7 @@ def build_detailer_plan(regional: Any, config: Any = None) -> dict[str, Any]:
         "version": 1,
         "document_id": document["document_id"],
         "document": document,
+        "regional_context": context.to_dict(),
         "jobs": jobs,
     }
 
@@ -121,6 +124,28 @@ def detailer_job_at(plan: Any, index: int) -> dict[str, Any]:
     if value < 0 or value >= len(jobs):
         raise IndexError(f"detailer job index {value} is outside 0..{max(len(jobs) - 1, 0)}")
     return {**jobs[value], "document": plan["document"], "index": value, "total": len(jobs)}
+
+
+def validate_detailer_loop_state(value: Any, *, allow_complete: bool = False) -> dict[str, Any]:
+    if not isinstance(value, dict) or value.get("schema") != "bv.detailer_loop_state":
+        raise ValueError("loop_state must be a BV_DETAILER_LOOP_STATE")
+    if value.get("version") != 1:
+        raise ValueError("BV_DETAILER_LOOP_STATE version must be 1")
+    plan = value.get("detailer_plan")
+    if not isinstance(plan, dict) or plan.get("schema") != "bv.detailer_plan":
+        raise ValueError("loop_state.detailer_plan must be a BV_DETAILER_PLAN")
+    jobs = plan.get("jobs")
+    if not isinstance(jobs, list) or not jobs:
+        raise ValueError("BV Detailer Loop requires at least one detailer job")
+    index = value.get("job_index")
+    if isinstance(index, bool) or not isinstance(index, int):
+        raise ValueError("loop_state.job_index must be an integer")
+    upper = len(jobs) if allow_complete else len(jobs) - 1
+    if index < 0 or index > upper:
+        raise ValueError(f"loop_state.job_index {index} is outside 0..{upper}")
+    if "current_image" not in value:
+        raise ValueError("loop_state.current_image is missing")
+    return value
 
 
 def compose_job_mask(job: Any, width: int, height: int) -> torch.Tensor:

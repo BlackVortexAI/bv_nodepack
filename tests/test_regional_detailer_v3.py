@@ -126,6 +126,8 @@ class DetailerV3Tests(unittest.TestCase):
         self.assertIs(plan["jobs"][0]["detector_binding"], left_binding)
         self.assertIs(plan["jobs"][1]["detector_binding"], right_binding)
         self.assertEqual([item["detector_id"] for item in plan["jobs"]], ["face", "eyes"])
+        self.assertEqual(plan["regional_context"]["version"], 3)
+        self.assertIn("bv-nodepack.detailer-plan", plan["regional_context"]["capabilities"])
 
     def test_two_jobs_reuse_one_provider_without_losing_resource_identity(self):
         face = normalize_detector_binding(sam_model=object())

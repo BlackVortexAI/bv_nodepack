@@ -19,6 +19,7 @@ from ..util.regional.detailer import (
     rebase_segs,
     register_detector,
     resolve_detector,
+    validate_detailer_loop_state,
 )
 from ..util.regional.detailer_v3 import (
     DETAILER_CAPABILITY_REGISTRY,
@@ -28,6 +29,8 @@ from ..util.regional.detailer_v3 import (
     transform_detailer_capability,
 )
 from ..util.regional.document import REGIONAL
+from ..util.regional.lora_hooks import create_hook_groups, resolve_stack_paths
+from ..util.regional.lora_v3 import LORA_CAPABILITY_REGISTRY, materialized_lora_scopes
 from ..util.regional.native_conditioning import compile_detailer_conditioning
 
 
@@ -138,8 +141,7 @@ class BVRegionalDetailerJobNode:
         self, loop_state, model, clip, vae,
         global_influence=1.0, background_influence=0.35, primary_region_influence=1.0,
     ):
-        if not isinstance(loop_state, dict) or loop_state.get("schema") != "bv.detailer_loop_state":
-            raise ValueError("loop_state must be a BV_DETAILER_LOOP_STATE")
+        validate_detailer_loop_state(loop_state)
         detailer_plan = loop_state["detailer_plan"]
         job_index = loop_state["job_index"]
         current_image = loop_state["current_image"]
@@ -161,9 +163,14 @@ class BVRegionalDetailerJobNode:
         primary_region_influence = float(conditioning.get("primary_region_influence", primary_region_influence))
         context_influence = float(conditioning.get("context_region_influence", 1.0))
         contexts = [{**context, "influence": context_influence} for context in contexts]
+        regional_context = detailer_plan.get("regional_context")
+        scope_stacks = materialized_lora_scopes(
+            regional_context, registry=LORA_CAPABILITY_REGISTRY,
+        ) if regional_context is not None else {}
+        hook_groups = create_hook_groups(resolve_stack_paths(scope_stacks))
         positive, negative, _, _, _, _ = compile_detailer_conditioning(
             job["document"], clip, job["primary_region_id"], global_influence,
-            background_influence, primary_region_influence, contexts,
+            background_influence, primary_region_influence, contexts, hook_groups,
         )
         return job, current_image, mask, (model, clip, vae, positive, negative)
 
@@ -408,8 +415,10 @@ class _BVDetailerLoopAdvance:
     CATEGORY = "__hidden__"
 
     def advance(self, loop_state, processed_image):
-        if not isinstance(loop_state, dict) or loop_state.get("schema") != "bv.detailer_loop_state":
-            raise ValueError("loop_state must be a BV_DETAILER_LOOP_STATE")
+        validate_detailer_loop_state(loop_state)
+        shape = getattr(processed_image, "shape", None)
+        if shape is None or len(shape) != 4 or int(shape[0]) != 1:
+            raise ValueError("BV Detailer Loop End requires a single IMAGE shaped B,H,W,C")
         next_index = int(loop_state["job_index"]) + 1
         next_state = {**loop_state, "job_index": next_index, "current_image": processed_image}
         return next_state, next_index < len(loop_state["detailer_plan"]["jobs"])
@@ -426,6 +435,9 @@ class _BVDetailerLoopResult:
     CATEGORY = "__hidden__"
 
     def extract(self, loop_state):
+        validate_detailer_loop_state(loop_state, allow_complete=True)
+        if loop_state["job_index"] != len(loop_state["detailer_plan"]["jobs"]):
+            raise ValueError("BV Detailer Loop ended before every detailer job was processed")
         return (loop_state["current_image"],)
 
 
@@ -511,17 +523,19 @@ class BVDetailerLoopStartNode:
     DESCRIPTION = "Starts a BV detailer loop and carries the current single image plus immutable plan through every job."
 
     def start(self, detailer_plan, initial_image, initial_value0=None):
-        if not detailer_plan.get("jobs"):
-            raise ValueError("BV Detailer Loop requires at least one detailer job")
+        shape = getattr(initial_image, "shape", None)
+        if shape is None or len(shape) != 4 or int(shape[0]) != 1:
+            raise ValueError("BV Detailer Loop Start requires a single IMAGE shaped B,H,W,C")
         from comfy_execution.graph_utils import GraphBuilder
         graph = GraphBuilder()
-        loop_state = initial_value0 or {
+        loop_state = initial_value0 if initial_value0 is not None else {
             "schema": "bv.detailer_loop_state",
             "version": 1,
             "job_index": 0,
             "current_image": initial_image,
             "detailer_plan": detailer_plan,
         }
+        validate_detailer_loop_state(loop_state)
         graph.node(
             "BV Detailer While Start (internal)", condition=True,
             initial_value0=loop_state,

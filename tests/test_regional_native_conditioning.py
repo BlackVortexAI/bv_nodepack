@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest import mock
 
 import torch
 
@@ -108,6 +109,35 @@ class RegionalNativeConditioningTests(unittest.TestCase):
         self.assertTrue(positive_weighted.startswith("(symmetrical face, green eyes, detailed irises:0.8)"))
         self.assertIn("(wooden tables, warm interior:0.35)", positive_weighted)
         self.assertIn("(asymmetrical eyes:0.8)", negative_weighted)
+
+    def test_detailer_conditioning_attaches_materialized_hooks_by_scope(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        primary = document["regions"][1]
+        context = document["regions"][0]
+        primary["usage"] = "detailer"
+        hooks = {
+            primary["id"]: FakeHookGroup(), context["id"]: FakeHookGroup(),
+            "global": FakeHookGroup(), "background": FakeHookGroup(),
+        }
+
+        def attach(clip, hook_group):
+            clone = clip.clone()
+            clone.apply_hooks_to_conds = hook_group
+            return clone
+
+        with mock.patch("util.regional.native_conditioning.clip_with_hooks", side_effect=attach):
+            positive, *_ = compile_detailer_conditioning(
+                document, FakeHookClip(), primary["id"],
+                context_regions=[{"region_id": context["id"], "influence": 1.0}],
+                hooks_by_scope=hooks,
+            )
+
+        self.assertEqual([item[1].get("hooks") for item in positive], [
+            hooks[primary["id"]], hooks[context["id"]], hooks["global"], hooks["background"],
+        ])
 
     def test_compiles_global_background_and_enabled_regions(self):
         clip = FakeClip()

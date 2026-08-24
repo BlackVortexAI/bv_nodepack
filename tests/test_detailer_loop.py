@@ -30,6 +30,7 @@ from bv_nodepack.py.nodes.bv_regional_detailer import (  # noqa: E402
     BVRegionalDetailerJobNode,
     BVRegionalDetailerPlanNode,
     _BVDetailerLoopAdvance,
+    _BVDetailerLoopResult,
     _BVDetailerWhileEnd,
 )
 from bv_nodepack.py.util.regional.detailer import normalize_detector_binding, register_detector  # noqa: E402
@@ -154,7 +155,7 @@ class DetailerLoopTests(unittest.TestCase):
 
     def test_start_expands_internal_while_state(self):
         plan = {"schema": "bv.detailer_plan", "jobs": [{"id": "one"}]}
-        image = object()
+        image = torch.zeros((1, 8, 8, 3))
         result = BVDetailerLoopStartNode().start(plan, image)
         loop_state = result["result"][1]
         self.assertEqual(loop_state["job_index"], 0)
@@ -194,11 +195,63 @@ class DetailerLoopTests(unittest.TestCase):
     def test_advance_stops_after_last_job(self):
         node = _BVDetailerLoopAdvance()
         plan = {"jobs": [{}, {}]}
-        state = {"schema": "bv.detailer_loop_state", "job_index": 0, "current_image": "first", "detailer_plan": plan}
-        next_state, keep_going = node.advance(state, "second")
-        self.assertEqual((next_state["job_index"], next_state["current_image"], keep_going), (1, "second", True))
-        final_state, keep_going = node.advance(next_state, "third")
-        self.assertEqual((final_state["job_index"], final_state["current_image"], keep_going), (2, "third", False))
+        plan["schema"] = "bv.detailer_plan"
+        first = torch.zeros((1, 8, 8, 3))
+        second = torch.ones((1, 8, 8, 3))
+        third = torch.full((1, 8, 8, 3), 2.0)
+        state = {"schema": "bv.detailer_loop_state", "version": 1, "job_index": 0, "current_image": first, "detailer_plan": plan}
+        next_state, keep_going = node.advance(state, second)
+        self.assertEqual((next_state["job_index"], keep_going), (1, True))
+        self.assertIs(next_state["current_image"], second)
+        final_state, keep_going = node.advance(next_state, third)
+        self.assertEqual((final_state["job_index"], keep_going), (2, False))
+        self.assertIs(final_state["current_image"], third)
+        self.assertIs(_BVDetailerLoopResult().extract(final_state)[0], third)
+
+    def test_loop_nodes_reject_invalid_or_incomplete_state(self):
+        image = torch.zeros((1, 8, 8, 3))
+        plan = {"schema": "bv.detailer_plan", "jobs": [{}]}
+        with self.assertRaisesRegex(ValueError, "version must be 1"):
+            BVDetailerLoopStartNode().start(plan, image, {"schema": "bv.detailer_loop_state"})
+        incomplete = {
+            "schema": "bv.detailer_loop_state", "version": 1, "job_index": 0,
+            "current_image": image, "detailer_plan": plan,
+        }
+        with self.assertRaisesRegex(ValueError, "before every detailer job"):
+            _BVDetailerLoopResult().extract(incomplete)
+
+    def test_job_resolver_uses_materialized_v3_lora_scopes(self):
+        node = BVRegionalDetailerJobNode()
+        image = torch.zeros((1, 8, 8, 3))
+        plan = {
+            "schema": "bv.detailer_plan", "version": 1, "regional_context": {"version": 3},
+            "document": {}, "jobs": [{
+                "id": "job", "region_names": ["Face"], "region_ids": ["face"],
+                "primary_region_id": "face", "prompt_composition": "primary", "conditioning": {},
+            }],
+        }
+        state = {
+            "schema": "bv.detailer_loop_state", "version": 1, "job_index": 0,
+            "current_image": image, "detailer_plan": plan,
+        }
+        with mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.compose_job_mask",
+            return_value=torch.zeros((1, 8, 8)),
+        ), mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.materialized_lora_scopes",
+            return_value={"face": [["portrait.safetensors", 1.0, 1.0]]},
+        ), mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.resolve_stack_paths",
+            return_value={"face": [["resolved", 1.0, 1.0]]},
+        ), mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.create_hook_groups",
+            return_value={"face": "face-hooks"},
+        ), mock.patch(
+            "bv_nodepack.py.nodes.bv_regional_detailer.compile_detailer_conditioning",
+            return_value=([], [], "", "", None, None),
+        ) as compile_conditioning:
+            node.resolve(state, object(), object(), object())
+        self.assertEqual(compile_conditioning.call_args.args[-1], {"face": "face-hooks"})
 
     def test_impact_detection_runs_on_roi_and_rebases_to_full_image(self):
         detector = FakeBBoxDetector()
