@@ -31,9 +31,9 @@ import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
-import { installM0CanvasVisibility } from "./regional/m0VisualProjection";
+import { installM0CanvasVisibility, requestM0DebugAnimation } from "./regional/m0VisualProjection";
 import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationReport, regionalEditorDraft, REGIONAL_MIGRATION_EVENT, REGIONAL_VALIDATION_EVENT } from "./regional/milestoneE";
-import { clearLegacyPortSticky, installLegacyPorts, legacyUsage, refreshLegacyPorts, setLegacyPortsVisible, SHOW_LEGACY_PORTS_SETTING_ID } from "./regional/legacyPorts";
+import { clearLegacyPortSticky, installLegacyPorts, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyPortsVisible, SHOW_LEGACY_PORTS_SETTING_ID, toggleLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, collectScopedNodes, dismissBvToast, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
@@ -700,6 +700,15 @@ comfyApp.registerExtension({
         icon: "icon-[lucide--layers]",
         function: () => { window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT)); },
     }, {
+        id: "bv.regional.toggleDebugWiring",
+        label: "Toggle BV Regional Legacy wiring debug",
+        icon: "icon-[lucide--workflow]",
+        function: () => {
+            const canvas=(comfyApp as any).canvas,active=toggleLegacyDebugVisible(canvas?.graph??(comfyApp as any).graph);
+            if(active)requestM0DebugAnimation(canvas);
+            showBvToast({id:"bv-regional-debug-wiring",title:`Regional wiring debug ${active?"enabled":"disabled"}`,message:active?"Legacy ports and hidden V3 provider links are visible for this UI session.":"Legacy ports and V3 provider links returned to their normal presentation.",tone:"info",duration:3500});
+        },
+    }, {
         id: "bv.debugBridge.publishSnapshot",
         label: "Refresh BV Debug Bridge Snapshot",
         icon: "icon-[lucide--radio-tower]",
@@ -728,6 +737,14 @@ comfyApp.registerExtension({
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         if (installM0ResourceSpike(nodeType, nodeData)) return;
+        const legacyDescriptors=legacyPortDescriptors(nodeData.name);
+        if(legacyDescriptors.length){
+            const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange,deselected=nodeType.prototype.onDeselected;
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>installLegacyPorts(this,legacyDescriptors));return result};
+            nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>installLegacyPorts(this,legacyDescriptors));return result};
+            nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>refreshLegacyPorts(this));return result};
+            nodeType.prototype.onDeselected=function(){const result=deselected?.apply(this,arguments);clearLegacyPortSticky(this);return result};
+        }
         const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData);
         if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
         if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){

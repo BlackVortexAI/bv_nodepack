@@ -5,11 +5,32 @@ type Slot={name?:string;type?:string;link?:unknown;links?:unknown[]|null;hidden?
 type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void};
 export type LegacyPortDescriptor={direction:"input"|"output";name:string;type:string;guidance:string};
 let showAll=false;
+let debugVisible=false;
 const connected=(slot:Slot,direction:"input"|"output")=>direction==="input"?slot.link!=null:Boolean(slot.links?.length);
+const visitGraphNodes=(graph:any,visit:(node:Node)=>void)=>{for(const node of graph?._nodes??[]){visit(node);if((node as any).subgraph)visitGraphNodes((node as any).subgraph,visit)}};
+const LORA_CONSUMERS=new Set(["BV Regional Native Conditioning","BV Regional SDXL Attention","BV Regional Z-Image Attention","BV Regional FLUX.2 Klein 9B Attention","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"]);
 
-export function setLegacyPortsVisible(value:boolean,graph?:any){showAll=Boolean(value);for(const node of graph?._nodes??[])refreshLegacyPorts(node);}
+export function legacyPortDescriptors(nodeName:string):LegacyPortDescriptor[]{
+    if(LORA_CONSUMERS.has(nodeName))return [
+        {direction:"input",name:"lora_registry",type:"BV_LORA_STACK_REGISTRY",guidance:"Use Regional V3 resource providers."},
+        {direction:"input",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use the BV_REGIONAL context input."},
+    ];
+    if(nodeName==="BV Regional Detailer Plan")return [{direction:"input",name:"detector_registry",type:"BV_DETECTOR_REGISTRY",guidance:"Use Regional V3 detector resource providers."}];
+    return [];
+}
+
+export function setLegacyPortsVisible(value:boolean,graph?:any){showAll=Boolean(value);visitGraphNodes(graph,refreshLegacyPorts);}
 export function legacyPortsVisible(){return showAll}
-export function legacyPortShouldShow(slot:Slot,direction:"input"|"output",dragType?:string|null){return showAll||connected(slot,direction)||slot.__bvLegacySticky===true||Boolean(dragType&&slot.type===dragType)}
+export function setLegacyDebugVisible(value:boolean,graph?:any){
+    debugVisible=Boolean(value);
+    if(typeof document!=="undefined")document.documentElement.classList.toggle("bv-regional-debug-wiring-active",debugVisible);
+    visitGraphNodes(graph,refreshLegacyPorts);
+    graph?.setDirtyCanvas?.(true,true);
+    return debugVisible;
+}
+export function toggleLegacyDebugVisible(graph?:any){return setLegacyDebugVisible(!debugVisible,graph)}
+export function legacyDebugVisible(){return debugVisible}
+export function legacyPortShouldShow(slot:Slot,direction:"input"|"output",dragType?:string|null){return showAll||debugVisible||connected(slot,direction)||slot.__bvLegacySticky===true||Boolean(dragType&&slot.type===dragType)}
 export function canvasLegacyDragType(canvas:any){
     const legacy=canvas?.connecting_output?.type??canvas?.connecting_input?.type;
     if(legacy)return String(legacy);

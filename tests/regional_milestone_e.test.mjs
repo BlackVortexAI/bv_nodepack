@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { applyRegionalPrimitiveDraft, migrateRegionalNode, migrationReportMessage, parseRegionalEditorDraft, persistRegionalEditorDraft, regionalEditorDraft } from "../ui/src/regional/milestoneE.ts";
 import { layoutPanelIds, missingLayoutPanels } from "../ui/src/ui/layoutProfiles.ts";
 import { clearSessionLayoutDraft, getSessionLayoutRevision, setSessionLayoutDraft, subscribeSessionLayoutDraft } from "../ui/src/ui/layoutProfiles.ts";
-import { canvasLegacyDragType, clearLegacyPortSticky, installLegacyPorts, legacyPortShouldShow, refreshLegacyDragPorts, refreshLegacyPorts, setLegacyPortsVisible } from "../ui/src/regional/legacyPorts.ts";
+import { canvasLegacyDragType, clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, legacyPortDescriptors, legacyPortShouldShow, refreshLegacyDragPorts, refreshLegacyPorts, setLegacyDebugVisible, setLegacyPortsVisible, toggleLegacyDebugVisible } from "../ui/src/regional/legacyPorts.ts";
 
 const document = {schema:"bv.regional",version:2,document_id:"doc",title:"Original",canvas:{width:1024,height:1024},prompts:{global:{positive_source:"",negative_source:""},background:{positive_source:"",negative_source:""}},negative_mode:"auto",overlap:{mode:"joint"},regions:[]};
 
@@ -75,4 +75,22 @@ test("Nodes 2.0 link drags reveal compatible Legacy port labels before drop",()=
   assert.equal(node.outputs[0].hidden,false);
   canvas.linkConnector.renderLinks=[];refreshLegacyDragPorts(canvas);
   assert.equal(node.outputs[0].hidden,true);
+});
+
+test("workflow debug toggles Legacy ports for this UI session without changing the preference",()=>{
+  const node={inputs:[{name:"lora_registry",type:"BV_LORA_STACK_REGISTRY",link:null}]};
+  const graph={_nodes:[{subgraph:{_nodes:[node]}}]};
+  installLegacyPorts(node,[{direction:"input",name:"lora_registry",type:"BV_LORA_STACK_REGISTRY",guidance:"Use Regional V3 resources"}]);
+  setLegacyPortsVisible(false,graph);setLegacyDebugVisible(false,graph);
+  assert.equal(node.inputs[0].hidden,true);assert.equal(legacyDebugVisible(),false);
+  assert.equal(toggleLegacyDebugVisible(graph),true);assert.equal(node.inputs[0].hidden,false);
+  assert.equal(toggleLegacyDebugVisible(graph),false);assert.equal(node.inputs[0].hidden,true);
+});
+
+test("Regional V3 identifies every superseded sidecar input as a Legacy port",()=>{
+  for(const name of ["BV Regional Native Conditioning","BV Regional SDXL Attention","BV Regional Z-Image Attention","BV Regional FLUX.2 Klein 9B Attention","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"]){
+    assert.deepEqual(legacyPortDescriptors(name).map(item=>item.name),["lora_registry","lora_bindings"]);
+  }
+  assert.deepEqual(legacyPortDescriptors("BV Regional Detailer Plan").map(item=>item.name),["detector_registry"]);
+  assert.deepEqual(legacyPortDescriptors("BV Regional Select"),[]);
 });

@@ -268,6 +268,21 @@ test("debug rendering gives native M0 links a dashed animated projection",()=>{
   assert.equal(input.link,7);
 });
 
+test("workflow debug reveals native V3 provider links with the debug projection",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
+  const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER"},output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER"};
+  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input]},seen={};
+  const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(value){seen.dash=value}};
+  const nodes=new Map([[1,collector],[2,consumer]]),graph={_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}};
+  const canvas={graph,renderLink(){seen.link=true},drawNode(){}};
+  installM0CanvasVisibility(canvas);
+  setLegacyDebugVisible(false,graph);canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  assert.equal(seen.link,undefined);
+  setLegacyDebugVisible(true,graph);canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  assert.equal(seen.link,true);assert.deepEqual(seen.dash,[7,5]);
+  setLegacyDebugVisible(false,graph);
+});
+
 test("multi debug projects every native edge onto one visual fan-in anchor",()=>{
   const outputs=[{links:[1],__bvM0ResourceSlot:true},{links:[2],__bvM0ResourceSlot:true}];
   const target={id:3,__bvM0ResourceConsumer:true,__bvM0FanInAnchorSlot:0,properties:{bvM0DebugVisible:true},inputs:[{link:1,__bvM0ResourceSlot:true},{link:2,__bvM0ResourceSlot:true}],getConnectionPos(input,slot){assert.equal(input,true);assert.equal(slot,0);return[9,11]}};

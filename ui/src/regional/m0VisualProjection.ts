@@ -1,4 +1,4 @@
-import { canvasLegacyDragType, refreshLegacyDragPorts } from "./legacyPorts";
+import { canvasLegacyDragType, legacyDebugVisible, refreshLegacyDragPorts } from "./legacyPorts";
 
 const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
 const V3_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
@@ -7,14 +7,14 @@ type M0Slot = { name?:string; label?:string; localized_name?:string; type?:strin
 type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0ResourceConsumer?:boolean; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
 
 function workflowHasM0Debug(graph:any){
-    return (graph?._nodes??[]).some((node:M0Node)=>node.__bvM0ResourceConsumer===true&&Boolean(node.properties?.bvM0DebugVisible));
+    return legacyDebugVisible()||(graph?._nodes??[]).some((node:M0Node)=>node.__bvM0ResourceConsumer===true&&Boolean(node.properties?.bvM0DebugVisible));
 }
 
 function hiddenLink(canvas:any,link:any) {
     if (!link) return false;
     const origin=canvas.graph?.getNodeById?.(link.origin_id) as M0Node|undefined;
     const target=canvas.graph?.getNodeById?.(link.target_id) as M0Node|undefined;
-    if(origin?.outputs?.[link.origin_slot]?.type===V3_PROVIDER_TYPE||target?.inputs?.[link.target_slot]?.type===V3_PROVIDER_TYPE)return true;
+    if(origin?.outputs?.[link.origin_slot]?.type===V3_PROVIDER_TYPE||target?.inputs?.[link.target_slot]?.type===V3_PROVIDER_TYPE)return !legacyDebugVisible();
     if(resourceLink(canvas,link))return !workflowHasM0Debug(canvas.graph);
     return Boolean(origin?.outputs?.[link.origin_slot]?.__bvM0VisualHidden||target?.inputs?.[link.target_slot]?.__bvM0VisualHidden);
 }
