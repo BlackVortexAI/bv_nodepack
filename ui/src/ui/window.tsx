@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEventHandler, type ReactNode } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEventHandler, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mergeChangedInitialGeometry, resizeFloatingWindow, type ResizeDirection, windowShelfPosition } from "./workspaceGeometry";
 import { AnchoredPopover, Button, CompactSelect, Dialog, MenuButton, TextField, useBvConfirm, type MenuAction, type SelectOption } from "./components";
@@ -6,7 +6,7 @@ import { getWindowSwitchMode, setWindowSwitchMode, subscribeWindowSwitchMode } f
 import { activateBvWindow, registerBvWindow } from "./windowFocus";
 import { BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT } from "./ToolbarWindowLauncher";
 import { BV_FLEXLAYOUT_LIBRARY } from "./dock";
-import { deleteLayoutProfile, getSessionLayoutDraft, isCompatibleLayoutProfile, readLayoutProfiles, renameLayoutProfile, saveLayoutProfile, setSessionLayoutDraft } from "./layoutProfiles";
+import { deleteLayoutProfile, getSessionLayoutDraft, getSessionLayoutRevision, isCompatibleLayoutProfile, readLayoutProfiles, renameLayoutProfile, saveLayoutProfile, setSessionLayoutDraft, subscribeSessionLayoutDraft } from "./layoutProfiles";
 import { showBvToast } from "./toastStore";
 
 export type BvWindowMode = "workspace" | "floating";
@@ -129,6 +129,7 @@ export function BvWindowNavigator({label,value,options,onNavigate}:{label:string
 
 export function ResetLayoutButton({onClick,storageId,editorType="regional",signature=`${editorType}:v1`}:{onClick:()=>void;storageId?:string;editorType?:string;signature?:string}){
     const [dialog,setDialog]=useState<"save"|"rename"|null>(null),[name,setName]=useState(""),[revision,setRevision]=useState(0),structural=useBvConfirm();void revision;
+    const layoutKey=storageId??"",subscribe=useCallback((listener:()=>void)=>subscribeSessionLayoutDraft(layoutKey,listener),[layoutKey]),snapshot=useCallback(()=>getSessionLayoutRevision(layoutKey),[layoutKey]);useSyncExternalStore(subscribe,snapshot,()=>0);
     if(!storageId)return <button type="button" className="bv-ui-button bv-ui-button--secondary bv-ui-window-reset" title="Restore the default panel arrangement" onClick={onClick}><Icon><path d="M4.9 9A7.5 7.5 0 1 1 5 15M4 4v5h5"/></Icon><span>Reset layout</span></button>;
     const envelope=readLayoutProfiles(editorType),draft=getSessionLayoutDraft(storageId),selected=envelope.profiles.find(profile=>profile.id===draft?.profileId),refresh=()=>setRevision(value=>value+1),save=()=>{if(!draft)return;const profile=saveLayoutProfile({id:dialog==="rename"?selected?.id:undefined,name,editorType,editorVersion:"1",library:BV_FLEXLAYOUT_LIBRARY,signature,layout:draft.layout});setSessionLayoutDraft(storageId,draft.layout,"saved",profile.id);setDialog(null);refresh()};
     const compatibility={editorType,editorVersion:"1",library:BV_FLEXLAYOUT_LIBRARY,signature},switchLayout=(label:string,action:()=>void)=>draft?.status==="modified"?structural.confirm({title:"Replace modified layout?",message:`Structural panel changes in this session will be discarded when switching to ${label}.`,confirmLabel:"Switch layout",danger:true,action}):action();

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applyRegionalPrimitiveDraft, migrateRegionalNode, migrationReportMessage, parseRegionalEditorDraft, persistRegionalEditorDraft, regionalEditorDraft } from "../ui/src/regional/milestoneE.ts";
 import { layoutPanelIds, missingLayoutPanels } from "../ui/src/ui/layoutProfiles.ts";
+import { clearSessionLayoutDraft, getSessionLayoutRevision, setSessionLayoutDraft, subscribeSessionLayoutDraft } from "../ui/src/ui/layoutProfiles.ts";
 import { canvasLegacyDragType, clearLegacyPortSticky, installLegacyPorts, legacyPortShouldShow, refreshLegacyDragPorts, refreshLegacyPorts, setLegacyPortsVisible } from "../ui/src/regional/legacyPorts.ts";
 
 const document = {schema:"bv.regional",version:2,document_id:"doc",title:"Original",canvas:{width:1024,height:1024},prompts:{global:{positive_source:"",negative_source:""},background:{positive_source:"",negative_source:""}},negative_mode:"auto",overlap:{mode:"joint"},regions:[]};
@@ -36,6 +37,15 @@ test("old layouts remain unchanged and report newly registered namespaced panels
   assert.deepEqual([...layoutPanelIds(saved)],["bv.regional.canvas"]);
   assert.deepEqual(missingLayoutPanels(saved,["bv.regional.canvas","bv.regional.capabilities"]),["bv.regional.capabilities"]);
   assert.equal(saved.layout.children.length,1);
+});
+
+test("layout-profile controls react when the dock writes a session draft silently",()=>{
+  const key="regional-editor:test",revisions=[];
+  const unsubscribe=subscribeSessionLayoutDraft(key,()=>revisions.push(getSessionLayoutRevision(key)));
+  try{
+    setSessionLayoutDraft(key,{layout:{type:"row",children:[]},borders:[]},"adjusted",undefined,false);
+    assert.deepEqual(revisions,[1]);assert.equal(getSessionLayoutRevision(key),1);
+  }finally{unsubscribe();clearSessionLayoutDraft(key)}
 });
 
 test("Legacy ports hide by default, reveal for compatible drag, and occupied links always win",()=>{
