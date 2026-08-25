@@ -26,11 +26,11 @@ push remain separate states.
 | Detailer/Detector/Loop identity and links | Versioned two-job workflow Golden | Automated |
 | Migration failure isolation and aggregate report | `regional_milestone_e.test.mjs`; corrupted-node corpus mutation in `regional_milestone_f_goldens.test.mjs` | Automated |
 | Save and reload without a repeated migration | Real workflow acceptance from Milestone E; migrated-workflow reload Golden | Automated and live verified |
-| Root graph, copied group and consumer-only copy | Existing M0/LoRA graph tests | Automated; add corpus fixture |
+| Root graph, copied group and consumer-only copy | Root-graph M0 Golden plus focused M0/LoRA copy tests | Automated |
 | Subgraph and cross-graph rejection | M0 graph tests; ComfyUI-authored four-collector Subgraph Golden | Automated and live verified |
 | Connected Legacy ports and manual migration guidance | Milestone E tests and live acceptance | Automated and live verified |
 | Broken collector/resource/region references | Focused LoRA/Detailer/M0 fail-closed tests and Detailer Golden mutations | Automated |
-| Legacy Attention/Conditioning execution | Existing backend regression tests | Automated; add corpus index |
+| Legacy Attention/Conditioning execution | Backend regression tests plus released-workflow provenance index for Native, Anima, FLUX.2, Krea 2, SDXL and Z-Image | Automated and indexed |
 
 ### 2. Mandatory functional contract
 

@@ -55,6 +55,16 @@
       "loop_link_types": ["BV_DETAILER_PLAN", "BV_DETAILER_LOOP_STATE", "BV_DETAILER_JOB", "FLOW_CONTROL"]
     }
   ],
+  "root_graph_cases": [
+    {
+      "id": "m0-four-collector-root-graph",
+      "workflow": "examples/workflows/bv-regional-v3-m0-multi-fan-in.json",
+      "collector_count": 4,
+      "consumer_count": 1,
+      "provider_link_count": 4,
+      "binding_count": 4
+    }
+  ],
   "subgraph_cases": [
     {
       "id": "m0-four-collector-subgraph",
@@ -63,6 +73,50 @@
       "consumer_count": 1,
       "provider_link_count": 4,
       "binding_count": 4
+    }
+  ],
+  "legacy_capture_index": [
+    {
+      "source": "Region Debug.json",
+      "sha256": "c585158e24216b0ae6911bb792f5e0ab239ee2cd3bc549813da9be099d89f22d",
+      "document_version": 1,
+      "region_count": 2,
+      "consumer": "BV Regional Native Conditioning"
+    },
+    {
+      "source": "Flux2 klein 9B Attention.json",
+      "sha256": "15ef1eccc0e8b10bf24bebeef7c82a6aa5c59a3c977b0d8cd3bf7ac2d8a93df7",
+      "document_version": 1,
+      "region_count": 2,
+      "consumer": "BV Regional FLUX.2 Klein 9B Attention"
+    },
+    {
+      "source": "Krea 2 Attention.json",
+      "sha256": "01d998b43ca302ed497b54eb6e9906f741a9078588ae6a966cbb9174e02a8d83",
+      "document_version": 1,
+      "region_count": 2,
+      "consumer": "BV Regional Krea 2 Attention"
+    },
+    {
+      "source": "Illustrious Region Attention.json",
+      "sha256": "647957db44dc6a93030fff1fc2f80612d93d4af647b68dc3d960ff604f174cfd",
+      "document_version": 1,
+      "region_count": 3,
+      "consumer": "BV Regional SDXL Attention"
+    },
+    {
+      "source": "ZiT Attention.json",
+      "sha256": "c49e85996566de3cfb4d8dbad0f2c4c47a7c5e599539b9763276c7e0303e3554",
+      "document_version": 1,
+      "region_count": 2,
+      "consumer": "BV Regional Z-Image Attention"
+    },
+    {
+      "source": "Deteiler Pipe Test.json",
+      "sha256": "9297ec666470e84eb2e40216623699a021844c6d37e3d5610e30c909a15dcc19",
+      "document_version": 2,
+      "region_count": 7,
+      "consumer": "BV Regional Detailer Plan"
     }
   ]
 }

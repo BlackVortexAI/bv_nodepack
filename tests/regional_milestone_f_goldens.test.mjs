@@ -82,6 +82,44 @@ test("detailer goldens preserve collector and resource identity through native l
   }
 });
 
+test("root-graph Goldens resolve each binding through its own persisted provider link", () => {
+  for (const golden of goldens.root_graph_cases) {
+    const value = workflow(golden.workflow);
+    const collectors = value.nodes.filter(node => node.type === "BV M0 Fake Resource Collector");
+    const consumers = value.nodes.filter(node => node.type === "BV M0 Fake Multi Resource Consumer");
+    assert.equal(collectors.length, golden.collector_count, golden.id);
+    assert.equal(consumers.length, golden.consumer_count, golden.id);
+    assert.equal(value.links.filter(link => link[5] === "BV_RUNTIME_RESOURCE_PROVIDER_M0").length, golden.provider_link_count, golden.id);
+
+    const bindings = JSON.parse(consumers[0].widgets_values[0]);
+    assert.equal(bindings.length, golden.binding_count, golden.id);
+    for (const [index, binding] of bindings.entries()) {
+      const collector = collectors.find(node => node.widgets_values[1] === binding.collector_id);
+      assert.ok(collector, `${golden.id}: missing collector ${binding.collector_id}`);
+      assert.ok(collector.widgets_values.slice(2, 4).includes(binding.resource_id), `${golden.id}: missing resource ${binding.resource_id}`);
+      assert.ok(value.links.some(link => link[1] === collector.id && link[3] === consumers[0].id && link[4] === index), `${golden.id}: missing native link ${index + 1}`);
+    }
+  }
+});
+
+test("Legacy capture index fixes representative released consumer provenance", () => {
+  const expectedConsumers = new Set([
+    "BV Regional Native Conditioning",
+    "BV Regional FLUX.2 Klein 9B Attention",
+    "BV Regional Krea 2 Attention",
+    "BV Regional SDXL Attention",
+    "BV Regional Z-Image Attention",
+    "BV Regional Detailer Plan",
+  ]);
+  assert.deepEqual(new Set(goldens.legacy_capture_index.map(item => item.consumer)), expectedConsumers);
+  for (const item of goldens.legacy_capture_index) {
+    assert.match(item.source, /\.json$/);
+    assert.match(item.sha256, /^[a-f0-9]{64}$/);
+    assert.ok([1, 2].includes(item.document_version));
+    assert.ok(item.region_count > 0);
+  }
+});
+
 test("saved migrated Goldens reload canonically without a repeated migration", () => {
   for (const golden of goldens.cases) {
     const value = workflow(golden.workflow);
