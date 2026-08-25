@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 import sys
@@ -58,6 +59,42 @@ class DetailerClip:
 
 
 class RegionalNodeTests(unittest.TestCase):
+    def test_published_consumers_accept_and_prefer_legacy_lora_sidecars(self):
+        consumers = (
+            self.module.BVRegionalNativeConditioningNode,
+            self.module.BVRegionalSDXLAttentionNode,
+            self.module.BVRegionalZImageAttentionNode,
+            self.module.BVRegionalFlux2KleinAttentionNode,
+            self.module.BVRegionalKrea2AttentionNode,
+            self.module.BVRegionalAnimaConditioningNode,
+        )
+        for consumer in consumers:
+            optional = consumer.INPUT_TYPES()["optional"]
+            self.assertEqual(optional["lora_registry"][0], "BV_LORA_STACK_REGISTRY")
+            self.assertEqual(optional["lora_bindings"][0], "BV_REGIONAL_LORA_BINDINGS")
+            parameters = inspect.signature(getattr(consumer, consumer.FUNCTION)).parameters
+            self.assertIn("lora_registry", parameters)
+            self.assertIn("lora_bindings", parameters)
+
+        document = fixture()
+        region_id = document["regions"][0]["id"]
+        registry = {
+            "schema": "bv.lora_stack_registry",
+            "version": 1,
+            "stacks": {"legacy": {"id": "legacy", "name": "Legacy", "stack": [["legacy.safetensors", 0.8, 0.6]]}},
+        }
+        bindings = {
+            "schema": "bv.regional.lora_bindings",
+            "version": 1,
+            "document_id": document["document_id"],
+            "global_stack_id": None,
+            "regions": {region_id: "legacy"},
+        }
+        self.assertEqual(
+            self.module._consumer_lora_scopes({"invalid": "v3 must not win"}, document, registry, bindings)[region_id],
+            [("legacy.safetensors", 0.8, 0.6)],
+        )
+
     def test_nodes_are_grouped_by_role_and_model_in_the_menu(self):
         expected_categories = {
             "BV Regional Prompt": "🌀 BV Node Pack/regional/core",
@@ -192,7 +229,8 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_native_compiler_is_not_a_lora_resource_consumer(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
-        self.assertNotIn("optional", inputs)
+        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings"})
+        self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in inputs["optional"].values()})
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
     def test_only_regional_context_writers_expose_typed_provider_inputs(self):
@@ -208,7 +246,9 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalKrea2AttentionNode,
             self.module.BVRegionalAnimaConditioningNode,
         ):
-            self.assertNotIn("optional", node_type.INPUT_TYPES())
+            optional = node_type.INPUT_TYPES()["optional"]
+            self.assertEqual(set(optional), {"lora_registry", "lora_bindings"})
+            self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in optional.values()})
 
     def test_named_lora_stack_node_builds_a_chainable_registry(self):
         output = self.module.BVNamedLoraStackNode().register(
@@ -409,7 +449,7 @@ class RegionalNodeTests(unittest.TestCase):
 
         for node_type, compiler_name, patcher_name, compiler_tail in cases:
             with self.subTest(node=node_type.__name__):
-                self.assertNotIn("optional", node_type.INPUT_TYPES())
+                self.assertEqual(set(node_type.INPUT_TYPES()["optional"]), {"lora_registry", "lora_bindings"})
                 compiler_result = (["positive"], ["negative"], ["slot"], *compiler_tail)
                 with (
                     unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"global": [["skin.safetensors", 0.8, 0.6]]}),
@@ -440,7 +480,10 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalKrea2AttentionNode.RETURN_TYPES,
             ("MODEL", "CONDITIONING", "CONDITIONING"),
         )
-        self.assertNotIn("optional", self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES())
+        self.assertEqual(
+            set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
+            {"lora_registry", "lora_bindings"},
+        )
         mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
         self.assertEqual(mode[1]["default"], "token_gated_singlepass")

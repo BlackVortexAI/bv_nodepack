@@ -23,14 +23,14 @@ push remain separate states.
 | Legacy native links remain graph truth | Exact persisted typed-link expectations | Automated |
 | Migration materializes defaults and marks the graph dirty | Node harness Golden expectations | Automated |
 | Legacy sidecar remains byte-for-byte unchanged | Node harness Golden expectations | Automated |
-| Detailer/Detector/Loop identity and links | Versioned two-job workflow Golden | Automated |
+| Detailer/Detector/Loop identity and links | Versioned two-job workflow Golden; fresh-session v2 Detailer/Loop execution | Automated and live verified |
 | Migration failure isolation and aggregate report | `regional_milestone_e.test.mjs`; corrupted-node corpus mutation in `regional_milestone_f_goldens.test.mjs` | Automated |
 | Save and reload without a repeated migration | Real workflow acceptance from Milestone E; migrated-workflow reload Golden | Automated and live verified |
 | Root graph, copied group and consumer-only copy | Root-graph M0 Golden plus focused M0/LoRA copy tests | Automated |
 | Subgraph and cross-graph rejection | M0 graph tests; ComfyUI-authored four-collector Subgraph Golden | Automated and live verified |
 | Connected Legacy ports and manual migration guidance | Milestone E tests and live acceptance | Automated and live verified |
 | Broken collector/resource/region references | Focused LoRA/Detailer/M0 fail-closed tests and Detailer Golden mutations | Automated |
-| Legacy Attention/Conditioning execution | Backend regression tests plus released-workflow provenance index for Native, Anima, FLUX.2, Krea 2, SDXL and Z-Image | Automated and indexed |
+| Legacy Attention/Conditioning execution | Backend regression tests plus released-workflow provenance index for Native, Anima, FLUX.2, Krea 2, SDXL and Z-Image; fresh-session Anima sidecar execution | Automated, indexed and live verified for Anima |
 
 ### 2. Mandatory functional contract
 
@@ -39,10 +39,10 @@ The complete mandatory acceptance list remains authoritative in
 test or an explicit fresh-session live step. A passing aggregate test count alone
 is not acceptance evidence.
 
-Current baseline on 2026-08-25 after the Subgraph regression fix:
+Current baseline on 2026-08-25 after the Subgraph and Legacy consumer regressions:
 
-- Python: 358 passed;
-- frontend: 363 passed;
+- Python: 359 passed;
+- frontend: 366 passed;
 - TypeScript typecheck: passed;
 - production frontend build: passed;
 - focused Milestone F Goldens: 6 passed.
@@ -88,5 +88,20 @@ fixed port, preferably `8200`:
 - verify Legacy port reveal, existing links, warning and manual guidance;
 - verify layout recovery and invalid-draft fallback navigation;
 - perform genuinely uncached executions and record the observed outcomes.
+
+Recorded fresh-session evidence on 2026-08-25:
+
+- exact Stability Matrix installation, dedicated temporary user configuration,
+  fixed port `8200`, and cache-busted `localhost` browser session;
+- v1 native migration reported `1 migrated, 0 failed`, persisted version 2 with
+  generation defaults, and did not report migration again after save and hard reload;
+- v1 Anima Legacy sidecar wiring remained visible, produced the non-blocking Legacy
+  warning, and completed an uncached execution with image output in 49.49 seconds;
+- v2 Detailer/Detector/Loop loaded without a false LoRA migration failure and
+  completed an uncached execution with image output;
+- V3 Subgraph workflow loaded without migration or dirty-state mutation.
+
+The two-collector/resource operation matrix, copy variants, layout recovery and
+invalid-draft fallback remain open live checks.
 
 Milestone F must not be closed solely from this checklist or automated tests.
