@@ -62,6 +62,10 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
             f"{PACKAGE}.py.util.regional.prompt_enhancer",
             fromlist=["LLMResponse", "enhancement_result"],
         )
+        cls.context = __import__(
+            f"{PACKAGE}.py.util.regional.context",
+            fromlist=["normalize_context"],
+        )
 
     def test_nodes_are_registered_with_bv_owned_socket_types(self):
         self.assertIn("BV Comfy CLIP LLM Provider", self.module.NODE_CLASS_MAPPINGS)
@@ -117,6 +121,56 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
         expected = copy.deepcopy(document)
         expected["regions"][0]["prompts"]["positive_source"] = candidate["regions"][0]["positive_source"]
         self.assertEqual(applied, expected)
+
+    def test_enhancer_accepts_a_v3_context_with_capabilities(self):
+        document = fixture()
+        context = self.context.normalize_context(document).with_capability(
+            "future-pack.opaque", {"version": 9, "payload": ["untouched"]}
+        ).to_dict()
+        candidate = proposal(document)
+        candidate["regions"][0]["positive_source"] += ", detailed fabric"
+
+        class Provider:
+            def generate(self, _request):
+                return self.utility.LLMResponse(
+                    json.dumps(candidate, separators=(",", ":")), "fake", "fake-model"
+                )
+
+        provider = Provider()
+        provider.utility = self.utility
+        result, _diff, diagnostics = self.module.BVRegionalPromptEnhancerNode().enhance(
+            context, provider, "Improve", 512, 0
+        )
+
+        self.assertTrue(result["valid"], diagnostics)
+
+    def test_apply_updates_only_v3_core_prompts_and_preserves_capabilities(self):
+        document = fixture()
+        context = self.context.normalize_context(document).with_capability(
+            "future-pack.opaque", {"version": 9, "payload": ["untouched"]}
+        ).to_dict()
+        candidate = proposal(document)
+        candidate["regions"][0]["positive_source"] += ", detailed fabric"
+        result = self.utility.enhancement_result(
+            context,
+            self.utility.LLMResponse(
+                json.dumps(candidate, separators=(",", ":")), "fake", "fake-model"
+            ),
+        )
+
+        applied = self.module.BVApplyRegionalEnhancementNode().apply(context, result)[0]
+
+        self.assertEqual(applied["version"], 3)
+        self.assertEqual(applied["capabilities"], context["capabilities"])
+        self.assertEqual(
+            applied["core"]["regions"][0]["prompts"]["positive_source"],
+            candidate["regions"][0]["positive_source"],
+        )
+        unchanged_core = copy.deepcopy(applied["core"])
+        unchanged_core["regions"][0]["prompts"] = copy.deepcopy(
+            context["core"]["regions"][0]["prompts"]
+        )
+        self.assertEqual(unchanged_core, context["core"])
 
     def test_enhancer_repairs_unsupported_new_terms_once(self):
         document = fixture()

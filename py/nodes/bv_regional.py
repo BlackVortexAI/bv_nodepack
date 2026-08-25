@@ -458,9 +458,11 @@ class BVRegionalDetailerMaskNode:
             raise ValueError(f"context_regions_json contains invalid JSON: {exc}") from exc
         if not isinstance(context_regions, list):
             raise ValueError("context_regions_json must contain an array")
+        scope_stacks = resolve_stack_paths(_context_lora_scopes(regional))
+        hook_groups = create_hook_groups(scope_stacks)
         positive, negative, positive_text, negative_text, positive_weighted_text, negative_weighted_text = compile_detailer_conditioning(
             selection["document"], clip, selected["id"], global_influence,
-            background_influence, primary_region_influence, context_regions,
+            background_influence, primary_region_influence, context_regions, hook_groups,
         )
         basic_pipe = (model, clip, vae, positive, negative)
         return (

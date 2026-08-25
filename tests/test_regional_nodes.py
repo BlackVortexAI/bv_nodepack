@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest import mock
 
 import torch
 
@@ -55,7 +56,10 @@ class DetailerClip:
 
     def encode_from_tokens_scheduled(self, tokens):
         self.encoded.append(tokens)
-        return [[torch.ones((1, 2, 3)), {"pooled_output": torch.ones((1, 3))}]]
+        metadata = {"pooled_output": torch.ones((1, 3))}
+        if getattr(self, "apply_hooks_to_conds", None) is not None:
+            metadata["hooks"] = self.apply_hooks_to_conds
+        return [[torch.ones((1, 2, 3)), metadata]]
 
 
 class RegionalNodeTests(unittest.TestCase):
@@ -125,6 +129,49 @@ class RegionalNodeTests(unittest.TestCase):
             for node_name, node_class in self.module.NODE_CLASS_MAPPINGS.items()
         }
         self.assertEqual(actual_categories, expected_categories)
+
+    def test_registered_regional_consumers_are_explicitly_covered_by_the_v3_contract(self):
+        direct_consumers = {
+            name
+            for name, node_class in self.module.NODE_CLASS_MAPPINGS.items()
+            if any(
+                spec[0] == "BV_REGIONAL"
+                for group in node_class.INPUT_TYPES().values()
+                if isinstance(group, dict)
+                for spec in group.values()
+                if isinstance(spec, tuple)
+            )
+        }
+        expected_direct_consumers = {
+            "BV Regional LoRA",
+            "BV Regional Debug",
+            "BV Regional Select",
+            "BV Regional Deconstructor",
+            "BV Regional Detailer Mask",
+            "BV Regional Native Conditioning",
+            "BV Regional SDXL Attention",
+            "BV Regional Z-Image Attention",
+            "BV Regional FLUX.2 Klein 9B Attention",
+            "BV Regional Krea 2 Attention",
+            "BV Regional Anima Adapter",
+            "BV Regional Anima Conditioning",
+            "BV Regional Color Control Image",
+            "BV Regional Anima LLLite",
+        }
+        selection_consumers = {
+            name
+            for name, node_class in self.module.NODE_CLASS_MAPPINGS.items()
+            if any(
+                spec[0] == "BV_REGIONAL_SELECTION"
+                for group in node_class.INPUT_TYPES().values()
+                if isinstance(group, dict)
+                for spec in group.values()
+                if isinstance(spec, tuple)
+            )
+        }
+
+        self.assertEqual(direct_consumers, expected_direct_consumers)
+        self.assertEqual(selection_consumers, {"BV Regional Prompt Extract", "BV Regional Mask Render"})
 
     @classmethod
     def setUpClass(cls):
@@ -342,6 +389,76 @@ class RegionalNodeTests(unittest.TestCase):
 
         self.assertEqual(tuple(result[1].shape), (1, 120, 200))
         self.assertEqual(result[13], document["regions"][1]["id"])
+
+    def test_detailer_mask_applies_materialized_v3_lora_scope_to_conditioning(self):
+        document = fixture()
+        document["version"] = 2
+        for region in document["regions"]:
+            region["usage"] = "generation"
+        selected = document["regions"][1]
+        selected["usage"] = "detailer"
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        configured = self.module.normalize_context(document).with_capability(
+            self.module.LORA_CAPABILITY,
+            {
+                "version": 2,
+                "entries": [{
+                    "id": "33333333-3333-4333-8333-333333333333",
+                    "source": {
+                        "kind": "external",
+                        "collector_id": collector_id,
+                        "resource_id": "portrait",
+                    },
+                    "targets": [{
+                        "scope": "region",
+                        "document_id": document["document_id"],
+                        "region_id": selected["id"],
+                    }],
+                }],
+            },
+        )
+        provider = self.module.build_lora_provider(
+            collector_id,
+            {"portrait": {
+                "id": "portrait",
+                "name": "Portrait",
+                "stack": [["portrait.safetensors", 0.8, 0.6]],
+            }},
+        )
+        regional = self.module.materialize_lora_capability(
+            configured, provider, registry=self.module.LORA_CAPABILITY_REGISTRY
+        ).to_dict()
+        hook = object()
+        native_conditioning = __import__(
+            f"{PACKAGE}.py.util.regional.native_conditioning",
+            fromlist=["clip_with_hooks"],
+        )
+
+        def clip_with_hooks(clip, hooks):
+            clip.apply_hooks_to_conds = hooks
+            return clip
+
+        with mock.patch.object(
+            self.module,
+            "resolve_stack_paths",
+            return_value={selected["id"]: [["portrait.safetensors", 0.8, 0.6]]},
+        ), mock.patch.object(
+            self.module, "create_hook_groups", return_value={selected["id"]: hook}
+        ), mock.patch.object(
+            native_conditioning, "clip_with_hooks", side_effect=clip_with_hooks
+        ):
+            result = self.module.BVRegionalDetailerMaskNode().render(
+                regional,
+                torch.zeros((1, 120, 200, 3)),
+                object(),
+                DetailerClip(),
+                object(),
+                selected["id"],
+                global_influence=0.0,
+                background_influence=0.0,
+            )
+
+        self.assertTrue(any(metadata.get("hooks") is hook for _embedding, metadata in result[3]))
 
     def test_detailer_mask_rejects_generation_only_region(self):
         with self.assertRaisesRegex(ValueError, "not enabled for detailer"):

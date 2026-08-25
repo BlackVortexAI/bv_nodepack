@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .document import RegionalValidationError, parse_document
+from .context import context_document, is_v3_context, normalize_context
 
 
 LLM_PROVIDER = "BV_LLM_PROVIDER"
@@ -184,7 +185,7 @@ def preservation_issues(
     policy_id: str = "balanced_v1",
     creativity: float = 0.0,
 ) -> list[str]:
-    clean = parse_document(document)
+    clean = context_document(document)
     creative_level = _normalized_creativity(creativity)
     semantic_rewrite_allowed = (
         policy_id in {"anima_hybrid_v1", "natural_language_v1"}
@@ -302,7 +303,7 @@ def regional_policy_issues(
     policy_id: str = "balanced_v1",
     creativity: float = 0.0,
 ) -> list[str]:
-    clean = parse_document(document)
+    clean = context_document(document)
     creative_level = _normalized_creativity(creativity)
     issues: list[str] = []
     if policy_id == "anima_hybrid_v1":
@@ -364,7 +365,7 @@ def normalize_model_contracts(
     policy_id: str,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """Apply deterministic model syntax after structural verification, without another LLM call."""
-    clean = parse_document(document)
+    clean = context_document(document)
     normalized = copy.deepcopy(proposal)
     changes: list[str] = []
     if policy_id != "anima_hybrid_v1":
@@ -402,7 +403,7 @@ def normalize_model_contracts(
 
 
 def regional_source_warnings(document: Any) -> list[str]:
-    clean = parse_document(document)
+    clean = context_document(document)
     warnings: list[str] = []
     for index, region in enumerate(clean["regions"]):
         source = region["prompts"]["positive_source"]
@@ -526,7 +527,7 @@ class ComfyClipGenerateProvider:
 
 
 def source_digest(document: Any) -> str:
-    clean = parse_document(document)
+    clean = context_document(document)
     encoded = json.dumps(clean, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -652,7 +653,7 @@ def build_request(
     prompt_language: str = "hybrid_tags_and_language",
     creativity: float = 0.5,
 ) -> LLMRequest:
-    clean = parse_document(document)
+    clean = context_document(document)
     bundle = load_prompt_bundle()
     selected_policy = policy_id or bundle.default_policy
     if selected_policy not in bundle.policies:
@@ -724,7 +725,7 @@ def _closed_keys(value: Any, required: set[str], path: str, issues: list[str]) -
 
 
 def verify_response(document: Any, raw_text: str) -> dict[str, Any]:
-    clean = parse_document(document)
+    clean = context_document(document)
     if not isinstance(raw_text, str):
         raise EnhancementVerificationError(["response must be text"])
     if len(raw_text.encode("utf-8")) > MAX_RESPONSE_BYTES:
@@ -825,7 +826,7 @@ def _diff(document: dict[str, Any], proposal: dict[str, Any]) -> list[dict[str, 
 
 
 def enhancement_result(document: Any, response: LLMResponse, request: LLMRequest | None = None) -> dict[str, Any]:
-    clean = parse_document(document)
+    clean = context_document(document)
     base = {
         "schema": "bv.regional.enhancement_result",
         "version": 1,
@@ -864,17 +865,19 @@ def enhancement_result(document: Any, response: LLMResponse, request: LLMRequest
 
 
 def apply_enhancement(document: Any, result: Any) -> dict[str, Any]:
-    clean = parse_document(document)
+    context = normalize_context(document) if is_v3_context(document) else None
+    clean = context_document(context if context is not None else document)
+    unchanged = context.to_dict() if context is not None else clean
     if not isinstance(result, dict) or not result.get("valid"):
-        return clean
+        return unchanged
     if result.get("schema") != "bv.regional.enhancement_result" or result.get("version") != 1:
-        return clean
+        return unchanged
     if result.get("document_id") != clean["document_id"] or result.get("source_digest") != source_digest(clean):
-        return clean
+        return unchanged
     try:
         proposal = verify_response(clean, json.dumps(result.get("proposal"), ensure_ascii=False, separators=(",", ":")))
     except EnhancementVerificationError:
-        return clean
+        return unchanged
     enhanced = copy.deepcopy(clean)
     enhanced["prompts"] = copy.deepcopy(proposal["prompts"])
     for index, region in enumerate(enhanced["regions"]):
@@ -882,4 +885,11 @@ def apply_enhancement(document: Any, result: Any) -> dict[str, Any]:
             "positive_source": proposal["regions"][index]["positive_source"],
             "negative_source": proposal["regions"][index]["negative_source"],
         }
-    return parse_document(enhanced)
+    enhanced = parse_document(enhanced)
+    if context is None:
+        return enhanced
+    core = {
+        "version": 1,
+        **{key: value for key, value in enhanced.items() if key not in {"schema", "version"}},
+    }
+    return context.with_core(core).to_dict()
