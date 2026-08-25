@@ -107,3 +107,11 @@ Report reproducible bugs and feature requests through
 
 BV Node Pack is licensed under [GPL-3.0](LICENSE). Third-party attribution and
 provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+---
+
+## Continue with the BV Node Pack Wiki
+
+Installation details, complete node references, migration guidance,
+acknowledgements and task-oriented workflow guides are maintained in the
+**[BV Node Pack Wiki →](https://blackvortexai.github.io/bv_nodepack_wiki/)**
