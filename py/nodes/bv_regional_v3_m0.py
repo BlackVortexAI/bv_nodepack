@@ -152,13 +152,5 @@ class BVM0FakeMultiResourceConsumer:
         return total, " | ".join(selections)
 
 
-NODE_CLASS_MAPPINGS = {
-    "BV M0 Fake Resource Collector": BVM0FakeResourceCollector,
-    "BV M0 Fake Resource Consumer": BVM0FakeResourceConsumer,
-    "BV M0 Fake Multi Resource Consumer": BVM0FakeMultiResourceConsumer,
-}
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "BV M0 Fake Resource Collector": "BV M0 Fake Resource Collector",
-    "BV M0 Fake Resource Consumer": "BV M0 Fake Resource Consumer",
-    "BV M0 Fake Multi Resource Consumer": "BV M0 Fake Multi Resource Consumer",
-}
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}

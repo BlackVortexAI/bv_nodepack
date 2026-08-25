@@ -60,7 +60,7 @@ class BVLatentRandomAspectRatio:
     RETURN_TYPES = ("LATENT", "INT", "INT", "STRING")
     RETURN_NAMES = ("latent", "latent_width", "latent_height", "picked_ratio")
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/deprecated"
+    CATEGORY = "🌀 BV Node Pack/latent/Deprecated Legacy Nodes"
 
     def run(
         self,

@@ -26,7 +26,7 @@ class BVPipeConfigNode:
     RETURN_TYPES = (PIPE,)
     RETURN_NAMES = ("pipe",)
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/deprecated"
+    CATEGORY = "🌀 BV Node Pack/pipe/Deprecated Legacy Nodes"
 
     def run(self, names: str):
         # store config in the pipe object

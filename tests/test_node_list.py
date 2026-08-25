@@ -45,6 +45,35 @@ class NodeListTests(unittest.TestCase):
                 self.assertIsInstance(description, str)
                 self.assertTrue(description.strip())
 
+    def test_deprecated_nodes_live_below_their_product_families(self):
+        from py.nodes.bv_latent_random_ratio import BVLatentRandomAspectRatio
+        from py.nodes.bv_pipe import BVPipeNode
+        from py.nodes.bv_pipe_config import BVPipeConfigNode
+
+        self.assertEqual(
+            BVPipeNode.CATEGORY,
+            "🌀 BV Node Pack/pipe/Deprecated Legacy Nodes",
+        )
+        self.assertEqual(
+            BVPipeConfigNode.CATEGORY,
+            "🌀 BV Node Pack/pipe/Deprecated Legacy Nodes",
+        )
+        self.assertEqual(
+            BVLatentRandomAspectRatio.CATEGORY,
+            "🌀 BV Node Pack/latent/Deprecated Legacy Nodes",
+        )
+
+    def test_m0_feasibility_nodes_are_not_publicly_registered(self):
+        from py.nodes.bv_regional_v3_m0 import (
+            NODE_CLASS_MAPPINGS,
+            NODE_DISPLAY_NAME_MAPPINGS,
+        )
+
+        self.assertEqual(NODE_CLASS_MAPPINGS, {})
+        self.assertEqual(NODE_DISPLAY_NAME_MAPPINGS, {})
+        node_list = json.loads((ROOT / "node_list.json").read_text(encoding="utf-8"))
+        self.assertFalse(any(name.startswith("BV M0 Fake ") for name in node_list))
+
 
 if __name__ == "__main__":
     unittest.main()

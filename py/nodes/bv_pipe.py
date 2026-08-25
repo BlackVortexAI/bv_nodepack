@@ -44,7 +44,7 @@ class BVPipeNode:
     RETURN_TYPES = (PIPE,) + (ANY,) * 100
     RETURN_NAMES = ("pipe",) + tuple([f"out_{i:03d}" for i in range(1, 101)])
     FUNCTION = "run"
-    CATEGORY = "🌀 BV Node Pack/deprecated"
+    CATEGORY = "🌀 BV Node Pack/pipe/Deprecated Legacy Nodes"
 
     def run(self, pipe: Dict[str, Any], **kwargs):
         pipe = pipe or {}
