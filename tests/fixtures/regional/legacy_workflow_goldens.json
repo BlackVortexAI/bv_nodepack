@@ -54,5 +54,15 @@
       "provider_link_type": "BV_RUNTIME_RESOURCE_PROVIDER",
       "loop_link_types": ["BV_DETAILER_PLAN", "BV_DETAILER_LOOP_STATE", "BV_DETAILER_JOB", "FLOW_CONTROL"]
     }
+  ],
+  "subgraph_cases": [
+    {
+      "id": "m0-four-collector-subgraph",
+      "workflow": "tests/fixtures/regional/m0_subgraph_four_collectors.json",
+      "collector_count": 4,
+      "consumer_count": 1,
+      "provider_link_count": 4,
+      "binding_count": 4
+    }
   ]
 }

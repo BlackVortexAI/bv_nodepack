@@ -125,3 +125,28 @@ test("one corrupted node stays byte-identical while another Golden migrates", ()
     tone: "warning",
   });
 });
+
+test("ComfyUI-authored Subgraph Goldens preserve native links and stable bindings", () => {
+  for (const golden of goldens.subgraph_cases) {
+    const value = workflow(golden.workflow);
+    assert.equal(value.nodes.length, 1, golden.id);
+    assert.equal(value.definitions.subgraphs.length, 1, golden.id);
+    const definition = value.definitions.subgraphs[0];
+    assert.equal(value.nodes[0].type, definition.id, golden.id);
+    const collectors = definition.nodes.filter(node => node.type === "BV M0 Fake Resource Collector");
+    const consumers = definition.nodes.filter(node => node.type === "BV M0 Fake Multi Resource Consumer");
+    assert.equal(collectors.length, golden.collector_count, golden.id);
+    assert.equal(consumers.length, golden.consumer_count, golden.id);
+    assert.equal(definition.links.filter(link => link.type === "BV_RUNTIME_RESOURCE_PROVIDER_M0").length, golden.provider_link_count, golden.id);
+
+    const bindings = JSON.parse(consumers[0].widgets_values[0]);
+    assert.equal(bindings.length, golden.binding_count, golden.id);
+    for (const [index, binding] of bindings.entries()) {
+      const collector = collectors.find(node => node.widgets_values[1] === binding.collector_id);
+      assert.ok(collector, `${golden.id}: collector ${binding.collector_id} is not in the same definition`);
+      assert.ok(collector.widgets_values.slice(2, 4).includes(binding.resource_id), `${golden.id}: resource ${binding.resource_id} is unresolved`);
+      assert.ok(definition.links.some(link => link.origin_id === collector.id && link.target_id === consumers[0].id && link.target_slot === index), `${golden.id}: binding ${index + 1} has no native link`);
+    }
+    assert.deepEqual(JSON.parse(JSON.stringify(value)), value, `${golden.id}: save/reload JSON changed`);
+  }
+});
