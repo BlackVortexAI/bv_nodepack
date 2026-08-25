@@ -5,11 +5,25 @@ import React from "../ui/node_modules/react/index.js";
 import { renderToStaticMarkup } from "../ui/node_modules/react-dom/server.node.js";
 import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
 import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
+import { sanitizeM0MultiSelections, sanitizeM0SingleSelection } from "../ui/src/regional/m0Selections.ts";
 import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
 import { installM0CanvasVisibility, markM0NodeElement } from "../ui/src/regional/m0VisualProjection.ts";
 import { resolveM0LocalLinkedCollector } from "../ui/src/regional/m0LocalGraph.ts";
 
 const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resource-1",label:"Alpha"}]}];
+
+test("Subgraph conversion preserves bindings while native links are temporarily unavailable",()=>{
+  const original=[{binding_id:"binding-1",collector_id:"collector-1",resource_id:"resource-1"}];let disconnected=0;
+  const node={widgets:[{name:"resource_bindings",value:JSON.stringify(original)}],inputs:[{name:"resource_provider_1",type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7}],graph:{_nodes:[],links:new Map()},disconnectInput(){disconnected++}};
+  sanitizeM0MultiSelections(node);
+  assert.deepEqual(JSON.parse(node.widgets[0].value),original);assert.equal(node.inputs[0].link,7);assert.equal(disconnected,0);
+});
+
+test("Subgraph conversion preserves a single unresolved selection and pending link",()=>{
+  const node={widgets:[{name:"collector_id",value:"collector-1"},{name:"resource_id",value:"resource-1"}],inputs:[{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",link:7}],graph:{_nodes:[],links:new Map()},disconnectInput(){throw new Error("pending native link was disconnected")}};
+  sanitizeM0SingleSelection(node);
+  assert.deepEqual(node.widgets.map(item=>item.value),["collector-1","resource-1"]);assert.equal(node.inputs[0].link,7);
+});
 
 test("a catalog match without a real link stays visibly unresolved",()=>{
   const html=renderToStaticMarkup(React.createElement(ResourcePicker,{collectors,collectorId:"collector-1",resourceId:"resource-1",resolved:false,onSelection(){}}));
@@ -153,6 +167,7 @@ test("Nodes 2.0 provider ports are hidden by their stable type, including subgra
 test("the spike uses ordinary graph links without prompt hooks or name fallback",()=>{
   const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
   const traversal=readFileSync(new URL("../ui/src/regional/m0LocalGraph.ts",import.meta.url),"utf8");
+  const selections=readFileSync(new URL("../ui/src/regional/m0Selections.ts",import.meta.url),"utf8");
   assert.match(source,/source\.connect\(output,node,input\)/);
   assert.match(traversal,/source\?\.graph===node\.graph/);
   assert.doesNotMatch(source,/graphToPrompt|queuePrompt|api\.queuePrompt/);
@@ -160,7 +175,8 @@ test("the spike uses ordinary graph links without prompt hooks or name fallback"
   assert.match(source,/input\.hidden=true/);
   assert.doesNotMatch(source,/MutationObserver/);
   assert.doesNotMatch(source,/allM0WorkflowGraphs|planM0CollectorConnection/);
-  assert.match(source,/sanitizeSingleSelection/);
+  assert.match(source,/sanitizeM0SingleSelection/);
+  assert.doesNotMatch(selections,/disconnectInput|collector_id=""|resource_id=""/);
   assert.match(source,/draw\(\);setDebug\(node,Boolean\(node\.properties\?\.bvM0DebugVisible\),false\)/);
   assert.match(source,/getMinHeight:\(\)=>/);
   assert.match(source,/host\.parentElement\?\.style\.position==="fixed"/);
