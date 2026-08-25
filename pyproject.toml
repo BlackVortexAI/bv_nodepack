@@ -1,6 +1,6 @@
 [project]
 name = "bv_nodepack"
-version = "0.18.2"
+version = "1.0.0"
 description = "Visual regional prompting with sequential regional detailer plans, detector-aware Impact integration, regional LoRA hooks, native composition modes and model-specific attention backends, plus Smart Pipes and ComfyUI workflow tools."
 authors = [
   {name = "BlackVortex", email = "blackvortexx@proton.me"}
@@ -12,7 +12,7 @@ license = {text = "GNU General Public License v3"}
 [project.urls]
 Repository = "https://github.com/BlackVortexAI/bv_nodepack"
 BugTracker = "https://github.com/BlackVortexAI/bv_nodepack/issues"
-Documentation = "https://github.com/BlackVortexAI/bv_nodepack/wiki"
+Documentation = "https://blackvortexai.github.io/bv_nodepack_wiki/"
 
 
 [tool.comfy]
