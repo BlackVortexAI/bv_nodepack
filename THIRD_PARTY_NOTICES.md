@@ -77,6 +77,9 @@ SOFTWARE.
 activation-space LoRA/LoKr techniques from revision `307081f2` of
 [`ComfyUI-Krea2-Regional`](https://github.com/januspluto/ComfyUI-Krea2-Regional).
 
+The following license text is reproduced verbatim from that pinned revision;
+its upstream copyright line contains the placeholder shown below.
+
 MIT License
 
 Copyright (c) 2026 YOUR_NAME

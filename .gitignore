@@ -4,8 +4,8 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Local frontend dependencies
 ui/node_modules/
-ui/dist/
 
 .idea/
 .vscode/
@@ -13,3 +13,9 @@ ui/dist/
 
 # Local documentation planning (not published)
 BV_DOCS_PLAN.local.md
+
+# Local Codex configuration
+.codex/
+.codex-worktrees/
+.codex-test
+.abacusai/
