@@ -280,6 +280,8 @@ def materialize_detailer_plan(
     return plan
 
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Legacy plan -> V3 resource bindings.
+# Remove after saved plans carry explicit same-graph collector_id/resource_id pairs.
 def migrate_detailer_plan_v1(
     value: Any,
     config: Any,

@@ -113,6 +113,8 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
             }})
 
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): LoRA capability v1 -> v2.
+# Remove together with v1 validation/registration after old workflows have migrated.
 def migrate_lora_capability_v1(payload: dict[str, Any]) -> dict[str, Any]:
     validate_lora_capability(payload)
     collector_id = payload["collector_id"]
@@ -127,6 +129,8 @@ def migrate_lora_capability_v1(payload: dict[str, Any]) -> dict[str, Any]:
     return migrated
 
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): LoRA capability v2 -> v3.
+# Remove together with v2 validation/registration after old workflows have migrated.
 def migrate_lora_capability_v2(payload: dict[str, Any]) -> dict[str, Any]:
     validate_lora_capability(payload)
     migrated = {"version": 3, "entries": payload["entries"], "scopes": {}}

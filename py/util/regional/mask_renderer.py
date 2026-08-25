@@ -101,6 +101,8 @@ def _feather(mask: torch.Tensor, amount: float, width: int, height: int) -> torc
 
 def render_region(region: dict[str, Any], width: int, height: int) -> torch.Tensor:
     layers: dict[str, list[dict[str, Any]]] = {}
+    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Pre-layer geometry fallback.
+    # Remove after documents without layer_id are no longer accepted by document migration.
     legacy_layer = next((shape["id"] for shape in region["geometry"] if "layer_id" not in shape), "__legacy__")
     for shape in region["geometry"]:
         layer_id = shape.get("layer_id", legacy_layer)

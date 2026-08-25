@@ -68,6 +68,8 @@ CATEGORY_MODEL_FLUX2_KLEIN = f"{CATEGORY_MODELS}/FLUX.2 Klein 9B"
 CATEGORY_MODEL_KREA2 = f"{CATEGORY_MODELS}/Krea 2"
 CATEGORY_MODEL_ANIMA = f"{CATEGORY_MODELS}/Anima"
 DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",", ":"))
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA bindings JSON/output.
+# Remove with the lora_bindings output after saved V2 workflows have passed the compatibility window.
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_V3_JSON = '{"version":3,"entries":[],"steps":[]}'
 DEFAULT_DETAILER_V3_JSON = '{"version":1,"jobs":[]}'
@@ -108,6 +110,8 @@ class BVRegionalPromptNode:
                 ),
             },
             "optional": {
+                # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Persisted V2 bindings payload.
+                # Remove with the lora_bindings output after workflow migration support expires.
                 "lora_bindings_json": (
                     "STRING",
                     {"default": DEFAULT_LORA_BINDINGS_JSON, "multiline": True, "dynamicPrompts": False},
@@ -129,6 +133,7 @@ class BVRegionalPromptNode:
             },
         }
 
+    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Second output is V2 wiring.
     RETURN_TYPES = (REGIONAL, BINDINGS)
     RETURN_NAMES = ("regional", "lora_bindings")
     FUNCTION = "build"
@@ -180,6 +185,8 @@ class BVLoraStackCollectorNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): V2 stack registry bridge.
+                # Remove only when named stacks expose the V3 provider contract without this adapter.
                 "lora_registry": (REGISTRY, {}),
                 "collector_id": ("STRING", {"default": "", "multiline": False}),
             }
@@ -235,6 +242,8 @@ def _context_lora_scopes(regional):
 
 
 def _consumer_lora_scopes(regional, document, lora_registry=None, lora_bindings=None):
+    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Prefer the V3 context capability.
+    # Remove this sidecar fallback together with every lora_registry/lora_bindings consumer port.
     if lora_registry is not None or lora_bindings is not None:
         return resolve_scope_stacks(lora_registry, lora_bindings, document)
     return _context_lora_scopes(regional)
@@ -500,6 +509,7 @@ class BVRegionalNativeConditioningNode:
                     },
                 ),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -544,6 +554,7 @@ class BVRegionalSDXLAttentionNode:
                     {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001},
                 ),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -588,6 +599,7 @@ class BVRegionalZImageAttentionNode:
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -624,6 +636,7 @@ class BVRegionalFlux2KleinAttentionNode:
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -667,12 +680,15 @@ class BVRegionalKrea2AttentionNode:
                 "attention_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "start_percent": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001}),
                 "end_percent": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}),
+                # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): Compatibility execution mode.
+                # Remove only after token-gated Krea 2 matches supported published LoRA behavior.
                 "regional_lora_mode": (["multipass_legacy", "token_gated_singlepass"], {
                     "default": "token_gated_singlepass",
                     "tooltip": "Legacy evaluates one masked model pass per distinct LoRA stack. "
                                "Token-gated single-pass is experimental and changes results.",
                 }),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -709,6 +725,7 @@ class BVRegionalKrea2AttentionNode:
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
             document, clip, hook_groups
         )
+        # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): See the INPUT_TYPES removal gate above.
         if regional_lora_mode == "multipass_legacy":
             positive, negative = apply_attention_hook_passes(
                 positive, negative, document, scope_stacks, hook_groups
@@ -760,11 +777,14 @@ class BVRegionalAnimaConditioningNode:
                 "base_ratio": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "cross_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
                 "self_inject_every_n_blocks": ("INT", {"default": 1, "min": 1, "max": 100, "step": 1}),
+                # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): Compatibility execution mode.
+                # Remove only after token-gated Anima matches supported published LoRA behavior.
                 "regional_lora_mode": (["multipass_legacy", "token_gated_singlepass"], {
                     "default": "multipass_legacy",
                     "tooltip": "Legacy preserves published Anima results. Single-pass is an experimental token-gated model-LoRA path.",
                 }),
             },
+            # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
             "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
         }
 
@@ -809,6 +829,7 @@ class BVRegionalAnimaConditioningNode:
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
+        # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): See the INPUT_TYPES removal gate above.
         if regional_lora_mode == "multipass_legacy":
             positive, negative = apply_attention_hook_passes(
                 positive, negative, document, scope_stacks, hook_groups

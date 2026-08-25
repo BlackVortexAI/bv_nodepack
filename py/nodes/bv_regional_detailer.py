@@ -68,6 +68,8 @@ class BVRegionalDetailerPlanNode:
                 "config_json": ("STRING", {"default": "", "multiline": True}),
             },
             "optional": {
+                # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 detector sidecar input.
+                # Remove after migrated plans resolve detectors exclusively through V3 provider links.
                 "detector_registry": (DETECTOR_REGISTRY, {}),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
                 **{
@@ -118,6 +120,7 @@ class BVRegionalDetailerPlanNode:
             detector_id = job.get("detector_id")
             if detector_id is not None:
                 resolve_detector(detector_registry, detector_id)
+        # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Preserve V2 executor lookup.
         plan["detector_registry"] = detector_registry
         summary = "\n".join(
             f"{index + 1}. {' + '.join(job['region_names'])}"
@@ -161,6 +164,7 @@ class BVRegionalDetailerJobNode:
             raise ValueError("BV Detailer Loop Job Resolver requires a single IMAGE shaped B,H,W,C")
         job = detailer_job_at(detailer_plan, job_index)
         detector_id = job.get("detector_id")
+        # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Execute unmigrated V1/V2 jobs.
         if "detector_binding" not in job:
             job["detector_binding"] = (
                 resolve_detector(detailer_plan.get("detector_registry"), detector_id)
@@ -231,6 +235,8 @@ class BVDetectorRegistryNode:
             },
         }
 
+    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): First output is the V2 registry.
+    # Remove it only with the detector_registry plan input; resource_provider is the V3 output.
     RETURN_TYPES = (DETECTOR_REGISTRY, "INT", "STRING", RUNTIME_PROVIDER)
     RETURN_NAMES = ("detector_registry", "detector_count", "registry_summary", "resource_provider")
     FUNCTION = "collect"
@@ -252,6 +258,7 @@ class BVDetectorRegistryNode:
             }
         except json.JSONDecodeError as error:
             raise ValueError("detector registry configuration is invalid JSON") from error
+        # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Accept config v1 without collector_id.
         if not isinstance(parsed, dict) or parsed.get("schema") != "bv.detector_registry_config" or parsed.get("version") not in {1, 2}:
             raise ValueError("detector registry configuration must be bv.detector_registry_config v1 or v2")
         collector_id = str(parsed.get("collector_id", "")).strip() if parsed.get("version") == 2 else ""

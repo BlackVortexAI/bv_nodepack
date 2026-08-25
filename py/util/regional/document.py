@@ -249,6 +249,8 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
     return list(dict.fromkeys(issues))
 
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Regional document v1 -> v2.
+# Remove only after published/saved v1 workflows have passed the compatibility window.
 def migrate_document(document: Any) -> dict[str, Any]:
     migrated = copy.deepcopy(document)
     if not isinstance(migrated, dict) or migrated.get("schema") != "bv.regional":
