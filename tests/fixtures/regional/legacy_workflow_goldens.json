@@ -1,0 +1,58 @@
+{
+  "schema": "bv.regional.legacy-workflow-goldens",
+  "version": 1,
+  "cases": [
+    {
+      "id": "anima-single-regional-lora-v1",
+      "workflow": "examples/workflows/anima-regional-skin-tone-lora-hybrid-035.json",
+      "prompt_node_id": 1,
+      "document_version_before": 1,
+      "region_count": 2,
+      "named_lora_stack_count": 1,
+      "legacy_links": [
+        { "from_node": 24, "from_slot": 0, "to_node": 26, "to_slot": 2, "type": "BV_LORA_STACK_REGISTRY" },
+        { "from_node": 1, "from_slot": 1, "to_node": 26, "to_slot": 3, "type": "BV_REGIONAL_LORA_BINDINGS" }
+      ],
+      "migration": {
+        "document_version_after": 2,
+        "region_usage": "generation",
+        "assumed_defaults": ["region usage = generation"]
+      }
+    },
+    {
+      "id": "anima-dual-regional-lora-v1",
+      "workflow": "examples/workflows/anima-dual-regional-character-loras-hybrid-035.json",
+      "prompt_node_id": 1,
+      "document_version_before": 1,
+      "region_count": 2,
+      "named_lora_stack_count": 2,
+      "legacy_links": [
+        { "from_node": 31, "from_slot": 0, "to_node": 24, "to_slot": 1, "type": "BV_LORA_STACK_REGISTRY" },
+        { "from_node": 24, "from_slot": 0, "to_node": 26, "to_slot": 2, "type": "BV_LORA_STACK_REGISTRY" },
+        { "from_node": 1, "from_slot": 1, "to_node": 26, "to_slot": 3, "type": "BV_REGIONAL_LORA_BINDINGS" }
+      ],
+      "migration": {
+        "document_version_after": 2,
+        "region_usage": "generation",
+        "assumed_defaults": ["region usage = generation"]
+      }
+    }
+  ],
+  "detailer_cases": [
+    {
+      "id": "detailer-two-jobs-two-resources",
+      "workflow": "examples/workflows/bv-regional-v3-detailer-loop-two-jobs.json",
+      "prompt_node_id": 7,
+      "plan_node_id": 8,
+      "collector_node_id": 15,
+      "expected_region_ids": [
+        "6ee983f7-6a0b-44cf-b05c-64810741449c",
+        "835b5c7b-29f4-451f-ac2e-948527b8c51d"
+      ],
+      "expected_resource_ids": ["Face", "Hand"],
+      "expected_collector_id": "f3993446-d59a-49a3-9918-14817cadcdb9",
+      "provider_link_type": "BV_RUNTIME_RESOURCE_PROVIDER",
+      "loop_link_types": ["BV_DETAILER_PLAN", "BV_DETAILER_LOOP_STATE", "BV_DETAILER_JOB", "FLOW_CONTROL"]
+    }
+  ]
+}
