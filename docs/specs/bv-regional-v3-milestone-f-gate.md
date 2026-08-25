@@ -24,12 +24,12 @@ push remain separate states.
 | Migration materializes defaults and marks the graph dirty | Node harness Golden expectations | Automated |
 | Legacy sidecar remains byte-for-byte unchanged | Node harness Golden expectations | Automated |
 | Detailer/Detector/Loop identity and links | Versioned two-job workflow Golden | Automated |
-| Migration failure isolation and aggregate report | `regional_milestone_e.test.mjs` | Automated; add corpus mutation |
-| Save and reload without a repeated migration | Real workflow acceptance from Milestone E | Live verified; add deterministic Golden |
+| Migration failure isolation and aggregate report | `regional_milestone_e.test.mjs`; corrupted-node corpus mutation in `regional_milestone_f_goldens.test.mjs` | Automated |
+| Save and reload without a repeated migration | Real workflow acceptance from Milestone E; migrated-workflow reload Golden | Automated and live verified |
 | Root graph, copied group and consumer-only copy | Existing M0/LoRA graph tests | Automated; add corpus fixture |
-| Subgraph and cross-graph rejection | Existing M0 graph tests | Automated; add corpus fixture |
+| Subgraph and cross-graph rejection | M0 graph tests; ComfyUI-authored four-collector Subgraph Golden | Automated and live verified |
 | Connected Legacy ports and manual migration guidance | Milestone E tests and live acceptance | Automated and live verified |
-| Broken collector/resource/region references | Existing focused tests | Automated; add corpus mutations |
+| Broken collector/resource/region references | Focused LoRA/Detailer/M0 fail-closed tests and Detailer Golden mutations | Automated |
 | Legacy Attention/Conditioning execution | Existing backend regression tests | Automated; add corpus index |
 
 ### 2. Mandatory functional contract
@@ -39,12 +39,20 @@ The complete mandatory acceptance list remains authoritative in
 test or an explicit fresh-session live step. A passing aggregate test count alone
 is not acceptance evidence.
 
-Current baseline on 2026-08-25:
+Current baseline on 2026-08-25 after the Subgraph regression fix:
 
-- Python: 357 passed;
-- frontend: 355 passed before the new Milestone F Goldens;
+- Python: 358 passed;
+- frontend: 363 passed;
 - TypeScript typecheck: passed;
-- focused Milestone F Goldens: 3 passed.
+- production frontend build: passed;
+- focused Milestone F Goldens: 6 passed.
+
+The mandatory list is covered by named focused suites for document and capability
+migration, immutable context transforms, unknown/newer capability handling,
+same-graph resource resolution, LoRA operations and live cache keys,
+Detailer/Detector planning, Legacy UX, persisted drafts/layout recovery, and
+frontend/backend workflow Goldens. The final fresh-session matrix below remains
+the release-closing evidence and is not replaced by this automated coverage.
 
 ### 3. BV Wiki documentation
 
@@ -60,8 +68,10 @@ Required public documentation:
 - concise repository README links replacing duplicated long-form guidance only
   after the Wiki is ready and verified.
 
-The Wiki workspace is `X:\bv_node_wiki`. Its existing uncommitted work is treated
-as foreign until its ownership and production foundation are explicitly reconciled.
+Renderer-neutral drafts currently live under `X:\bv_node_wiki\content`. They are
+not yet linked from navigation or treated as published because the Wiki production
+foundation is parallel work. All other existing uncommitted Wiki work remains
+foreign.
 
 ### 4. Fresh-session release verification
 
