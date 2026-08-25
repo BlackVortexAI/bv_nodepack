@@ -61,12 +61,15 @@ export function geometryMaskGroups(geometries: Geometry[]): GeometryLayer[] {
 export function parseDocument(value: unknown): RegionalDocument {
     const document = typeof value === "string" ? JSON.parse(value) : clone(value);
     if (document?.schema !== "bv.regional" || ![1, 2].includes(document?.version) || !Array.isArray(document?.regions)) throw new Error("Not a valid BV_REGIONAL document");
+    // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Workflow document v1 -> v2.
+    // Remove v1 acceptance after saved workflows have passed the migration window.
     if (document.version === 1) {
         for (const region of document.regions as Region[]) region.usage = "generation";
         document.version = 2;
     }
     for (const region of document.regions as Region[]) {
         if (!["generation", "detailer", "both"].includes(region.usage)) throw new Error(`Invalid region usage: ${region.usage}`);
+        // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Pre-layer geometry repair.
         const legacyLayerId = region.geometry.find(geometry => !geometry.layer_id)?.id;
         region.geometry.forEach((geometry, index) => {
             geometry.enabled ??= true;

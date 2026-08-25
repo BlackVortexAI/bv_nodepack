@@ -1,6 +1,9 @@
 import torch
 import torch.nn.functional as F
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire legacy latent ratio node.
+# Remove the module and its node-list entry after workflows use BV Empty Latent Random Ratio.
+
 
 def _pick_from_seed(seed: int, items: list):
     if not items:

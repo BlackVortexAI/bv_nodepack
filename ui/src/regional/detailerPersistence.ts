@@ -14,6 +14,8 @@ export const detailerBackendWidgetValues = (widgets: WidgetLike[] | undefined): 
 export const normalizeDetailerWidgetValues = (values: unknown): unknown => {
     if (!Array.isArray(values)) return values;
 
+    // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Positional widget repair.
+    // Remove after workflows from early Detailer builds have passed the migration window.
     // Early Detailer builds inserted the visual region selector before the primary
     // influence. LiteGraph persisted serialize:false as a positional null placeholder.
     if (

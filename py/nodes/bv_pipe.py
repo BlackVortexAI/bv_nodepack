@@ -4,6 +4,9 @@ from typing import Dict, Any, List
 
 PIPE = "BV_PIPE"
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire BV Pipe node contract.
+# Remove the module and its node-list entry after saved workflows have been migrated to BV Smart Pipe.
+
 
 class AnyType(str):
     # ComfyUI type-compare hack: makes "ANY" compatible with everything

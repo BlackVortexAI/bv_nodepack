@@ -1,5 +1,5 @@
-/* Compatibility exports for existing callers. Implementations live in
-   ui/components; new code imports from that module directly. */
+/* BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Compatibility exports.
+   Remove this module after every caller imports implementations from ui/components directly. */
 import React, { ReactNode } from "react";
 import { FieldFrame, NumberField, NumberFieldProps, SelectField, TextareaField } from "./components";
 

@@ -104,6 +104,8 @@ export function defaultEditorState(viewport = { width: window.innerWidth, height
 }
 
 export function normalizeEditorState(value: unknown, viewport = { width: window.innerWidth, height: window.innerHeight }): EditorViewState {
+    // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Normalize incomplete early UI state.
+    // Remove rect-tool and position-only quick-window fallbacks after old local state expires.
     const defaults = defaultEditorState(viewport), input = value && typeof value === "object" ? value as Partial<EditorViewState> : {};
     const mode: EditorMode = input.mode === "floating" ? "floating" : "workspace";
     const windows = input.windows && typeof input.windows === "object" ? input.windows : defaults.windows;

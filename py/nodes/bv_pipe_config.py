@@ -4,6 +4,9 @@ from typing import Dict, Any, List
 
 PIPE = "BV_PIPE"
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire BV Pipe Config node.
+# Remove the module and its node-list entry together with BV Pipe after the workflow compatibility window.
+
 
 def _parse_names(raw: str, max_count: int = 100) -> List[str]:
     items: List[str] = []

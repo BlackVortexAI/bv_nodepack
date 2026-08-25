@@ -1,6 +1,9 @@
 export const SHOW_LEGACY_PORTS_SETTING_ID="BV.Regional.ShowLegacyPorts";
 export const LEGACY_USAGE_EVENT="bv-regional-legacy-usage";
 
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire Regional sidecar-port UX.
+// Remove this module, its command/setting hooks, and canvas projection branches with the ports.
+
 type Slot={name?:string;type?:string;link?:unknown;links?:unknown[]|null;hidden?:boolean;__bvLegacyPort?:boolean;__bvLegacySticky?:boolean;__bvLegacyWasConnected?:boolean;__bvM0PortHidden?:boolean;__bvM0VisualHidden?:boolean};
 type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void};
 export type LegacyPortDescriptor={direction:"input"|"output";name:string;type:string;guidance:string};

@@ -380,6 +380,8 @@ def serialize_context(value: Any, *, registry: CapabilityRegistry | None = None,
 
 
 def context_document(value: Any, *, registry: CapabilityRegistry | None = None) -> dict[str, Any]:
+    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V3 context -> V2 document projection.
+    # Remove after every Regional consumer reads core/capabilities without the compatibility projection.
     """Return the validated v2-compatible document projection used by existing consumers."""
     core = normalize_context(value, registry=registry).core
     return {

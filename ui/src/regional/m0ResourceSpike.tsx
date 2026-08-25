@@ -78,6 +78,8 @@ function connectMulti(node:any,index:number,collectorId:string){
     if(source&&input>=0&&output>=0)source.connect(output,node,input);
     setMultiDebug(node,Boolean(node.properties?.bvM0DebugVisible));refreshCollector(previous);
 }
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Fixed-position DOM-widget repair.
+// Remove when supported ComfyUI builds all use the current node DOM layout contract.
 function syncLegacyPickerLayout(node:any,host:HTMLElement){
     const legacy=host.parentElement?.style.position==="fixed";
     if(!legacy){host.style.transform="";host.style.maxHeight="";host.style.overflowY="";return;}

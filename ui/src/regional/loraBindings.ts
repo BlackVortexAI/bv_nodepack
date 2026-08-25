@@ -1,4 +1,6 @@
 export type NamedLoraStack = { id: string; name: string; nodeId: string };
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire V2 LoRA bindings model.
+// Remove this module after workflow loading no longer accepts lora_bindings_json or sidecar wiring.
 export type RegionalLoraBindings = { schema: "bv.regional.lora_bindings"; version: 1; document_id: string; global_stack_id: string | null; regions: Record<string, string> };
 export type RegionalEditorSnapshot<T extends { document_id: string; regions: Array<{ id: string }> }> = { document: T; loraBindings: RegionalLoraBindings };
 export const emptyLoraBindings = (documentId: string): RegionalLoraBindings => ({ schema: "bv.regional.lora_bindings", version: 1, document_id: documentId, global_stack_id: null, regions: {} });

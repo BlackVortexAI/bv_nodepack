@@ -7,6 +7,8 @@ from threading import RLock
 from typing import Any
 
 
+# BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Headerless legacy tag CSV format.
+# Remove the category map and _legacy_candidates once configured datasets require named columns.
 LEGACY_CATEGORIES = {
     "0": "general",
     "1": "artist",

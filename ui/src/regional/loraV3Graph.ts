@@ -95,6 +95,8 @@ export function connectLocalLoraCollectors(consumer:any,collectors:(any|null)[])
     return linkedLocalLoraCollectors(consumer).slice(0,collectors.length).every((collector,index)=>collector===collectors[index]);
 }
 
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Single resource_provider -> ordinal V3 input.
+// Remove after workflows saved before multi-collector support have passed the migration window.
 export function migrateLegacyLoraCollectorLink(consumer:any){
     const legacyIndex=consumer.inputs?.findIndex((item:any)=>item.name===LORA_PROVIDER_SLOT)??-1;if(legacyIndex<0||consumer.inputs?.[legacyIndex]?.link==null)return false;
     const link=graphLink(consumer.graph,consumer.inputs[legacyIndex].link),source=link&&consumer.graph?.getNodeById?.(link.origin_id);if(!source||source.graph!==consumer.graph)return false;

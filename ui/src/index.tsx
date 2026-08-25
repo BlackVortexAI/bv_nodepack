@@ -826,6 +826,8 @@ comfyApp.registerExtension({
                 return result;
             };
             nodeType.prototype.onConfigure = function (data: any) {
+                // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Prototype widget order.
+                // Remove after Remote LLM workflows saved before the final widget schema expire.
                 // Prototype workflows stored the environment-variable name between model and reasoning.
                 if (Array.isArray(data?.widgets_values) && data.widgets_values.length >= 6
                     && /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(data.widgets_values[3] ?? ""))) {

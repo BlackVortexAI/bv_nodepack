@@ -2,6 +2,8 @@ import type { LoraV3Config } from "./LoraV3ResourcePickerPanel";
 
 export const emptyLoraV3Config=():LoraV3Config=>({version:3,entries:[],steps:[]});
 
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): LoRA config v1/v2 -> v3.
+// Remove old-version acceptance and collector_id lifting after saved workflows have migrated.
 const migrateEntry=(entry:any,collectorId:string|null)=>entry?.source?.kind==="external"?{...entry,source:{...entry.source,collector_id:String(entry.source.collector_id??collectorId??"")}}:entry;
 
 export function parseLoraV3Config(value:unknown):LoraV3Config{

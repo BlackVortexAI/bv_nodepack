@@ -87,6 +87,8 @@ export function applyRegionalPrimitiveDraft(
     return { canonical, draft: { schema: "bv.regional.editor-draft", version: 1, raw: structuredClone(raw), issues } };
 }
 
+// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Workflow-load migration coordinator.
+// Remove with document v1 and LoRA config v1/v2 parsers once old workflow loading is unsupported.
 export function migrateRegionalNode(node: NodeLike): RegionalMigrationResult {
     const result: RegionalMigrationResult = { nodeId: String(node.id ?? ""), nodeTitle: node.title || "BV Regional node", migrated: false, assumedDefaults: [] };
     const candidates: Array<{ target: Widget; value: string }> = [];
