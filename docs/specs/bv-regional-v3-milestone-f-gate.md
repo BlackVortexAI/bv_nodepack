@@ -26,7 +26,7 @@ push remain separate states.
 | Detailer/Detector/Loop identity and links | Versioned two-job workflow Golden; fresh-session v2 Detailer/Loop execution | Automated and live verified |
 | Migration failure isolation and aggregate report | `regional_milestone_e.test.mjs`; corrupted-node corpus mutation in `regional_milestone_f_goldens.test.mjs` | Automated |
 | Save and reload without a repeated migration | Real workflow acceptance from Milestone E; migrated-workflow reload Golden | Automated and live verified |
-| Root graph, copied group and consumer-only copy | Root-graph M0 Golden plus focused M0/LoRA copy tests | Automated |
+| Root graph, copied group and consumer-only copy | Root-graph M0 Golden plus focused M0/LoRA copy tests and fresh-session UI copy/paste | Automated and live verified |
 | Subgraph and cross-graph rejection | M0 graph tests; ComfyUI-authored four-collector Subgraph Golden | Automated and live verified |
 | Connected Legacy ports and manual migration guidance | Milestone E tests and live acceptance | Automated and live verified |
 | Broken collector/resource/region references | Focused LoRA/Detailer/M0 fail-closed tests and Detailer Golden mutations | Automated |
@@ -104,7 +104,16 @@ Recorded fresh-session evidence on 2026-08-25:
   collector/resource IDs; scoped Merge, Replace, Subtract and Clear each forced
   a downstream execution and produced distinct image outputs (`00281` through
   `00284`) from isolated workflow copies.
+- copying a complete four-provider M0 graph produced a second consumer with four
+  remapped native links; copying that consumer alone produced no links and left
+  its visible picker values unresolved instead of reconnecting by name;
+- an editor tab was floated, the adjusted state was detected, and Factory reset
+  restored the dock; the saved Milestone E old-layout fixture still exposed the
+  newly registered Document tab and could be reset to Factory;
+- invalid canvas-width draft fallback and its `Open field` navigation to the
+  Document tab were live accepted during the Milestone E test session.
 
-Copy variants, layout recovery and invalid-draft fallback remain open live checks.
+All fresh-session checks listed above have live evidence. Milestone completion
+still requires a final evidence audit and documentation/release-state review.
 
 Milestone F must not be closed solely from this checklist or automated tests.
