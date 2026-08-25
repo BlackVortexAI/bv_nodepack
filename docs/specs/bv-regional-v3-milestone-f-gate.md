@@ -100,8 +100,11 @@ Recorded fresh-session evidence on 2026-08-25:
 - v2 Detailer/Detector/Loop loaded without a false LoRA migration failure and
   completed an uncached execution with image output;
 - V3 Subgraph workflow loaded without migration or dirty-state mutation.
+- a production-like SDXL graph resolved two collectors with independent stable
+  collector/resource IDs; scoped Merge, Replace, Subtract and Clear each forced
+  a downstream execution and produced distinct image outputs (`00281` through
+  `00284`) from isolated workflow copies.
 
-The two-collector/resource operation matrix, copy variants, layout recovery and
-invalid-draft fallback remain open live checks.
+Copy variants, layout recovery and invalid-draft fallback remain open live checks.
 
 Milestone F must not be closed solely from this checklist or automated tests.
