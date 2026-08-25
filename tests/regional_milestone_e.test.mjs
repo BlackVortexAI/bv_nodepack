@@ -32,6 +32,13 @@ test("migration summaries aggregate success, failure and assumed defaults",()=>{
   assert.deepEqual(migrationReportMessage([{nodeId:"1",nodeTitle:"A",migrated:true,assumedDefaults:["x"]},{nodeId:"2",nodeTitle:"B",migrated:false,assumedDefaults:[],error:"bad"}]),{title:"Regional migration needs attention",message:"1 migrated, 1 failed · Defaults: x.",tone:"warning"});
 });
 
+test("generic config_json migrates only on the Regional LoRA node",()=>{
+  const detailer={id:9,type:"BV Regional Detailer Plan",widgets:[{name:"config_json",value:JSON.stringify({version:1,jobs:[]})}]};
+  const ignored=migrateRegionalNode(detailer);assert.equal(ignored.migrated,false);assert.equal(ignored.error,undefined);
+  const lora={id:10,type:"BV Regional LoRA",widgets:[{name:"config_json",value:JSON.stringify({version:1,entries:[]})}]};
+  const migrated=migrateRegionalNode(lora);assert.equal(migrated.migrated,true);assert.equal(migrated.error,undefined);assert.equal(JSON.parse(lora.widgets[0].value).version,3);
+});
+
 test("old layouts remain unchanged and report newly registered namespaced panels",()=>{
   const saved={layout:{type:"row",children:[{type:"tabset",children:[{type:"tab",id:"bv.regional.canvas",component:"canvas"}]}]},borders:[]};
   assert.deepEqual([...layoutPanelIds(saved)],["bv.regional.canvas"]);

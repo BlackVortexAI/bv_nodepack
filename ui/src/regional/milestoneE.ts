@@ -31,12 +31,15 @@ type Widget = { name?: string; value?: unknown; callback?: (value: unknown) => v
 type NodeLike = {
     id?: string | number;
     title?: string;
+    type?: string;
+    comfyClass?: string;
     properties?: Record<string, unknown>;
     widgets?: Widget[];
     graph?: { change?: () => void; setDirtyCanvas?: (foreground: boolean, background: boolean) => void };
 };
 
 const widget = (node: NodeLike, name: string) => node.widgets?.find(item => item.name === name);
+const nodeClass = (node: NodeLike) => String(node.comfyClass ?? node.type ?? "");
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
 export function parseRegionalEditorDraft(value: unknown): RegionalEditorDraft | null {
@@ -96,7 +99,8 @@ export function migrateRegionalNode(node: NodeLike): RegionalMigrationResult {
             if (before?.version === 1) result.assumedDefaults.push("region usage = generation");
             if (String(documentWidget.value ?? "") !== value) candidates.push({ target: documentWidget, value });
         }
-        const loraWidget = widget(node, "lora_v3_config_json") ?? widget(node, "config_json");
+        const loraWidget = widget(node, "lora_v3_config_json")
+            ?? (nodeClass(node) === "BV Regional LoRA" ? widget(node, "config_json") : undefined);
         if (loraWidget && String(loraWidget.value ?? "").trim()) {
             const parsed = parseLoraV3Config(loraWidget.value), value = serializeLoraV3Config(parsed);
             if (String(loraWidget.value ?? "") !== value) candidates.push({ target: loraWidget, value });
