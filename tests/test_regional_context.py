@@ -103,6 +103,12 @@ class RegionalContextTests(unittest.TestCase):
         self.assertEqual(branch.core["title"], "Branch title")
         self.assertIn("third-party.demo", branch.capabilities)
 
+    def test_context_facade_exposes_no_context_merge_operation(self):
+        context = normalize_context(fixture())
+        self.assertNotIn("merge", RegionalContext.__dict__)
+        with self.assertRaises(AttributeError):
+            getattr(context, "merge")
+
     def test_unknown_capability_is_losslessly_passed_through(self):
         opaque = {"version": 91, "nested": [{"future": None}], "label": "unchanged"}
         wire = normalize_context(fixture()).to_dict()
