@@ -1,6 +1,6 @@
 # BV Regional V3 Milestone F release gate
 
-Status: in progress
+Status: complete
 
 Branch: `codex/regional-context-v3`
 Scope source: `docs/specs/bv-regional-v3-plan.md`, Milestone F and Mandatory acceptance tests
@@ -98,10 +98,10 @@ Required public documentation:
 - concise repository README links replacing duplicated long-form guidance only
   after the Wiki is ready and verified.
 
-Renderer-neutral drafts currently live under `X:\bv_node_wiki\content`. They are
-not yet linked from navigation or treated as published because the Wiki production
-foundation is parallel work. All other existing uncommitted Wiki work remains
-foreign.
+The renderer-neutral Wiki foundation and the four Regional V3 drafts are committed
+locally in the separate `X:\bv_node_wiki` repository (`47b4421` and `db8ac8e`).
+They remain an unpublished draft: navigation integration, remote push and public
+publication are separate release states and are not claimed by this gate.
 
 ### 4. Fresh-session release verification
 
@@ -146,7 +146,8 @@ Recorded fresh-session evidence on 2026-08-25:
 - invalid canvas-width draft fallback and its `Open field` navigation to the
   Document tab were live accepted during the Milestone E test session.
 
-All fresh-session checks listed above have live evidence. Milestone completion
-still requires a final evidence audit and documentation/release-state review.
+All fresh-session checks listed above have live evidence. The final evidence audit
+and documentation review are complete; the separate Wiki draft is locally
+versioned without claiming publication.
 
 Milestone F must not be closed solely from this checklist or automated tests.
