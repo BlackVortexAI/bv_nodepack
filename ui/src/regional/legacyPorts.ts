@@ -1,4 +1,6 @@
 export const SHOW_LEGACY_PORTS_SETTING_ID="BV.Regional.ShowLegacyPorts";
+export const LEGACY_DEBUG_SETTING_ID="BV.Regional.LegacyDebugMode";
+export const LEGACY_DEBUG_COMMAND_ID="bv.regional.toggleDebugWiring";
 export const LEGACY_USAGE_EVENT="bv-regional-legacy-usage";
 
 // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire Regional sidecar-port UX.

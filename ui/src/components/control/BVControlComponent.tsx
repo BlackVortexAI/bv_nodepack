@@ -5,7 +5,7 @@ import { collectAllGroups } from "../../util/control/collector";
 import { BVControl, BVControlConfig, CONFIG_CHANGED_EVENT, readConfig, writeConfig } from "../../util/control/configHandler";
 import { findActiveControlConflicts } from "../../util/control/controlCenterModel.js";
 import BVControlRowComponent from "./BVControlRowComponent";
-import { Badge, Button, CheckboxField, SortableList, type SortableItem } from "../../ui/components";
+import { Badge, Button, SortableList, ToggleField, type SortableItem } from "../../ui/components";
 import { useBvHistory, useBvHistoryShortcuts } from "../../ui/history";
 
 function id() {
@@ -41,10 +41,13 @@ const BVControlComponent: FC = () => {
         setConfig({ ...config, controls: [...config.controls, { id: id(), name, enabled: true, assignments: [] }] });
     };
     const items:SortableItem[]=config.controls.map((control,index)=>({id:control.id,title:control.name||"Unnamed control",description:`${control.assignments.length} assignment${control.assignments.length===1?"":"s"}`,content:<BVControlRowComponent control={control} groups={groups} conflicts={conflicts} onChange={(value)=>updateControl(index,value)}/>}));
-    return <div className="bv-ui-stack">
-        <CheckboxField label="Force active after releasing restrictions" checked={config.forceActive} onValue={forceActive=>setConfig({...config,forceActive})}/>
+    return <div className="bv-control-editor">
+        <section className="bv-control-editor-settings">
+            <div><strong>Release behavior</strong><span>Choose whether controls become active again when restrictions are released.</span></div>
+            <ToggleField label="Force active after releasing restrictions" value={config.forceActive} trueLabel="Force active" falseLabel="Keep current state" onValue={forceActive=>setConfig({...config,forceActive})}/>
+        </section>
         <div className="bv-controls"><SortableList items={items} onReorder={ordered=>setConfig({...config,controls:ordered.map(item=>config.controls.find(control=>control.id===item.id)!).filter(Boolean)})} onRemove={controlId=>setConfig({...config,controls:config.controls.filter(control=>control.id!==controlId)})}/></div>
-        <footer className="bv-ui-inline-footer"><Badge tone="success" dot>Autosaved</Badge><Button intent="ghost" disabled={!history.canUndo} onClick={history.undo}>Undo</Button><Button intent="ghost" disabled={!history.canRedo} onClick={history.redo}>Redo</Button><Button onClick={addControl}>Add Control</Button></footer>
+        <footer className="bv-control-editor-footer bv-ui-inline-footer"><Badge tone="success" dot>Autosaved</Badge><Button intent="ghost" disabled={!history.canUndo} onClick={history.undo}>Undo</Button><Button intent="ghost" disabled={!history.canRedo} onClick={history.redo}>Redo</Button><Button onClick={addControl}>Add Control</Button></footer>
     </div>;
 };
 

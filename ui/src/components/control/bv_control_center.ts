@@ -108,6 +108,15 @@ function syncConflictStatus(node: any, config: BVControlConfig) {
     widget.tooltip = conflicts.map((conflict: any) => `${conflict.groupPath}: ${conflict.winnerAction} wins`).join("\n");
 }
 
+function moveWidgetToEnd(node: any, name: string) {
+    const widgets = node.widgets;
+    if (!Array.isArray(widgets)) return;
+    const index = widgets.findIndex((widget: any) => widget.name === name);
+    if (index < 0 || index === widgets.length - 1) return;
+    const [widget] = widgets.splice(index, 1);
+    widgets.push(widget);
+}
+
 function syncNode(node: any, config: BVControlConfig) {
     node.mode = NORMAL;
     if (node.properties) delete node.properties[BASE_MODE];
@@ -161,6 +170,9 @@ function syncNode(node: any, config: BVControlConfig) {
         configWidget.computeSize = () => [0, -4];
         configWidget.serializeValue = () => JSON.stringify(configForValidation(readConfig()));
     }
+    // Dynamic control widgets are appended by ComfyUI. Reassert the status row
+    // after every reconciliation so it remains the final row on the node.
+    moveWidgetToEnd(node, CONTROL_STATUS_WIDGET);
     node.serialize_widgets = true;
     const currentSize = node.size ?? [0, 0];
     const computedSize = node.computeSize?.() ?? currentSize;

@@ -33,7 +33,7 @@ import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, i
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility, requestM0DebugAnimation } from "./regional/m0VisualProjection";
 import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationReport, regionalEditorDraft, REGIONAL_MIGRATION_EVENT, REGIONAL_VALIDATION_EVENT } from "./regional/milestoneE";
-import { clearLegacyPortSticky, installLegacyPorts, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyPortsVisible, SHOW_LEGACY_PORTS_SETTING_ID, toggleLegacyDebugVisible } from "./regional/legacyPorts";
+import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, collectScopedNodes, dismissBvToast, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
 const comfyApp = getApp();
@@ -49,46 +49,6 @@ const OPEN_REGIONAL_EDITOR_EVENT = "bv-open-regional-editor";
 const OPEN_REGIONAL_QUICK_EDIT_EVENT = "bv-open-regional-quick-edit";
 const REGIONAL_DOCUMENT_CHANGED_EVENT = "bv-regional-document-changed";
 const STYLE_ID = "bv-nodepack-styles";
-const DEBUG_BRIDGE_SETTING_ID = "BV.DebugBridge.Enabled";
-let debugBridgeEnabled = false;
-let debugBridgePublishTimer: number | null = null;
-
-const debugWorkflowName = () => {
-    const workflow = (comfyApp as any).extensionManager?.workflow?.activeWorkflow
-        ?? (comfyApp as any).workflowManager?.activeWorkflow;
-    return String(workflow?.filename ?? workflow?.path ?? "Current workflow");
-};
-
-const setDebugBridgeSession = async (enabled: boolean) => {
-    debugBridgeEnabled = Boolean(enabled);
-    const response = await fetch(comfyApi.apiURL("/bv_nodepack/debug/session"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: debugBridgeEnabled }),
-    });
-    if (!response.ok) throw new Error(`BV Debug Bridge session failed: ${response.status} ${await response.text()}`);
-};
-
-const publishDebugSnapshot = async () => {
-    if (!debugBridgeEnabled) return false;
-    const prompt = await (comfyApp as any).graphToPrompt();
-    const response = await fetch(comfyApi.apiURL("/bv_nodepack/debug/snapshot"), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.output, workflow_name: debugWorkflowName() }),
-    });
-    if (!response.ok) throw new Error(`BV Debug Bridge snapshot failed: ${response.status} ${await response.text()}`);
-    return true;
-};
-
-const scheduleDebugSnapshot = () => {
-    if (!debugBridgeEnabled) return;
-    if (debugBridgePublishTimer != null) window.clearTimeout(debugBridgePublishTimer);
-    debugBridgePublishTimer = window.setTimeout(() => {
-        debugBridgePublishTimer = null;
-        publishDebugSnapshot().catch(error => console.error(error));
-    }, 600);
-};
 
 const hideRegionalWidget = (widget: any) => {
     widget.type = "converted-widget";
@@ -602,13 +562,8 @@ comfyApp.registerExtension({
         ensureMountedOnce();
         installM0CanvasVisibility((comfyApp as any).canvas);
         applyUiPreferences((comfyApp as any).ui?.settings);
-        setLegacyPortsVisible(Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(SHOW_LEGACY_PORTS_SETTING_ID, false)),(comfyApp as any).graph);
+        setLegacyDebugVisible(Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(LEGACY_DEBUG_SETTING_ID, false)),(comfyApp as any).graph);
         installGlobalTextareaCompletion();
-        debugBridgeEnabled = Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(DEBUG_BRIDGE_SETTING_ID, false));
-        setDebugBridgeSession(debugBridgeEnabled)
-            .then(() => { if (debugBridgeEnabled) scheduleDebugSnapshot(); })
-            .catch(error => console.error(error));
-        comfyApi.addEventListener("graphChanged", scheduleDebugSnapshot);
         comfyApi.addEventListener("graphChanged", refreshBvToolbarCapabilities);
     },
 });
@@ -649,25 +604,29 @@ comfyApp.registerExtension({
         tooltip: "Choose whether changing the node in a BV editor minimizes or closes the current window. Hold Shift to invert the mode once.",
         onChange: (value: string) => setWindowSwitchMode(value, false),
     }, {
-        id: SHOW_LEGACY_PORTS_SETTING_ID as any,
-        name: "Show BV Regional Legacy Ports",
+        id: LEGACY_DEBUG_SETTING_ID as any,
+        name: "Enable BV Regional Legacy Debug Mode",
         type: "boolean",
         defaultValue: false,
-        category: ["BV Node Pack", "Regional", "Show Legacy ports"],
-        tooltip: "Temporarily reveal every deprecated BV Regional port in the active workflow.",
-        onChange: (value: boolean) => setLegacyPortsVisible(Boolean(value),(comfyApp as any).graph),
-    }, {
-        id: DEBUG_BRIDGE_SETTING_ID as any,
-        name: "Enable BV Debug Bridge",
-        type: "boolean",
-        defaultValue: false,
-        category: ["BV Node Pack", "Developer", "Enable Debug Bridge"],
-        tooltip: "Expose the current API-format workflow as an in-memory snapshot to loopback clients only.",
+        category: ["BV Node Pack", "Regional", "Legacy debug mode"],
+        tooltip: "Reveal deprecated Regional ports, legacy nodes and hidden provider wiring for debugging.",
         onChange: (value: boolean) => {
-            setDebugBridgeSession(Boolean(value))
-                .then(() => { if (value) scheduleDebugSnapshot(); })
-                .catch(error => console.error(error));
+            const canvas=(comfyApp as any).canvas;
+            setLegacyDebugVisible(Boolean(value),canvas?.graph??(comfyApp as any).graph);
+            if(value)requestM0DebugAnimation(canvas);
         },
+    }, {
+        id: "BV.Regional.LegacyDebugShortcutInfo" as any,
+        name: "Legacy Debug Shortcut",
+        type: (_name:string) => {
+            const host=document.createElement("div");
+            host.className="bv-legacy-shortcut-info";
+            host.innerHTML="<kbd>Ctrl</kbd><span>+</span><kbd>Alt</kbd><span>+</span><kbd>B</kbd><small>Default shortcut · change it in ComfyUI Settings → Shortcuts</small>";
+            return host;
+        },
+        defaultValue: "Ctrl+Alt+B",
+        category: ["BV Node Pack", "Regional", "Legacy debug shortcut"],
+        tooltip: "The effective binding is managed by ComfyUI's native Shortcuts menu.",
     }, {
         id: COMPLETION_SETTING_ID as any,
         name: "Enable BV Prompt Autocomplete",
@@ -694,25 +653,23 @@ comfyApp.registerExtension({
         tooltip: "Choose one or more local CSV/TSV datasets for BV Prompt Autocomplete.",
         onChange: (value: string) => applyCompletionDatasetSetting(value),
     }],
+    keybindings: [{commandId:LEGACY_DEBUG_COMMAND_ID,combo:{key:"b",ctrl:true,alt:true}}],
     commands: [{
         id: "bv.regional.openEditor",
         label: "Open BV Regional Editor",
         icon: "icon-[lucide--layers]",
         function: () => { window.dispatchEvent(new CustomEvent(OPEN_REGIONAL_EDITOR_EVENT)); },
     }, {
-        id: "bv.regional.toggleDebugWiring",
+        id: LEGACY_DEBUG_COMMAND_ID,
         label: "Toggle BV Regional Legacy wiring debug",
         icon: "icon-[lucide--workflow]",
         function: () => {
-            const canvas=(comfyApp as any).canvas,active=toggleLegacyDebugVisible(canvas?.graph??(comfyApp as any).graph);
-            if(active)requestM0DebugAnimation(canvas);
+            const canvas=(comfyApp as any).canvas,active=!legacyDebugVisible();
+            const settings=(comfyApp as any).ui?.settings;
+            settings?.setSettingValue?.(LEGACY_DEBUG_SETTING_ID,active);
+            if(!settings?.setSettingValue)setLegacyDebugVisible(active,canvas?.graph??(comfyApp as any).graph);
             showBvToast({id:"bv-regional-debug-wiring",title:`Regional wiring debug ${active?"enabled":"disabled"}`,message:active?"Legacy ports and hidden V3 provider links are visible for this UI session.":"Legacy ports and V3 provider links returned to their normal presentation.",tone:"info",duration:3500});
         },
-    }, {
-        id: "bv.debugBridge.publishSnapshot",
-        label: "Refresh BV Debug Bridge Snapshot",
-        icon: "icon-[lucide--radio-tower]",
-        function: () => publishDebugSnapshot().catch(error => console.error(error)),
     }],
     actionBarButtons: [{
         icon: "icon-[lucide--sliders-horizontal]",
@@ -978,7 +935,6 @@ comfyApp.registerExtension({
         };
     },
     afterConfigureGraph() {
-        scheduleDebugSnapshot();
         queueMicrotask(refreshBvToolbarCapabilities);
     },
 });
