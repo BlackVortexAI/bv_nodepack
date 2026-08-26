@@ -1,7 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEventHandler, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { mergeChangedInitialGeometry, resizeFloatingWindow, type ResizeDirection, windowShelfPosition } from "./workspaceGeometry";
-import { AnchoredPopover, Button, CompactSelect, Dialog, MenuButton, TextField, useBvConfirm, type MenuAction, type SelectOption } from "./components";
+import { AnchoredPopover, Button, CompactSelect, ContextMenu, Dialog, MenuButton, TextField, useBvConfirm, type MenuAction, type SelectOption } from "./components";
+import { CaptureOwner, nextCaptureId, registerUiCaptureSource } from "../export/captureRegistry";
+import { openExportDialog } from "../export/events";
 import { getWindowSwitchMode, setWindowSwitchMode, subscribeWindowSwitchMode } from "./preferences";
 import { activateBvWindow, registerBvWindow } from "./windowFocus";
 import { BV_TOOLBAR_LAUNCHER_TOGGLE_EVENT } from "./ToolbarWindowLauncher";
@@ -42,7 +44,7 @@ export function BvWindowHeader(props: { title: string; shortTitle?: string; cont
 export type BvWindowGeometry = { x:number; y:number; width:number; height:number };
 export type BvManagedWindowProps = {
     open:boolean; title:string; shortTitle?:string; context?:ReactNode; center?:ReactNode; children:ReactNode; status?:ReactNode; actions?:ReactNode; activationToken?:number;
-    allowWorkspace?:boolean; initialMode?:BvWindowMode; initialGeometry?:Partial<BvWindowGeometry>; minSize?:{width:number;height:number};
+    allowWorkspace?:boolean; initialMode?:BvWindowMode; initialGeometry?:Partial<BvWindowGeometry>; minSize?:{width:number;height:number}; footerStackAt?:number;
     mode?:BvWindowMode; className?:string; bodyClassName?:string; menuVisible?:boolean; onMenuVisible?:(visible:boolean)=>void; onClose:()=>void; onGeometry?:(geometry:BvWindowGeometry)=>void; onModeChange?:(mode:BvWindowMode)=>void;
 };
 
@@ -52,14 +54,16 @@ const clampManagedGeometry = (geometry:BvWindowGeometry, min:{width:number;heigh
     return {x:Math.max(16,Math.min(geometry.x,window.innerWidth-width-16)),y:Math.max(16,Math.min(geometry.y,window.innerHeight-height-16)),width,height};
 };
 
-export function BvManagedWindow({open,title,shortTitle,context,center,children,status,actions,activationToken=0,allowWorkspace=true,initialMode="floating",initialGeometry,minSize={width:360,height:240},mode:controlledMode,className="",bodyClassName="",menuVisible,onMenuVisible,onClose,onGeometry,onModeChange}:BvManagedWindowProps) {
+export function BvManagedWindow({open,title,shortTitle,context,center,children,status,actions,activationToken=0,allowWorkspace=true,initialMode="floating",initialGeometry,minSize={width:360,height:240},footerStackAt=700,mode:controlledMode,className="",bodyClassName="",menuVisible,onMenuVisible,onClose,onGeometry,onModeChange}:BvManagedWindowProps) {
     const effectiveShortTitle=shortTitle??(title==="BV Regional Editor"?"Reg. Editor":title==="Regional Quick Edit"?"Quick Edit":undefined);
     const defaults=()=>clampManagedGeometry({x:Math.max(16,(window.innerWidth-(initialGeometry?.width??760))/2),y:Math.max(16,(window.innerHeight-(initialGeometry?.height??640))/2),width:initialGeometry?.width??760,height:initialGeometry?.height??640,...initialGeometry},minSize);
     const [internalMode,setInternalMode]=useState<BvWindowMode>(allowWorkspace?initialMode:"floating"),[minimized,setMinimized]=useState(false),[geometry,setGeometry]=useState<BvWindowGeometry>(defaults),mode=controlledMode??internalMode;
-    const shell=useRef<HTMLDivElement>(null),opener=useRef<HTMLElement|null>(null),geometryRef=useRef(geometry),initialGeometryRef=useRef(initialGeometry),drag=useRef<{pointerId:number;startX:number;startY:number;kind:"move";x:number;y:number}|{pointerId:number;startX:number;startY:number;kind:"resize";direction:ResizeDirection;geometry:BvWindowGeometry}>();
+    const shell=useRef<HTMLDivElement>(null),captureId=useRef(nextCaptureId()).current,opener=useRef<HTMLElement|null>(null),geometryRef=useRef(geometry),initialGeometryRef=useRef(initialGeometry),drag=useRef<{pointerId:number;startX:number;startY:number;kind:"move";x:number;y:number}|{pointerId:number;startX:number;startY:number;kind:"resize";direction:ResizeDirection;geometry:BvWindowGeometry}>();
+    const [captureMenu,setCaptureMenu]=useState<{x:number;y:number}|null>(null);
     useEffect(()=>{geometryRef.current=geometry},[geometry]);
     useEffect(()=>{if(open)setMinimized(false)},[open]);
     useEffect(()=>{const node=shell.current;if(!open||!node)return;opener.current=document.activeElement instanceof HTMLElement&&!node.contains(document.activeElement)?document.activeElement:opener.current;return registerBvWindow(node)},[open]);
+    useEffect(()=>{const node=shell.current;if(!open||!node)return;return registerUiCaptureSource(captureId,title,node)},[captureId,open,title]);
     useEffect(()=>{const node=shell.current;if(!node)return;const activate=()=>{setMinimized(false);requestAnimationFrame(()=>node.focus({preventScroll:true}))},minimize=()=>setMinimized(true);node.addEventListener("bv-ui-activate",activate);node.addEventListener("bv-ui-minimize",minimize);return()=>{node.removeEventListener("bv-ui-activate",activate);node.removeEventListener("bv-ui-minimize",minimize)}},[]);
     useEffect(()=>{const node=shell.current;if(!node)return;const setRequestedState=(event:Event)=>{const requested=(event as CustomEvent<{mode?:BvWindowMode;geometry?:BvWindowGeometry}>).detail;if(allowWorkspace&&requested?.mode){setInternalMode(requested.mode);onModeChange?.(requested.mode)}if(requested?.mode==="floating"&&requested.geometry)setGeometry(clampManagedGeometry(requested.geometry,minSize))};node.addEventListener("bv-ui-set-window-state",setRequestedState);return()=>node.removeEventListener("bv-ui-set-window-state",setRequestedState)},[allowWorkspace,minSize.height,minSize.width,onModeChange]);
     useEffect(()=>{if(!open)return;setMinimized(false);requestAnimationFrame(()=>shell.current?.focus({preventScroll:true}))},[activationToken,open]);
@@ -72,11 +76,11 @@ export function BvManagedWindow({open,title,shortTitle,context,center,children,s
     if(!open)return null;
     const style=mode==="workspace"?undefined:{left:geometry.x,top:geometry.y,width:geometry.width,height:geometry.height};
     const close=()=>{onClose();requestAnimationFrame(()=>opener.current?.focus({preventScroll:true}))};
-    return <>{minimized&&<BvMinimizedWindow title={title} onRestore={()=>setMinimized(false)} onClose={close}/>}<div ref={shell} tabIndex={-1} hidden={minimized} className={`bv-managed-window ${mode} ${className}`.trim()} role="dialog" aria-modal={mode==="workspace"} aria-label={title} style={style} onPointerDownCapture={()=>shell.current&&activateBvWindow(shell.current)} onFocusCapture={()=>shell.current&&activateBvWindow(shell.current)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onKeyDown={event=>{if(event.key==="Escape"){const overlay=[...document.querySelectorAll<HTMLElement>(".bv-anchored-popover,[role='listbox'],[role='menu']")].some(node=>node.offsetParent!==null);if(!overlay){event.preventDefault();event.stopPropagation();close();return;}}event.stopPropagation()}}><div className="bv-managed-window-surface">
+    return <CaptureOwner id={captureId}><>{minimized&&<BvMinimizedWindow title={title} onRestore={()=>setMinimized(false)} onClose={close}/>}<div ref={shell} data-bv-capture-window={captureId} tabIndex={-1} hidden={minimized} className={`bv-managed-window ${mode} ${className}`.trim()} role="dialog" aria-modal={mode==="workspace"} aria-label={title} style={style} onContextMenu={event=>{if((event.target as Element).closest("input,textarea,select,[contenteditable='true'],[role='textbox']"))return;event.preventDefault();setCaptureMenu({x:event.clientX,y:event.clientY})}} onPointerDownCapture={()=>shell.current&&activateBvWindow(shell.current)} onFocusCapture={()=>shell.current&&activateBvWindow(shell.current)} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onKeyDown={event=>{if(event.key==="Escape"){const overlay=[...document.querySelectorAll<HTMLElement>(".bv-anchored-popover,[role='listbox'],[role='menu']")].some(node=>node.offsetParent!==null);if(!overlay){event.preventDefault();event.stopPropagation();close();return;}}event.stopPropagation()}}><div className="bv-managed-window-surface">
         <BvWindowHeader title={title} shortTitle={effectiveShortTitle} context={context} center={center} mode={mode} allowWorkspace={allowWorkspace} menuVisible={menuVisible} onMenuVisible={onMenuVisible} onMode={()=>{if(!allowWorkspace)return;const next=mode==="workspace"?"floating":"workspace";setInternalMode(next);onModeChange?.(next)}} onMinimize={()=>setMinimized(true)} onClose={close} onPointerDown={begin}/>
         <div className={`bv-managed-window-body ${bodyClassName}`.trim()}>{children}</div>
-        {(status||actions)&&<BvWindowFooter status={status??null} actions={actions} stacked={mode==="floating"&&geometry.width<700} minimal={mode==="floating"&&geometry.width<470}/>}
-    </div>{mode==="floating"&&(["n","ne","e","se","s","sw","w","nw"] as ResizeDirection[]).map(direction=><div key={direction} className={`bv-window-resize-handle ${direction}`} aria-hidden="true" onPointerDown={beginResize(direction)}/>)}</div></>;
+        {(status||actions)&&<BvWindowFooter status={status??null} actions={actions} stacked={mode==="floating"&&geometry.width<footerStackAt} minimal={mode==="floating"&&geometry.width<470}/>}
+    </div>{mode==="floating"&&(["n","ne","e","se","s","sw","w","nw"] as ResizeDirection[]).map(direction=><div key={direction} className={`bv-window-resize-handle ${direction}`} aria-hidden="true" onPointerDown={beginResize(direction)}/>)}</div>{captureMenu&&<div data-bv-export-ui><ContextMenu open x={captureMenu.x} y={captureMenu.y} actions={[{id:"export-bv-ui",label:"Export BV UI Image…",onSelect:()=>openExportDialog(`ui:${captureId}`)}]} onClose={()=>setCaptureMenu(null)}/></div>}</></CaptureOwner>;
 }
 
 export function BvWindowFooter({ status, actions, warning = false, stacked=false, minimal=false }: { status: ReactNode; actions?: ReactNode; warning?: boolean; stacked?:boolean; minimal?:boolean }) {

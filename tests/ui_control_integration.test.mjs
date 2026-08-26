@@ -227,6 +227,8 @@ test("window navigation overflow is a complete surfaced control group", () => {
 
 test("managed windows share keyboard cycling, escape handling and focus restoration", () => {
     assert.match(windowFocus, /event\.key !== "Tab" \|\| !event\.ctrlKey/);
+    assert.match(windowFocus, /node\.style\.zIndex=`calc\(var\(--bv-layer-window\) \+ \$\{index\}\)`/);
+    assert.match(windowFocus, /windows\.push\(node\);\s*syncLayers\(\)/);
     assert.match(windowChrome, /opener\.current\?\.focus/);
     assert.match(windowChrome, /event\.key==="Escape"/);
     assert.match(windowChrome, /registerBvWindow/);
@@ -285,7 +287,8 @@ test("sortable jobs rely on drag reorder and grouped actions only", () => {
 
 test("window footer has stacked and overflow states instead of word columns", () => {
     assert.match(windowChrome, /BvFooterActions/);
-    assert.match(windowChrome, /stacked=\{mode==="floating"&&geometry\.width<700\}/);
+    assert.match(windowChrome, /footerStackAt=700/);
+    assert.match(windowChrome, /stacked=\{mode==="floating"&&geometry\.width<footerStackAt\}/);
     assert.match(windowChrome, /minimal=\{mode==="floating"&&geometry\.width<470\}/);
     assert.match(styles, /\.bv-ui-window-footer\.is-stacked/);
     assert.match(styles, /\.bv-ui-window-footer\.is-minimal/);

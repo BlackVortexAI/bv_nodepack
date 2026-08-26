@@ -36,6 +36,9 @@ import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationRepo
 import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, collectScopedNodes, dismissBvToast, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
+import { ExportDialog } from "./export/ExportDialog";
+import { installExporter } from "./export/install";
+import { openExportDialog } from "./export/events";
 const comfyApp = getApp();
 const comfyApi = getApi();
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
@@ -511,6 +514,7 @@ function BVRoot() {
 
     return (<>
         <BvGlobalToastStack/>
+        <ExportDialog app={comfyApp} api={comfyApi}/>
         <ToolbarWindowLauncher getColumns={launcherColumns}/>
         <SmartPipeEditorWindow/>
         <BVPortal open={portalOpen} hasControlNodes={hasControlNodes} onClose={() => setPortalOpen(false)} />
@@ -560,12 +564,19 @@ comfyApp.registerExtension({
     name: "bv_nodepack.control_rack_portal",
     setup() {
         ensureMountedOnce();
+        installExporter(comfyApp,comfyApi);
         installM0CanvasVisibility((comfyApp as any).canvas);
         applyUiPreferences((comfyApp as any).ui?.settings);
         setLegacyDebugVisible(Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(LEGACY_DEBUG_SETTING_ID, false)),(comfyApp as any).graph);
         installGlobalTextareaCompletion();
         comfyApi.addEventListener("graphChanged", refreshBvToolbarCapabilities);
     },
+});
+
+comfyApp.registerExtension({
+    name:"bv_nodepack.image_export",
+    commands:[{id:"bv.export.open",label:"Export BV graph or UI image",icon:"icon-[lucide--image-down]",function:()=>{openExportDialog()}}],
+    getCanvasMenuItems(){return [{content:"BV Node Pack",has_submenu:true,submenu:{options:[{content:"Export Graph Image…",callback:(_value:unknown,_options:unknown,event?:MouseEvent,menu?:any)=>{menu?.getTopMenu?.().close(event);(window as any).LiteGraph?.closeAllContextMenus?.(window);queueMicrotask(()=>openExportDialog())}}]}}]},
 });
 
 comfyApp.registerExtension({

@@ -11,7 +11,7 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.0.0 introduces Regional V3.** The accompanying
+> **BV Node Pack 1.0.1 includes Regional V3.** The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
 > missing runtime features.

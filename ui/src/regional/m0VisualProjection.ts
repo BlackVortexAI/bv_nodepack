@@ -73,9 +73,11 @@ export function installM0CanvasVisibility(canvas: any) {
         const ctx=args[0] as CanvasRenderingContext2D;
         ctx.save();
         try{
+            const exportTime=Number(this.__bvExportTimeSeconds);
+            const timeSeconds=Number.isFinite(exportTime)?exportTime:(typeof performance==="undefined"?0:performance.now()/1000);
             ctx.setLineDash([7,5]);
-            ctx.lineDashOffset=-((typeof performance==="undefined"?0:performance.now())/45%12);
-            args[5]=(typeof performance==="undefined"?0:performance.now()/1000);
+            ctx.lineDashOffset=-((timeSeconds*1000)/45%12);
+            args[5]=timeSeconds;
             return renderLink.apply(this,args);
         }finally{ctx.restore();}
     };

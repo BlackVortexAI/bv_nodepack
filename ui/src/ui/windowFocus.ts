@@ -2,6 +2,7 @@ const windows: HTMLElement[] = [];
 let listening = false;
 
 const visible = (node: HTMLElement) => node.isConnected && !node.hidden && node.offsetParent !== null;
+const syncLayers = () => windows.forEach((node,index) => node.style.zIndex=`calc(var(--bv-layer-window) + ${index})`);
 
 function cycle(reverse: boolean) {
     const available = windows.filter(visible);
@@ -25,11 +26,13 @@ function ensureListener() {
 export function registerBvWindow(node: HTMLElement) {
     ensureListener();
     windows.push(node);
-    return () => { const index = windows.indexOf(node); if (index >= 0) windows.splice(index, 1); };
+    syncLayers();
+    return () => { const index = windows.indexOf(node); if (index >= 0) windows.splice(index, 1); syncLayers(); };
 }
 
 export function activateBvWindow(node: HTMLElement) {
     const index = windows.indexOf(node);
     if (index >= 0) windows.splice(index, 1);
     windows.push(node);
+    syncLayers();
 }
