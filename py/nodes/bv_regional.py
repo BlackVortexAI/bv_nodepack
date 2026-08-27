@@ -43,6 +43,7 @@ from ..util.regional.lora_v3 import (
     transform_lora_sequence,
 )
 from ..util.regional.detailer_v3 import transform_detailer_capability
+from ..util.regional.lut_v3 import MAX_LUT_RESOURCE_PROVIDERS, transform_lut_capability
 from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
@@ -73,6 +74,7 @@ DEFAULT_JSON = json.dumps(default_document(), ensure_ascii=False, separators=(",
 DEFAULT_LORA_BINDINGS_JSON = json.dumps(default_bindings(), ensure_ascii=False, separators=(",", ":"))
 DEFAULT_LORA_V3_JSON = '{"version":3,"entries":[],"steps":[]}'
 DEFAULT_DETAILER_V3_JSON = '{"version":1,"jobs":[]}'
+DEFAULT_LUT_V3_JSON = '{"version":1,"jobs":[]}'
 MAX_LORA_COLLECTORS = 20
 MAX_DETECTOR_COLLECTORS = 20
 
@@ -124,11 +126,19 @@ class BVRegionalPromptNode:
                     "STRING",
                     {"default": DEFAULT_DETAILER_V3_JSON, "multiline": True, "dynamicPrompts": False},
                 ),
+                "lut_v3_config_json": (
+                    "STRING",
+                    {"default": DEFAULT_LUT_V3_JSON, "multiline": True, "dynamicPrompts": False},
+                ),
                 "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
                 **_lora_provider_inputs(),
                 **{
                     f"detailer_resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
                     for index in range(1, MAX_DETECTOR_COLLECTORS + 1)
+                },
+                **{
+                    f"lut_resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
+                    for index in range(1, MAX_LUT_RESOURCE_PROVIDERS + 1)
                 },
             },
         }
@@ -139,7 +149,7 @@ class BVRegionalPromptNode:
     FUNCTION = "build"
     CATEGORY = CATEGORY_CORE
 
-    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, resource_provider=None, **providers):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, **providers):
         document = parse_document(regional_json)
         payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
         regional = document
@@ -154,6 +164,11 @@ class BVRegionalPromptNode:
         if detailer_payload.get("jobs"):
             regional = transform_detailer_capability(
                 regional, detailer_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
+            ).to_dict()
+        lut_payload = json.loads(lut_v3_config_json or DEFAULT_LUT_V3_JSON)
+        if lut_payload.get("jobs"):
+            regional = transform_lut_capability(
+                regional, lut_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             ).to_dict()
         return regional, reconcile_bindings(lora_bindings_json, document)
 

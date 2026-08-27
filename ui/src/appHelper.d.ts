@@ -5,5 +5,6 @@ declare module "./appHelper.js" {
         addEventListener(type: string, callback: (event: CustomEvent<any>) => void): void;
         removeEventListener(type: string, callback: (event: CustomEvent<any>) => void): void;
         apiURL(path: string): string;
+        fetchApi(route: string, options?: RequestInit): Promise<Response>;
     };
 }

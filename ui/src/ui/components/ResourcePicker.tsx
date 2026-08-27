@@ -1,7 +1,9 @@
 import React from "react";
 import { SelectField } from "./forms";
+import { detectorCapabilityText } from "../../regional/detectorRegistryConfig";
 
-export type ResourcePickerCollector = { id:string; nodeId?:string; label:string; resources:Array<{id:string;label:string}> };
+export type ResourcePickerResource = { id:string; label:string; detectorCapabilities?:import("../../regional/detectorRegistryConfig").DetectorCapabilities };
+export type ResourcePickerCollector = { id:string; nodeId?:string; label:string; resources:ResourcePickerResource[] };
 export type ResourcePickerOption={value:string;collectorId:string;resourceId:string;label:string};
 
 const selectionValue=(collectorId:string,resourceId:string)=>JSON.stringify([collectorId,resourceId]);
@@ -23,5 +25,6 @@ export function ResourcePicker({collectors,collectorId,resourceId,resolved=true,
     const visibleOptions=unresolved&&!options.some(option=>option.value===value)?[{value,label:`Unresolved · ${resourceId||collectorId}`},...options]:options;
     return <div className={`bv-resource-picker ${unresolved?"is-unresolved":""}`}>
         <SelectField label={label} value={value} options={[{value:"",label:emptyLabel},...visibleOptions]} onValue={next=>{if(!next){onSelection("","");return;}const option=options.find(candidate=>candidate.value===next);if(option)onSelection(option.collectorId,option.resourceId);}}/>
+        {resource?.detectorCapabilities && <p className={`option-hint bv-detector-capability ${resource.detectorCapabilities.pixelMask ? "has-pixel-mask" : "lacks-pixel-mask"}`}>{detectorCapabilityText(resource.detectorCapabilities)}</p>}
     </div>;
 }

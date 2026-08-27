@@ -1,4 +1,7 @@
 export const DETAILER_UI_NODES = new Set([
+    "BV LUT Loop Job Resolver",
+    "BV LUT Loop Start",
+    "BV LUT Loop End",
     "BV Regional Detailer Mask",
     "BV Regional Detailer Plan",
     "BV Detailer Loop Job Resolver",
@@ -55,6 +58,7 @@ const COMMON_LABELS: Record<string, string> = {
 };
 
 const NODE_LABELS: Record<string, Record<string, string>> = {
+    "BV LUT Loop Start": { plan: "regional or lut_plan", initial_image: "initial image" },
     "BV Regional Detailer Mask": { image: "source image", mask: "region mask", summary: "detailer summary" },
     "BV Regional Detailer Plan": { plan_summary: "plan summary" },
     "BV Detailer Loop Detect to SEGS (Impact)": { segs: "SEGS" },

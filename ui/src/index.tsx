@@ -27,6 +27,12 @@ import { visibleExternalDetectorSlots } from "./regional/detectorExternalInputs"
 import { compactNodeToComputedHeight } from "./regional/nodeLayout";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetailerPromptV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
+import { lutV3Catalog, prepareLutRegistryV3, prepareLutV3 } from "./regional/lutV3Catalog";
+import { openLutDownloadDialog } from "./regional/lutDownloadDialog";
+import { openLutPlanDialog } from "./regional/lutPlanDialog";
+import { parseLutPlanConfig } from "./regional/lutPlanConfig";
+import { openLutRegistryDialog } from "./regional/lutRegistryDialog";
+import { parseLutRegistryConfig, serializeLutRegistryConfig } from "./regional/lutRegistryConfig";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui, LORA_V3_INVENTORY_CHANGED_EVENT, OPEN_LORA_V3_EDITOR_EVENT } from "./regional/loraV3Ui";
@@ -36,11 +42,16 @@ import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationRepo
 import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { BvGlobalToastStack, collectScopedNodes, dismissBvToast, lastBvFullWindowType, lastBvWindowInstance, rememberBvWindowInstance, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible } from "./ui";
+import { configureProjectedPortLayout, installRegionalPromptCreationLayout, setProjectedSlotLabel, suppressInitialProjectedProviderDefinitions } from "./regional/portProjection";
 import { ExportDialog } from "./export/ExportDialog";
 import { installExporter } from "./export/install";
 import { openExportDialog } from "./export/events";
 const comfyApp = getApp();
 const comfyApi = getApi();
+let bvPointerGestureActive=false;
+document.addEventListener("pointerdown",()=>{bvPointerGestureActive=true},true);
+for(const eventName of["pointerup","pointercancel"] as const)document.addEventListener(eventName,()=>{bvPointerGestureActive=false},true);
+configureProjectedPortLayout({isUserResizing:node=>(comfyApp as any).canvas?.resizing_node===node||bvPointerGestureActive});
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
 bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
 bindCompletionPlacementPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_PLACEMENT_SETTING_ID, value));
@@ -115,8 +126,8 @@ const syncDetectorExternalInputs = (node: any) => {
 };
 
 const labelDetailerUi = (node: any, nodeName: string) => {
-    for (const input of node.inputs ?? []) input.label = detailerUiLabel(nodeName, String(input.name));
-    for (const output of node.outputs ?? []) output.label = detailerUiLabel(nodeName, String(output.name));
+    for (const input of node.inputs ?? []) setProjectedSlotLabel(input,detailerUiLabel(nodeName,String(input.name)));
+    for (const output of node.outputs ?? []) setProjectedSlotLabel(output,detailerUiLabel(nodeName,String(output.name)));
     for (const widget of node.widgets ?? []) {
         if (!String(widget.name).startsWith("configure_")) widget.label = detailerUiLabel(nodeName, String(widget.name));
     }
@@ -704,6 +715,7 @@ comfyApp.registerExtension({
         onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if(nodeData.name==="BV Regional Prompt"){suppressInitialProjectedProviderDefinitions(nodeData);installRegionalPromptCreationLayout(nodeType)}
         if (installM0ResourceSpike(nodeType, nodeData)) return;
         const legacyDescriptors=legacyPortDescriptors(nodeData.name);
         if(legacyDescriptors.length){
@@ -715,6 +727,35 @@ comfyApp.registerExtension({
         }
         const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData);
         if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
+        if(nodeData.name==="BV LUT Registry"){
+            const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure;
+            const prepare=(node:any)=>{const hidden=node.widgets?.find((item:any)=>item.name==="config_json");if(!hidden)return;hideRegionalWidget(hidden);const normalized=parseLutRegistryConfig(hidden.value),serialized=serializeLutRegistryConfig(normalized);if(String(hidden.value??"")!==serialized){hidden.value=serialized;hidden.callback?.(serialized)}prepareLutRegistryV3(node);let action=node.widgets?.find((item:any)=>item.name==="configure_lut_registry");if(!action){action=node.addWidget("button","configure_lut_registry",null,()=>openLutRegistryDialog(comfyApi,hidden.value,value=>{hidden.value=value;hidden.callback?.(value);prepare(node);node.graph?.setDirtyCanvas?.(true,true)},`lut-registry:${scopedNodeKey(node)}`,workflowNodesOfType("BV LUT Registry").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV LUT Registry"} · #${item.id}`})),(targetId,replace)=>{const target=workflowNodesOfType("BV LUT Registry").find(item=>scopedNodeKey(item)===targetId),targetAction=target?.widgets?.find((item:any)=>item.name==="configure_lut_registry");if(targetAction)switchBvView(`lut-registry:${scopedNodeKey(node)}`,`lut-registry:${scopedNodeKey(target)}`,()=>targetAction.callback?.(),replace)},node).catch(console.error),{serialize:false});action.serialize=false}const count=normalized.luts.length;action.label=`Configure LUT Registry · ${count} LUT${count===1?"":"s"}`;compactNodeToComputedHeight(node);node.setDirtyCanvas?.(true,true)};
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            return;
+        }
+        if(nodeData.name==="BV LUT Loader"){
+            const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure;
+            const prepare=(node:any)=>{const combo=node.widgets?.find((item:any)=>item.name==="lut_name");if(!combo||combo.__bvLutDownloadInstalled)return;combo.__bvLutDownloadInstalled=true;let previous=String(combo.value??"Built-in: Identity"),callback=combo.callback;combo.callback=function(value:any){if(String(value)!=="Download more LUTs…"){previous=String(value);return callback?.apply(this,arguments)}combo.value=previous;openLutDownloadDialog(path=>{const values=combo.options?.values;if(Array.isArray(values)&&!values.includes(path))values.splice(Math.max(0,values.length-1),0,path);combo.value=path;previous=path;callback?.call(combo,path);node.graph?.setDirtyCanvas?.(true,true);});};};
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            return;
+        }
+        if(nodeData.name==="BV LUT Loop Start"){
+            const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;
+            const prepare=(node:any)=>{prepareLutV3(node,detailerGraphOwner(node));compactLoraConsumerNode(node)};
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+        }
+        if(nodeData.name==="BV Regional LUT Plan"){
+            const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange;
+            const prepare=(node:any)=>{prepareLutV3(node,detailerGraphOwner(node));const hidden=node.widgets?.find((item:any)=>item.name==="config_json");if(!hidden)return;hideRegionalWidget(hidden);let action=node.widgets?.find((item:any)=>item.name==="configure_lut_plan");if(!action){action=node.addWidget("button","configure_lut_plan",null,()=>{const document=sourceRegionalDocument(node);if(!document)return;openLutPlanDialog({nodeId:scopedNodeKey(node),regions:document.regions,lutCollectors:lutV3Catalog(node),detectorCollectors:detectorCollectorsForPlan(node),stored:hidden.value,save:(value:string)=>{hidden.value=value;hidden.callback?.(value);prepareLutV3(node,detailerGraphOwner(node));prepare(node);node.graph?.setDirtyCanvas?.(true,true)},nodes:workflowNodesOfType("BV Regional LUT Plan").filter(windowMenuVisible).map(item=>({id:scopedNodeKey(item),label:`${item.title||"BV Regional LUT Plan"} · #${item.id}`})),onNavigate:(targetId:string,replace:boolean)=>{const target=workflowNodesOfType("BV Regional LUT Plan").find(item=>scopedNodeKey(item)===targetId),targetAction=target?.widgets?.find((item:any)=>item.name==="configure_lut_plan");if(targetAction)switchBvView(`lut-plan:${scopedNodeKey(node)}`,`lut-plan:${scopedNodeKey(target)}`,()=>targetAction.callback?.(),replace)},currentNode:node})},{serialize:false});action.serialize=false;}const document=sourceRegionalDocument(node),count=document?parseLutPlanConfig(hidden.value,document.regions).jobs.length:0;action.label=document?`Configure LUT Plan · ${count} Job${count===1?"":"s"}`:"Connect a BV Regional Prompt";action.disabled=!document;compactLoraConsumerNode(node);node.setDirtyCanvas?.(true,true);};
+            nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
+            return;
+        }
         if(["BV Control Center","BV Regional Prompt","BV Regional Detailer Plan","BV Detector Registry","BV Smart Pipe","BV Smart Pipe Merge"].includes(nodeData.name)){
             const created=nodeType.prototype.onNodeCreated,removed=nodeType.prototype.onRemoved;
             nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(nodeData.name!=="BV Control Center"){this.properties??={};if(typeof this.properties.bvWindowMenuVisible!=="boolean")this.properties.bvWindowMenuVisible=!['BV Smart Pipe','BV Smart Pipe Merge'].includes(nodeData.name)}queueMicrotask(refreshBvToolbarCapabilities);return result};
@@ -887,11 +928,14 @@ comfyApp.registerExtension({
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
             const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
             const detailerV3Widget = this.widgets?.find((widget: any) => widget.name === "detailer_v3_config_json");
+            const lutV3Widget = this.widgets?.find((widget: any) => widget.name === "lut_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
             if (detailerV3Widget) hideLoraV3Widget(detailerV3Widget);
+            if (lutV3Widget) hideLoraV3Widget(lutV3Widget);
             installLoraV3ConsumerSlot(this);
             prepareDetailerPromptV3(this,detailerGraphOwner(this));
+            prepareLutV3(this,detailerGraphOwner(this));
             if (jsonWidget) {
                 hideRegionalWidget(jsonWidget);
                 if (!jsonWidget.__bvRegionalDocumentHooked) {
@@ -914,8 +958,10 @@ comfyApp.registerExtension({
                 button.label = "Quick Edit Prompts";
                 button.serialize = false;
             }
-            compactLoraConsumerNode(this);
+            this.__bvRegionalPromptUiReady=true;
+            this.__bvProjectedArrangementPadding=12;
             installLegacyPorts(this,[{direction:"output",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use the BV_REGIONAL context output and v3 capability editors."}]);
+            compactLoraConsumerNode(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };
@@ -926,13 +972,18 @@ comfyApp.registerExtension({
             const bindingsWidget = this.widgets?.find((widget: any) => widget.name === "lora_bindings_json");
             const loraV3Widget = this.widgets?.find((widget: any) => widget.name === "lora_v3_config_json");
             const detailerV3Widget = this.widgets?.find((widget: any) => widget.name === "detailer_v3_config_json");
+            const lutV3Widget = this.widgets?.find((widget: any) => widget.name === "lut_v3_config_json");
             if (bindingsWidget) hideRegionalWidget(bindingsWidget);
             if (loraV3Widget) hideLoraV3Widget(loraV3Widget);
             if (detailerV3Widget) hideLoraV3Widget(detailerV3Widget);
+            if (lutV3Widget) hideLoraV3Widget(lutV3Widget);
             installLoraV3ConsumerSlot(this);
             prepareDetailerPromptV3(this,detailerGraphOwner(this));
-            compactLoraConsumerNode(this);
+            prepareLutV3(this,detailerGraphOwner(this));
+            this.__bvRegionalPromptUiReady=true;
+            this.__bvProjectedArrangementPadding=12;
             installLegacyPorts(this,[{direction:"output",name:"lora_bindings",type:"BV_REGIONAL_LORA_BINDINGS",guidance:"Use the BV_REGIONAL context output and v3 capability editors."}]);
+            compactLoraConsumerNode(this);
             window.dispatchEvent(new CustomEvent(REGIONAL_DOCUMENT_CHANGED_EVENT));
             return result;
         };

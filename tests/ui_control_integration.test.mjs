@@ -6,6 +6,8 @@ const options = readFileSync(new URL("../ui/src/regional/OptionsPanel.tsx", impo
 const detailer = readFileSync(new URL("../ui/src/regional/detailerPlanDialog.ts", import.meta.url), "utf8");
 const detailerView = readFileSync(new URL("../ui/src/regional/DetailerPlanDialogView.tsx", import.meta.url), "utf8");
 const detectorView = readFileSync(new URL("../ui/src/regional/DetectorRegistryDialogView.tsx", import.meta.url), "utf8");
+const lutRegistryView = readFileSync(new URL("../ui/src/regional/LutRegistryDialogView.tsx", import.meta.url), "utf8");
+const lutPlanView = readFileSync(new URL("../ui/src/regional/LutPlanDialogView.tsx", import.meta.url), "utf8");
 const dataComponents = readFileSync(new URL("../ui/src/ui/components/data.tsx", import.meta.url), "utf8");
 const controls = readFileSync(new URL("../ui/src/ui/controls.tsx", import.meta.url), "utf8");
 const forms = readFileSync(new URL("../ui/src/ui/components/forms.tsx", import.meta.url), "utf8");
@@ -503,4 +505,23 @@ test("layer bounds present normalized geometry as editable canvas pixels", () =>
     assert.match(options,/unit="px"/);
     assert.match(options,/\[key\]: value\/axisSize/);
     assert.doesNotMatch(options,/label=\{key\.toUpperCase\(\)\}[^>]*slider=\{false\}/);
+});
+
+test("regional LUT planner uses the shared sortable job contract", () => {
+    assert.match(lutPlanView, /SortableItem/);
+    assert.match(lutPlanView, /<SortableList\b/);
+    assert.match(lutPlanView, /onReorder=/);
+    assert.match(lutPlanView, /draft\.jobs=next\.map/);
+    assert.doesNotMatch(lutPlanView, /<div className="bv-card-list"><Accordion/);
+});
+
+test("regional easy mode renders global LUT settings in the Global panel", () => {
+    assert.match(regionalEditor, /<OptionsPanel mode=\{mode\} lutEasyGlobalEditor=\{globalLutSettings\}/);
+    assert.match(regionalEditor, /title:"Global"[^\n]+content:optionsPanel\("document"\)/);
+    assert.match(options, /<h3>Document Prompts<\/h3>[^\n]+\{props\.lutEasyGlobalEditor\}<BvSelect label="Negative Mode"/);
+});
+
+test("LUT Registry opens the shared download manager and adopts downloaded LUTs", () => {
+    assert.match(lutRegistryView, /<Button onClick=\{\(\)=>openLutDownloadDialog\(downloaded\)\}>Download LUTs<\/Button>/);
+    assert.match(lutRegistryView, /setAvailableLuts\(current=>current\.includes\(path\)\?current:/);
 });

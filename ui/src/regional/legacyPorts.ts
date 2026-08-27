@@ -7,7 +7,7 @@ export const LEGACY_USAGE_EVENT="bv-regional-legacy-usage";
 // Remove this module, its command/setting hooks, and canvas projection branches with the ports.
 
 type Slot={name?:string;type?:string;link?:unknown;links?:unknown[]|null;hidden?:boolean;__bvLegacyPort?:boolean;__bvLegacySticky?:boolean;__bvLegacyWasConnected?:boolean;__bvM0PortHidden?:boolean;__bvM0VisualHidden?:boolean};
-type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void};
+type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void;__bvRefreshPortProjection?:()=>void};
 export type LegacyPortDescriptor={direction:"input"|"output";name:string;type:string;guidance:string};
 let showAll=false;
 let debugVisible=false;
@@ -60,6 +60,7 @@ export function refreshLegacyPorts(node:Node,dragType?:string|null){
         slot.hidden=!visible;slot.__bvM0PortHidden=!visible;slot.__bvM0VisualHidden=!visible;
     }
     node.setDirtyCanvas?.(true,true);
+    node.__bvRefreshPortProjection?.();
 }
 
 export function refreshLegacyDragPorts(canvas:any){

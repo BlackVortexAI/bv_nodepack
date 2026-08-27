@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDetectorRegistryConfig, serializeDetectorRegistryConfig } from "../ui/src/regional/detectorRegistryConfig.ts";
+import { detectorCapabilities, detectorCapabilityText, parseDetectorRegistryConfig, serializeDetectorRegistryConfig } from "../ui/src/regional/detectorRegistryConfig.ts";
 
 test("detector registry config preserves model-backed entries", () => {
     const config = parseDetectorRegistryConfig(JSON.stringify({ detectors: [{
@@ -32,4 +32,16 @@ test("legacy registry config receives a persisted collector identity", () => {
         parseDetectorRegistryConfig(serializeDetectorRegistryConfig(migrated)).collector_id,
         migrated.collector_id,
     );
+});
+
+test("detector capabilities distinguish BBOX, native SEGM, and SAM masks", () => {
+    const bbox = detectorCapabilities({ provider: "ultralytics", model_name: "bbox/person.pt" });
+    const segm = detectorCapabilities({ provider: "ultralytics", model_name: "segm/person-seg.pt" });
+    const sam = detectorCapabilities({ provider: "onnx", model_name: "person.onnx", sam_model_name: "sam.pth" });
+    assert.deepEqual(bbox, { kind: "bbox", sam: false, pixelMask: false });
+    assert.deepEqual(segm, { kind: "segmentation", sam: false, pixelMask: true });
+    assert.deepEqual(sam, { kind: "bbox", sam: true, pixelMask: true });
+    assert.match(detectorCapabilityText(bbox), /BBOX only/);
+    assert.match(detectorCapabilityText(segm), /SEGM pixel masks/);
+    assert.match(detectorCapabilityText(sam), /SAM-generated pixel masks/);
 });

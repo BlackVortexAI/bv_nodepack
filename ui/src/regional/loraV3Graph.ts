@@ -2,6 +2,7 @@ export const LORA_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
 export const LORA_PROVIDER_SLOT="resource_provider";
 export const LORA_COLLECTOR_NODE="BV LoRA Stack Collector";
 export const LORA_MAX_COLLECTORS=20;
+import{compactProjectedPortLayout,markProjectedProvider,scheduleProjectedPortLayout}from"./portProjection.js";
 export const loraProviderSlot=(ordinal:number)=>`${LORA_PROVIDER_SLOT}_${ordinal}`;
 const LORA_PROVIDER_SLOT_HEIGHT=20;
 
@@ -22,7 +23,7 @@ export function ensureLoraConsumerInputs(node:any,count=LORA_MAX_COLLECTORS){
     for(let ordinal=1;ordinal<=count;ordinal++){
         const name=loraProviderSlot(ordinal);let index=node.inputs?.findIndex((slot:any)=>slot?.name===name)??-1;
         if(index<0&&node.addInput){node.addInput(name,LORA_PROVIDER_TYPE);index=node.inputs?.findIndex((slot:any)=>slot?.name===name)??-1;}
-        const input=node.inputs?.[index];if(input){input.name=name;input.type=LORA_PROVIDER_TYPE;input.hidden=true;input.__bvResourceSlot=true;input.__bvLoraProviderOrdinal=ordinal;}
+        const input=node.inputs?.[index];if(input){input.name=name;input.type=LORA_PROVIDER_TYPE;input.__bvLoraProviderOrdinal=ordinal;markProjectedProvider(input);}
         indexes.push(index);
     }
     return indexes;
@@ -35,25 +36,16 @@ export function trimUnusedLoraConsumerInputs(node:any,keepCount=0){
 }
 
 export function installLoraSizePolicy(node:any){
-    if(node.__bvLoraOriginalComputeSize||typeof node.computeSize!=="function")return;
-    const original=node.computeSize;node.__bvLoraOriginalComputeSize=original;
-    node.computeSize=function(){
-        const computed=original.apply(this,arguments),providerCount=(this.inputs??[]).filter((slot:any)=>slot?.type===LORA_PROVIDER_TYPE).length;
-        return [Number(computed?.[0]??this.size?.[0]??220),Math.max(60,Number(computed?.[1]??this.size?.[1]??60)-providerCount*LORA_PROVIDER_SLOT_HEIGHT)];
-    };
+    // Compatibility marker for older callers/tests. The actual policy now lives
+    // in the shared projected-port layout module.
+    if(node&&!node.__bvLoraOriginalComputeSize)node.__bvLoraOriginalComputeSize=node.computeSize;
+    compactProjectedPortLayout(node);
 }
 export function compactLoraConsumerNode(node:any){
-    installLoraSizePolicy(node);if(!node.setSize)return;
-    const current=node.size??[220,60],width=Math.max(Number(current[0]??0),220);
-    node.setSize([width,60]);
-    const computed=node.computeSize?.()??node.size??[220,60],height=Math.max(60,Number(computed[1]??60)),finalWidth=Math.max(width,Number(computed[0]??0),220);
-    if(Math.abs(Number(node.size?.[0]??0)-finalWidth)<0.5&&Math.abs(Number(node.size?.[1]??0)-height)<0.5)return;
-    node.setSize([finalWidth,height]);
+    compactProjectedPortLayout(node);
 }
 export function scheduleCompactLoraConsumerNode(node:any){
-    if(node.__bvLoraCompactScheduled)return;
-    node.__bvLoraCompactScheduled=true;compactLoraConsumerNode(node);
-    for(const delay of [0,50,150])setTimeout(()=>{compactLoraConsumerNode(node);if(delay===150)node.__bvLoraCompactScheduled=false;},delay);
+    scheduleProjectedPortLayout(node);
 }
 
 export function linkedLocalLoraCollector(node:any){

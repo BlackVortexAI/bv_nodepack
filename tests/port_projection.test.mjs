@@ -1,0 +1,31 @@
+import assert from"node:assert/strict";
+import test from"node:test";
+import{compactProjectedPortLayout,configureProjectedPortLayout,installRegionalPromptCreationLayout,markProjectedProvider,retainNeededProjectedInputs,scheduleProjectedPortLayout,setProjectedSlotLabel,suppressInitialProjectedProviderDefinitions}from"../ui/src/regional/portProjection.ts";
+import{setLegacyDebugVisible}from"../ui/src/regional/legacyPorts.ts";
+
+const provider=(name,link=null)=>({name,type:"BV_RUNTIME_RESOURCE_PROVIDER",link});
+function fixture(){const observed=[],node={size:[320,520],properties:{},inputs:Array.from({length:20},(_,index)=>provider(`resource_provider_${index+1}`)),outputs:[{name:"regional",type:"BV_REGIONAL"},{name:"legacy",type:"LEGACY",hidden:true,__bvLegacyPort:true}],widgets:[{}],computeSize(){observed.push({inputs:this.inputs.length,outputs:this.outputs.length});return[300,80+Math.max(this.inputs.length,this.outputs.length)*20]},setSize(size){this.size=size;this.onResize?.(size)}};return{node,observed}}
+
+test("projected layout computes normal spacing without hidden providers or hidden legacy ports",()=>{const{node,observed}=fixture();node.inputs.forEach(markProjectedProvider);compactProjectedPortLayout(node);assert.deepEqual(observed.at(-1),{inputs:0,outputs:1});assert.deepEqual(node.size,[320,100]);assert.equal(node.inputs.length,20)});
+
+test("projected layout publishes only the final size instead of a transient minimum height",()=>{const{node}=fixture();node.inputs.forEach(markProjectedProvider);const sizes=[],setSize=node.setSize;node.setSize=function(size){sizes.push([...size]);setSize.call(this,size)};compactProjectedPortLayout(node);assert.deepEqual(sizes,[[320,100]])});
+
+test("measurement does not mutate a LiteGraph-style shared size accessor",()=>{const backing=[320,520],node={properties:{},inputs:Array.from({length:20},(_,index)=>provider(`resource_provider_${index+1}`)),outputs:[{name:"regional"}],widgets:[{}],get size(){return backing},set size(value){backing.splice(0,2,...value)},computeSize(){return[300,80+Math.max(this.inputs.length,this.outputs.length)*20]},setSize(size){this.size=size}};node.inputs.forEach(markProjectedProvider);compactProjectedPortLayout(node);assert.deepEqual(backing,[320,100])});
+
+test("classic widget arrangement padding is included in the single final size",()=>{const{node}=fixture();node.inputs.forEach(markProjectedProvider);node.__bvProjectedArrangementPadding=12;const sizes=[],setSize=node.setSize;node.setSize=function(size){sizes.push([...size]);setSize.call(this,size)};compactProjectedPortLayout(node);assert.deepEqual(sizes,[[320,112]])});
+
+test("only a real canvas drag persists manual node height",()=>{let dragging=false;configureProjectedPortLayout({isUserResizing:()=>dragging});const{node}=fixture();node.inputs.forEach(markProjectedProvider);compactProjectedPortLayout(node);node.setSize([360,520]);compactProjectedPortLayout(node);assert.deepEqual(node.size,[360,100]);dragging=true;node.setSize([360,260]);dragging=false;compactProjectedPortLayout(node);assert.deepEqual(node.size,[360,260]);assert.equal(node.properties.bvProjectedUserHeight,260);configureProjectedPortLayout({})});
+
+test("legacy heights captured by the broken resize hook migrate once",()=>{const{node}=fixture();node.properties={bvProjectedUserHeight:520};node.inputs.forEach(markProjectedProvider);compactProjectedPortLayout(node);assert.deepEqual(node.size,[320,100]);assert.equal(node.properties.bvProjectedUserHeight,undefined);assert.equal(node.properties.bvProjectedLayoutVersion,1)});
+
+test("scheduled layout waits until the current UI construction turn is complete",async()=>{const{node}=fixture();node.inputs.forEach(markProjectedProvider);let calls=0;const setSize=node.setSize;node.setSize=function(size){calls++;setSize.call(this,size)};scheduleProjectedPortLayout(node);assert.equal(calls,0);node.widgets.push({name:"final_button"});await new Promise(resolve=>setTimeout(resolve,10));assert.ok(calls>0)});
+
+test("debug mode projects all wireless providers onto exactly one fan-in row",()=>{const{node,observed}=fixture();node.inputs.forEach(markProjectedProvider);setLegacyDebugVisible(true);try{compactProjectedPortLayout(node);assert.deepEqual(observed.at(-1),{inputs:1,outputs:1});assert.equal(node.inputs.length,20)}finally{setLegacyDebugVisible(false)}});
+
+test("projected input retention removes only unused ports and preserves linked legacy state",()=>{const node={inputs:[provider("wanted"),provider("stale"),provider("linked",7),{name:"legacy",type:"LEGACY",link:null,__bvLegacyPort:true}],removeInput(index){this.inputs.splice(index,1)}};retainNeededProjectedInputs(node,["wanted"],slot=>slot.type==="BV_RUNTIME_RESOURCE_PROVIDER");assert.deepEqual(node.inputs.map(item=>item.name),["wanted","linked","legacy"]);assert.equal(node.inputs[0].__bvM0ResourceSlot,true)});
+
+test("slot labels update classic and Nodes 2.0 names together",()=>{const slot={name:"plan"};setProjectedSlotLabel(slot,"regional or LUT plan");assert.equal(slot.label,"regional or LUT plan");assert.equal(slot.localized_name,"regional or LUT plan")});
+
+test("classic node creation omits projected providers before its first canvas frame",()=>{const nodeData={input:{optional:{regional_json:["STRING",{}],resource_provider_1:["BV_RUNTIME_RESOURCE_PROVIDER",{forceInput:true}],detailer_resource_provider_1:["BV_RUNTIME_RESOURCE_PROVIDER",{forceInput:true}],unrelated:["IMAGE",{forceInput:true}]}}};assert.deepEqual(suppressInitialProjectedProviderDefinitions(nodeData),["resource_provider_1","detailer_resource_provider_1"]);assert.deepEqual(Object.keys(nodeData.input.optional),["regional_json","unrelated"])});
+
+test("classic Regional Prompt preview measures the final two-button shell before upgrade",()=>{function Node(){}Node.prototype.computeSize=function(){return[220,40+(this.widgets?.length??0)*20+Math.max(this.inputs?.length??0,this.outputs?.length??0)*20]};installRegionalPromptCreationLayout(Node);const node=new Node();node.inputs=[provider("resource_provider_1")];node.outputs=[{name:"regional"},{name:"lora_bindings"}];node.widgets=Array.from({length:5},()=>({type:"text"}));assert.deepEqual(node.computeSize(),[220,100]);node.__bvRegionalPromptUiReady=true;assert.deepEqual(node.computeSize(),[220,180])});

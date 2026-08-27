@@ -14,3 +14,7 @@ test("detailer UI uses consistent human-readable connector terminology", () => {
     assert.equal(detailerUiLabel("BV Detector Binding", "bbox_detector"), "BBOX detector");
     assert.ok(DETAILER_UI_NODES.has("BV Regional Detailer Mask"));
 });
+
+test("LUT Loop Start identifies both accepted plan sources", () => {
+    assert.equal(detailerUiLabel("BV LUT Loop Start", "plan"), "regional or lut_plan");
+});

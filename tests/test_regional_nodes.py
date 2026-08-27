@@ -274,6 +274,23 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertIn("bv-nodepack.lora", regional["capabilities"])
         self.assertEqual(regional["capabilities"]["bv-nodepack.detailer-plan"]["jobs"], [detailer_job])
 
+    def test_main_node_embeds_lut_easy_mode_capability(self):
+        document = fixture()
+        document["version"] = 2
+        for item in document["regions"]:
+            item["usage"] = "generation"
+        region = document["regions"][0]
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        job = {
+            "id": "person-grade", "region_ids": [region["id"]], "mask_composition": "union",
+            "lut_source": {"collector_id": collector_id, "resource_id": "warm"},
+            "strength": .5, "mask_invert": True, "detector_source": None,
+        }
+        regional, _ = self.module.BVRegionalPromptNode().build(
+            json.dumps(document), lut_v3_config_json=json.dumps({"version": 1, "jobs": [job]}),
+        )
+        self.assertEqual(regional["capabilities"]["bv-nodepack.lut-plan"]["jobs"], [{**job, "scope": "regional"}])
+
     def test_native_compiler_is_not_a_lora_resource_consumer(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
         self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings"})

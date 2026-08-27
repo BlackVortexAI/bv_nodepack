@@ -21,6 +21,11 @@ try:
 except Exception as error:
     print(f"BV Node Pack: detector model API unavailable: {error}")
 
+try:
+    from .py.util import lut_routes as _lut_routes  # noqa: F401
+except Exception as error:
+    print(f"BV Node Pack: LUT catalog API unavailable: {error}")
+
 
 def get_ext_dir(subpath=None, mkdir=False):
     root = Path(__file__).parent
