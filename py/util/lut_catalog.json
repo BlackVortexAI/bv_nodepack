@@ -1,6 +1,8 @@
 {
   "schema": "bv.lut-download-catalog",
   "version": 1,
+  "catalog_version": 1,
+  "channel": "stable",
   "checked_at": "2026-08-26",
   "entries": [
     {

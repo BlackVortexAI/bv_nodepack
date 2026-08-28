@@ -19,3 +19,9 @@ BV_DOCS_PLAN.local.md
 .codex-worktrees/
 .codex-test
 .abacusai/
+
+# Local LUT catalog state and downloaded resources
+/user/default/bv_nodepack/lut_catalog.json
+/user/default/bv_nodepack/lut_catalog.experimental.json
+/user/default/bv_nodepack/lut_catalog_settings.json
+/models/luts/downloaded/
