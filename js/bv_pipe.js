@@ -12,6 +12,11 @@ app.registerExtension({
   name: "bv_nodepack.bv_pipe",
   async nodeCreated(node) {
     if (node.comfyClass !== "BV Pipe") return;
+    const originalRemoved = node.onRemoved;
+    node.onRemoved = function () {
+      globalThis.__bvNodePresentationBridge?.remove?.(this);
+      return originalRemoved?.apply(this, arguments);
+    };
 
     // Apply config (or collapse if none) on creation
     defer(() => {

@@ -2,6 +2,7 @@ import { getApp } from "../../appHelper.js";
 import { collectAllGroups, collectNodesByType, nodeMatchesType } from "../../util/control/collector";
 import { BVControlConfig, CONFIG_CHANGED_EVENT, readConfig, writeConfig } from "../../util/control/configHandler";
 import { findActiveControlConflicts, formatControlConflictStatus, nodesInControlGroup } from "../../util/control/controlCenterModel.js";
+import { applyClassicNodePresentation } from "../../regional/classicNodePresentation.js";
 
 const NODE_CLASS = "BV Control Center";
 const NORMAL = 0;
@@ -11,6 +12,7 @@ const BASE_MODE = "bvControlBaseMode";
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
 const CONTROL_CENTER_MIN_WIDTH = 320;
 const CONTROL_CENTER_WIDTH_BUFFER = 48;
+const CONTROL_CENTER_WIDGET_START_Y = 34;
 const CONTROL_STATUS_WIDGET = "bv_control_conflict_status";
 const previouslyControlled = new Set<any>();
 
@@ -177,11 +179,13 @@ function syncNode(node: any, config: BVControlConfig) {
     const currentSize = node.size ?? [0, 0];
     const computedSize = node.computeSize?.() ?? currentSize;
     const minimumWidth = Math.max(CONTROL_CENTER_MIN_WIDTH, (computedSize[0] ?? 0) + CONTROL_CENTER_WIDTH_BUFFER);
-    node.setSize?.([
-        Math.max(currentSize[0] ?? 0, minimumWidth),
-        computedSize[1] ?? currentSize[1] ?? 0,
-    ]);
-    node.setDirtyCanvas?.(true, true);
+    node.__bvPresentationManaged=true;
+    const presentation={minWidth:minimumWidth,compactWidgetOnly:true,widgetStartY:CONTROL_CENTER_WIDGET_START_Y} as const;
+    applyClassicNodePresentation(node,NODE_CLASS,presentation);
+    if(!node.__bvControlFinalLayoutQueued&&typeof requestAnimationFrame!=="undefined"){
+        node.__bvControlFinalLayoutQueued=true;
+        requestAnimationFrame(()=>{node.__bvControlFinalLayoutQueued=false;applyClassicNodePresentation(node,NODE_CLASS,presentation)});
+    }
 }
 
 function syncAll(config = readConfig()) {
@@ -198,7 +202,7 @@ getApp().registerExtension({
         const originalCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const result = originalCreated?.apply(this, arguments);
-            syncNode(this, readConfig());
+            queueMicrotask(() => syncNode(this, readConfig()));
             return result;
         };
     },

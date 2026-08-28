@@ -50,7 +50,18 @@ function projectedButtonAction(localY, baseHeight) {
   return BUTTONS[row][0];
 }
 
+function widgetTheme() {
+  const theme = globalThis.LiteGraph;
+  return {
+    background: theme.WIDGET_BGCOLOR,
+    outline: theme.WIDGET_OUTLINE_COLOR,
+    text: theme.WIDGET_TEXT_COLOR,
+    secondaryText: theme.WIDGET_SECONDARY_TEXT_COLOR,
+  };
+}
+
 function drawButtons(ctx, width, startY, stateNode) {
+  const theme = widgetTheme();
   ctx.save();
   ctx.font = "13px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
@@ -58,24 +69,25 @@ function drawButtons(ctx, width, startY, stateNode) {
   for (let index = 0; index < BUTTONS.length; index++) {
     const [action, label] = BUTTONS[index];
     const y = startY + index * (BUTTON_HEIGHT + BUTTON_GAP);
-    ctx.fillStyle = "#242424";
-    ctx.strokeStyle = "#666";
+    ctx.fillStyle = theme.background;
+    ctx.strokeStyle = theme.outline;
     ctx.lineWidth = 1;
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(10, y + 1, Math.max(0, width - 20), BUTTON_HEIGHT - 2, 4);
     else ctx.rect(10, y + 1, Math.max(0, width - 20), BUTTON_HEIGHT - 2);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = "#ddd";
+    ctx.fillStyle = theme.text;
     ctx.fillText(projectedButtonLabel(action, label, stateNode), width / 2, y + BUTTON_HEIGHT / 2);
   }
   ctx.restore();
 }
 
 function drawSeedValue(ctx, width, posY, height, value) {
+  const theme = widgetTheme();
   ctx.save();
-  ctx.fillStyle = "#242424";
-  ctx.strokeStyle = "#666";
+  ctx.fillStyle = theme.background;
+  ctx.strokeStyle = theme.outline;
   ctx.lineWidth = 1;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(10, posY + 1, Math.max(0, width - 20), height - 2, height / 2);
@@ -84,10 +96,10 @@ function drawSeedValue(ctx, width, posY, height, value) {
   ctx.stroke();
   ctx.font = "13px Inter, system-ui, sans-serif";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#aaa";
+  ctx.fillStyle = theme.secondaryText;
   ctx.textAlign = "left";
   ctx.fillText("seed", 22, posY + height / 2);
-  ctx.fillStyle = "#ddd";
+  ctx.fillStyle = theme.text;
   ctx.textAlign = "right";
   ctx.fillText(String(value ?? -1), width - 22, posY + height / 2);
   ctx.restore();
@@ -95,56 +107,31 @@ function drawSeedValue(ctx, width, posY, height, value) {
 
 function patchSeedControl(owner, seedWidget, stateNode = owner) {
   if (!seedWidget) return false;
-  if (seedWidget.__bvSeedControlOwner === owner && seedWidget.__bvSeedControlState === stateNode) return false;
-
-  seedWidget.__bvSeedBaseDraw ??= seedWidget.draw;
-  seedWidget.__bvSeedBaseDrawWidget ??= seedWidget.drawWidget;
-  seedWidget.__bvSeedBaseComputeSize ??= seedWidget.computeSize;
-  seedWidget.__bvSeedBaseComputeLayoutSize ??= seedWidget.computeLayoutSize;
-  seedWidget.__bvSeedBaseMouse ??= seedWidget.mouse;
-  seedWidget.__bvSeedBaseOnPointerDown ??= seedWidget.onPointerDown;
-  const originalDraw = seedWidget.__bvSeedBaseDraw;
-  const originalComputeSize = seedWidget.__bvSeedBaseComputeSize;
-  const originalMouse = seedWidget.__bvSeedBaseMouse;
-  const originalOnPointerDown = seedWidget.__bvSeedBaseOnPointerDown;
-  const baseHeight = Math.max(24, originalComputeSize?.call(seedWidget, owner.size?.[0] ?? 220)?.[1] || 24);
-  const controlsHeight = BUTTONS.length * BUTTON_HEIGHT + (BUTTONS.length - 1) * BUTTON_GAP;
-
+  const alreadyInstalled = seedWidget.__bvSeedControlOwner === owner
+    && seedWidget.__bvSeedControlState === stateNode
+    && BUTTONS.every(([action]) => owner.widgets?.some((candidate) => candidate.name === `bv_seed_action_${action}`));
+  if (alreadyInstalled) return false;
+  if (seedWidget.__bvSeedBaseDraw !== undefined) seedWidget.draw = seedWidget.__bvSeedBaseDraw;
+  if (seedWidget.__bvSeedBaseDrawWidget !== undefined) seedWidget.drawWidget = seedWidget.__bvSeedBaseDrawWidget;
+  if (seedWidget.__bvSeedBaseComputeSize !== undefined) seedWidget.computeSize = seedWidget.__bvSeedBaseComputeSize;
+  if (seedWidget.__bvSeedBaseComputeLayoutSize !== undefined) seedWidget.computeLayoutSize = seedWidget.__bvSeedBaseComputeLayoutSize;
+  if (seedWidget.__bvSeedBaseMouse !== undefined) seedWidget.mouse = seedWidget.__bvSeedBaseMouse;
+  if (seedWidget.__bvSeedBaseOnPointerDown !== undefined) seedWidget.onPointerDown = seedWidget.__bvSeedBaseOnPointerDown;
   seedWidget.__bvSeedControlOwner = owner;
   seedWidget.__bvSeedControlState = stateNode;
-  seedWidget.__bvSeedBaseHeight = baseHeight;
-  seedWidget.computeSize = (width) => [Math.max(MIN_WIDTH, width || MIN_WIDTH), baseHeight + BUTTON_GAP + controlsHeight];
-  seedWidget.computeLayoutSize = function () {
-    const [minWidth, minHeight] = this.computeSize(this.width ?? owner.size?.[0] ?? MIN_WIDTH);
-    return { minWidth, minHeight, maxHeight: minHeight };
-  };
-  seedWidget.draw = function (ctx, node, width, posY, _height, lowQuality) {
-    this.__bvSeedDrawY = posY;
-    drawSeedValue(ctx, width, posY, baseHeight, this.value);
-    drawButtons(ctx, width, posY + baseHeight + BUTTON_GAP, stateNode);
-  };
-  seedWidget.mouse = function (event, pos, node) {
-    const localY = (pos?.[1] ?? 0) - (this.__bvSeedDrawY ?? this.y ?? this.last_y ?? 0);
-    const action = projectedButtonAction(localY, baseHeight + BUTTON_GAP);
-    if (action && (event?.type === "pointerdown" || event?.type === "mousedown")) {
-      if (action !== "use-last" || Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed)) {
-        applyAction(owner, action, this, stateNode);
-        return true;
-      }
-    }
-    return originalMouse?.call(this, event, pos, node) ?? false;
-  };
-  seedWidget.onPointerDown = function (pointer, node) {
-    const event = pointer?.eDown;
-    const localY = Number(event?.canvasY) - Number(node?.pos?.[1] || 0)
-      - (this.__bvSeedDrawY ?? this.y ?? this.last_y ?? 0);
-    const action = projectedButtonAction(localY, baseHeight + BUTTON_GAP);
-    if (!action || (action === "use-last" && !Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed))) {
-      return originalOnPointerDown?.call(this, pointer, node) ?? false;
-    }
-    applyAction(owner, action, this, stateNode);
-    return true;
-  };
+  stateNode.__bvSeedControlOwners ??= new Set();
+  stateNode.__bvSeedControlOwners.add(owner);
+  for (const [action, label] of BUTTONS) {
+    const name = `bv_seed_action_${action}`;
+    let button = owner.widgets?.find((candidate) => candidate.name === name);
+    if (!button) button = owner.addWidget?.("button", name, null, () => {
+      if (action !== "use-last" || Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed)) applyAction(owner, action, seedWidget, stateNode);
+    }, { serialize: false });
+    if (!button) continue;
+    button.label = projectedButtonLabel(action, label, stateNode);
+    button.serialize = false;
+    button.disabled = action === "use-last" && !Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed);
+  }
   return true;
 }
 
@@ -205,6 +192,11 @@ export function projectSeedControls(host) {
 function updateLastSeed(node, used) {
   node.properties ??= {};
   node.properties.bvLastQueuedSeed = used;
+  for (const owner of node.__bvSeedControlOwners || []) {
+    const button = owner.widgets?.find((candidate) => candidate.name === "bv_seed_action_use-last");
+    if (button) { button.label = `♻️ ${used}`; button.disabled = false; }
+    owner.setDirtyCanvas?.(true, true);
+  }
   node.setDirtyCanvas?.(true, true);
 }
 

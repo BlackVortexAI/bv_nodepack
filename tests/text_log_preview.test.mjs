@@ -10,6 +10,13 @@ test("text log preview uses the ComfyUI STRING widget execution channel", () => 
   assert.doesNotMatch(source, /message\?\.preview_text/);
 });
 
+test("AST debug preview uses the same native ComfyUI STRING widget contract", () => {
+  assert.match(source, /ensureReadonlyTextPreview/);
+  assert.match(source, /BV Prompt AST Debug preview/);
+  assert.doesNotMatch(source, /document\.createElement\("textarea"\)/);
+  assert.doesNotMatch(source, /addDOMWidget\(WIDGET_NAME/);
+});
+
 test("text log preview is appended only after base widget configuration", () => {
   const writerBranch = source.slice(
     source.indexOf('if (nodeData?.name === "BV Text Log Writer")'),

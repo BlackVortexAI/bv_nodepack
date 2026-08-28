@@ -146,10 +146,15 @@ function reconcileInputs(node) {
     input.type = "BV_SMART_PIPE";
   }
   ensureAddSource(node);
-  hideConfigWidget(node);
   syncConfig(node);
   const wiredCount = sources.filter((source) => source.mode === "wired").length;
-  node.setSize?.([Math.max(280, node.size?.[0] || 0), compactMergeNodeHeight(wiredCount)]);
+  const presentation = globalThis.__bvNodePresentationBridge;
+  if (presentation?.applyClassic) presentation.applyClassic(node, NODE_CLASS);
+  else {
+    hideConfigWidget(node);
+    const next = [Math.max(280, node.size?.[0] || 0), compactMergeNodeHeight(wiredCount)];
+    if (node.size?.[0] !== next[0] || node.size?.[1] !== next[1]) node.setSize?.(next);
+  }
   node.setDirtyCanvas?.(true, true);
   for (const target of node.__bvSmartPipeTargets || []) propagate(target);
 }
@@ -234,6 +239,11 @@ function setupNode(node) {
     originalConnectionsChange?.apply(this, arguments);
     if (type === 1 && connected && convertAddSource(this, index, arguments[3])) return;
     requestAnimationFrame(() => reconcileInputs(this));
+  };
+  const originalRemoved = node.onRemoved;
+  node.onRemoved = function () {
+    globalThis.__bvNodePresentationBridge?.remove?.(this);
+    return originalRemoved?.apply(this, arguments);
   };
   requestAnimationFrame(() => reconcileInputs(node));
 }

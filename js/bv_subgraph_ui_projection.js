@@ -11,6 +11,13 @@ const PRESENTATION_INPUT_NAMES = new Map([
   ["BV_SPACER", "Spacer"],
 ]);
 
+export function subgraphFor(node) {
+  if (node?.subgraph) return node.subgraph;
+  try { return node?.getSubgraph?.() ?? null; } catch { return null; }
+}
+
+export const isSubgraphHost = (node) => Boolean(node?.isSubgraphNode?.() || subgraphFor(node));
+
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -154,19 +161,84 @@ function createProjectedWidget(host, input, source, key, presentationType) {
   return target;
 }
 
+function holdProjectedMethod(target, property, projected) {
+  target.__bvProjectedMethodGuards ??= {};
+  const existing = target.__bvProjectedMethodGuards[property];
+  if (existing) {
+    existing.projected = projected;
+    return true;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(target, property);
+  if (descriptor?.configurable === false) {
+    try { target[property] = projected; } catch { return false; }
+    return false;
+  }
+  const state = { projected, base: target[property] };
+  try {
+    Object.defineProperty(target, property, {
+      configurable: true,
+      enumerable: descriptor?.enumerable ?? true,
+      get: () => state.projected,
+      set: (value) => { if (value !== state.projected) state.base = value; },
+    });
+    target.__bvProjectedMethodGuards[property] = state;
+    return true;
+  } catch {
+    target[property] = projected;
+    return false;
+  }
+}
+
+export function resolveSubgraphWidgetPresentations(host) {
+  const presentations = [];
+  for (const [inputIndex, input] of (host?.inputs || []).entries()) {
+    const presentation = sourcePresentationFor(host, input, inputIndex);
+    if (!presentation) continue;
+    const key = presentationKey(presentation.sourceNode, presentation.sourceInput, input);
+    const target = host.getWidgetFromSlot?.(input)
+      || host.widgets?.find((widget) => widget.widgetId && widget.widgetId === input.widgetId)
+      || host.widgets?.find((widget) => widget.__bvPresentationKey === key)
+      || null;
+    presentations.push({ ...presentation, source: presentation.widget, input, inputIndex, key, target });
+  }
+  return presentations;
+}
+
+function currentPresentationTarget(host, snapshot) {
+  return host.getWidgetFromSlot?.(snapshot.input)
+    || host.widgets?.find((widget) => widget.widgetId && widget.widgetId === snapshot.input?.widgetId)
+    || host.widgets?.find((widget) => widget.__bvPresentationKey === snapshot.key)
+    || null;
+}
+
+export function isSubgraphProjectionStale(host) {
+  const snapshots = host?.__bvSubgraphProjectionSnapshot;
+  if (!Array.isArray(snapshots) || snapshots.length === 0) return false;
+  return snapshots.some((snapshot) => {
+    const target = currentPresentationTarget(host, snapshot);
+    return target !== snapshot.target
+      || (snapshot.guardedDraw && target?.draw !== snapshot.draw)
+      || (snapshot.guardedComputeSize && target?.computeSize !== snapshot.computeSize)
+      || (snapshot.guardedDrawWidget && target?.drawWidget !== snapshot.drawWidget)
+      || (snapshot.guardedComputeLayoutSize && target?.computeLayoutSize !== snapshot.computeLayoutSize)
+      || target?.__bvPresentationType !== snapshot.presentationType
+      || target?.__bvProjectedFrom !== snapshot.source;
+  });
+}
+
 export function projectSubgraphUIPresentation(host, visited = new Set()) {
   if (!host || visited.has(host)) return 0;
   visited.add(host);
   let projected = 0;
   let changed = false;
-  for (const [inputIndex, input] of (host.inputs || []).entries()) {
-    const presentation = sourcePresentationFor(host, input, inputIndex);
-    if (!presentation) continue;
+  const projectionSnapshot = [];
+  for (const presentation of resolveSubgraphWidgetPresentations(host)) {
+    const { input, inputIndex } = presentation;
     const source = presentation.widget;
     const presentationType = presentation.presentationType;
     migratePresentationInputName(host, input, inputIndex, presentation);
     const key = presentationKey(presentation.sourceNode, presentation.sourceInput, input);
-    const slotWidget = host.getWidgetFromSlot?.(input);
+    const slotWidget = presentation.target;
     // Current ComfyUI owns promoted proxy widgets through the input slot. Such
     // a proxy may intentionally not be present in host.widgets; replacing it
     // with a synthetic widget makes ComfyUI remove the replacement during its
@@ -179,8 +251,8 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
     // Modern ComfyUI widgets expose type as a getter-only property. Their
     // renderer already honours a custom draw/computeSize implementation, so
     // changing the type is both unnecessary and invalid.
-    if (target.draw !== source.draw) {
-      target.draw = source.draw;
+    if (target.draw !== source.draw || !target.__bvProjectedMethodGuards?.draw) {
+      holdProjectedMethod(target, "draw", source.draw);
       changed = true;
     }
     const projectedComputeSize = presentationType === "BV_SPACER" && typeof source.computeSize === "function"
@@ -215,8 +287,8 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
         changed = true;
       }
     }
-    if (target.computeSize !== projectedComputeSize) {
-      target.computeSize = projectedComputeSize;
+    if (target.computeSize !== projectedComputeSize || !target.__bvProjectedMethodGuards?.computeSize) {
+      holdProjectedMethod(target, "computeSize", projectedComputeSize);
       changed = true;
     }
     if (typeof target.drawWidget === "function" && typeof source.draw === "function") {
@@ -228,7 +300,7 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
               const height = this.height ?? this.computeSize?.(width)?.[1] ?? 24;
               return source.draw.call(this, ctx, host, width, this.y ?? 0, height, !options.showText);
             };
-        target.drawWidget = projectedDrawWidget;
+        holdProjectedMethod(target, "drawWidget", projectedDrawWidget);
         target.__bvProjectedDrawWidget = projectedDrawWidget;
         target.__bvProjectedDrawSource = source.draw;
         changed = true;
@@ -242,7 +314,7 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
               const [minWidth, minHeight] = this.computeSize(this.width ?? host.size?.[0] ?? 220);
               return { minWidth, minHeight };
             };
-        target.computeLayoutSize = projectedLayout;
+        holdProjectedMethod(target, "computeLayoutSize", projectedLayout);
         target.__bvProjectedLayout = projectedLayout;
         target.__bvProjectedLayoutSource = source.computeSize;
         changed = true;
@@ -285,12 +357,32 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
       }
     }
     host.serialize_widgets = true;
+    projectionSnapshot.push({
+      input,
+      key,
+      target,
+      source,
+      presentationType,
+      draw: target.draw,
+      computeSize: target.computeSize,
+      drawWidget: target.drawWidget,
+      computeLayoutSize: target.computeLayoutSize,
+      guardedDraw: Boolean(target.__bvProjectedMethodGuards?.draw),
+      guardedComputeSize: Boolean(target.__bvProjectedMethodGuards?.computeSize),
+      guardedDrawWidget: Boolean(target.__bvProjectedMethodGuards?.drawWidget),
+      guardedComputeLayoutSize: Boolean(target.__bvProjectedMethodGuards?.computeLayoutSize),
+    });
     projected++;
   }
+  host.__bvSubgraphProjectionSnapshot = projectionSnapshot;
   if (projected && changed) {
-    host.expandToFitContent?.();
-    const computedSize = host.computeSize?.();
-    if (computedSize) host.setSize?.(computedSize);
+    const bridge = globalThis.__bvNodePresentationBridge;
+    if (bridge?.applyClassicSubgraph) bridge.applyClassicSubgraph(host);
+    else {
+      host.expandToFitContent?.();
+      const computedSize = host.computeSize?.();
+      if (computedSize) host.setSize?.(computedSize);
+    }
     host.setDirtyCanvas?.(true, true);
     host.graph?.setDirtyCanvas?.(true, true);
   }

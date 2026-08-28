@@ -11,7 +11,7 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.0.1 includes Regional V3.** The accompanying
+> **BV Node Pack 1.1.0 includes Regional V3.** The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
 > missing runtime features.
@@ -107,6 +107,54 @@ Report reproducible bugs and feature requests through
 
 BV Node Pack is licensed under [GPL-3.0](LICENSE). Third-party attribution and
 provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Changelog
+
+The README keeps the four most recent release entries. The complete history is
+maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
+
+### 1.1.0 — 2026-08-28
+
+- Add Regional LUT authoring and execution workflows, including registry, plan,
+  loop, catalog, download and prototype tooling.
+- Unify Classic, Nodes 2.0 and Node Library presentation for technical,
+  provider and legacy ports, including connection-aware Legacy Debug visibility.
+- Stabilize node sizing and widget projection across mode changes, Subgraphs and
+  hot reloads without overwriting user-resized dimensions.
+- Refresh Regional graph-dependent selectors and sender targets when relevant
+  nodes, editors or regions are created, replaced or removed.
+- Normalize Control Center, Seed, prompt-debug and text-preview presentation and
+  add regression coverage for the shared UI rules.
+
+### 1.0.1 — 2026-08-26
+
+- Add deterministic PNG export for the active graph, selected nodes and groups,
+  and open BV-managed windows.
+- Add transparent, BV Documentation Grid and current ComfyUI background modes
+  with configurable scale and padding.
+- Add optional complete-workflow PNG metadata and the versioned
+  `window.bvNodepack.export.v1` automation API.
+- Preserve native Subgraph capture compatibility with guarded offscreen-canvas
+  attachment and cleanup.
+
+### 1.0.0 — 2026-08-25
+
+- Release Regional V3 with workflow-scoped documents, stable region identity,
+  resource providers and model-specific execution paths.
+- Add migration support and temporary Legacy Debug visibility for compatible
+  pre-1.0 Regional workflows.
+- Publish the task-oriented documentation site and runtime-derived node
+  reference.
+
+### 0.18.2 — 2026-08-23
+
+- Adopt the Fluent Cyclone mark and the `#1345B7` CI palette across published
+  brand assets and shared UI accent states.
+- Add canonical white, black and light-tinted logo variants with the required
+  Microsoft Fluent Emoji attribution.
+- Replace the legacy Regional Editor and minimized-window marks with the
+  canonical Cyclone geometry.
+- Keep the layout-profile icon compact when a session layout is modified.
 
 ---
 

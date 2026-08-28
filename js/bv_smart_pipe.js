@@ -708,7 +708,18 @@ export function propagate(node, visited = new Set()) {
   updateRouteWidget(node);
   updatePredecessorWidget(node);
   const visibleSlots = Math.max((node.inputs?.length || 1) - 1, (node.outputs?.length || 1) - 1);
-  node.setSize?.([Math.max(260, node.size?.[0] || 0), 90 + visibleSlots * 22]);
+  const presentation = globalThis.__bvNodePresentationBridge;
+  if (presentation?.applyClassic) {
+    presentation.applyClassic(node, NODE_CLASS);
+    const projectNodes2 = () => node.__bvApplyNodes2Presentation?.();
+    requestAnimationFrame(() => {
+      projectNodes2();
+      requestAnimationFrame(projectNodes2);
+      setTimeout(() => presentation.applyClassic(node, NODE_CLASS), 100);
+      setTimeout(() => presentation.applyClassic(node, NODE_CLASS), 500);
+    });
+  }
+  else node.setSize?.([Math.max(260, node.size?.[0] || 0), 90 + visibleSlots * 22]);
   node.setDirtyCanvas?.(true, true);
   for (const target of node.__bvSmartPipeTargets || []) propagate(target, visited);
 }
@@ -766,6 +777,11 @@ globalThis.__bvSmartPipeEditorBridge.pipe = {
 function setupNode(node) {
   if (node.__bvSmartPipeReady) return;
   node.__bvSmartPipeReady = true;
+  const originalRemoved = node.onRemoved;
+  node.onRemoved = function () {
+    globalThis.__bvNodePresentationBridge?.remove?.(this);
+    return originalRemoved?.apply(this, arguments);
+  };
   stateFor(node);
   routingFor(node);
   const predecessor = node.addWidget?.("combo", "Pipe predecessor", "Start new pipe", (label) => {
@@ -792,6 +808,7 @@ function setupNode(node) {
   }
   const button = node.addWidget?.("button", "Configure", null, () => openEditor(node), { serialize: false });
   if (button) button.label = "Configure Smart Pipe";
+  setTimeout(() => globalThis.__bvNodePresentationBridge?.applyClassic?.(node, NODE_CLASS), 500);
   const originalConnectionsChange = node.onConnectionsChange;
   node.onConnectionsChange = function (type, index, connected, linkInfo) {
     originalConnectionsChange?.apply(this, arguments);

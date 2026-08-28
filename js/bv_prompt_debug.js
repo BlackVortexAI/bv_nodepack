@@ -76,51 +76,19 @@ function migrateTextLogWriterWidgets(node) {
     return changed;
 }
 
-function ensureDebugWidget(node) {
-    if (!node || node.__bvAstDebugWidget) return node?.__bvAstDebugWidget;
-
-    const textarea = document.createElement("textarea");
-    textarea.readOnly = true;
-    textarea.placeholder = "Run the workflow to inspect the AST.";
-    textarea.style.boxSizing = "border-box";
-    textarea.style.width = "100%";
-    textarea.style.height = "100%";
-    textarea.style.minHeight = "160px";
-    textarea.style.resize = "vertical";
-    textarea.style.fontFamily = "ui-monospace, SFMono-Regular, Consolas, monospace";
-    textarea.style.fontSize = "12px";
-    textarea.style.whiteSpace = "pre";
-
-    const widget = node.addDOMWidget(WIDGET_NAME, "textarea", textarea, {
-        serialize: false,
-        getMinHeight: () => 160,
-        getValue: () => textarea.value,
-        setValue: (value) => {
-            textarea.value = typeof value === "string" ? value : "";
-        },
-    });
-
-    widget.element = textarea;
-    node.__bvAstDebugWidget = widget;
-    return widget;
-}
-
-function setDebugText(node, value) {
-    const widget = ensureDebugWidget(node);
-    const textarea = widget?.element;
-    if (!textarea) return;
-
-    textarea.value = value;
-    node.setDirtyCanvas?.(true, true);
-    node.graph?.setDirtyCanvas?.(true, true);
-}
-
-function ensureTextLogPreview(node) {
-    if (!node || node.__bvTextLogPreviewWidget) return node?.__bvTextLogPreviewWidget;
-
+function ensureReadonlyTextPreview(node, {
+    cacheKey,
+    widgetName,
+    placeholder,
+    ariaLabel,
+    minHeight,
+    minWidth,
+    minNodeHeight,
+}) {
+    if (!node || node[cacheKey]) return node?.[cacheKey];
     const widget = ComfyWidgets["STRING"](
         node,
-        TEXT_LOG_WIDGET_NAME,
+        widgetName,
         ["STRING", { multiline: true, default: "" }],
         app,
     ).widget;
@@ -129,23 +97,50 @@ function ensureTextLogPreview(node) {
     widget.value = "";
     if (widget.inputEl) {
         widget.inputEl.readOnly = true;
-        widget.inputEl.placeholder = "Run the workflow to preview the received text.";
-        widget.inputEl.setAttribute("aria-label", "BV Text Log Writer preview");
+        widget.inputEl.placeholder = placeholder;
+        widget.inputEl.setAttribute("aria-label", ariaLabel);
         widget.inputEl.style.opacity = "0.75";
-        widget.inputEl.style.minHeight = "220px";
+        widget.inputEl.style.minHeight = `${minHeight}px`;
     }
-    node.__bvTextLogPreviewWidget = widget;
-    node.setSize?.([Math.max(node.size?.[0] ?? 0, 360), Math.max(node.size?.[1] ?? 0, 390)]);
+    node[cacheKey] = widget;
+    node.setSize?.([
+        Math.max(node.size?.[0] ?? 0, minWidth),
+        Math.max(node.size?.[1] ?? 0, minNodeHeight),
+    ]);
     return widget;
 }
 
-function setTextLogPreview(node, value) {
-    const widget = ensureTextLogPreview(node);
+function setReadonlyTextPreview(node, value, ensureWidget) {
+    const widget = ensureWidget(node);
     if (!widget) return;
     widget.value = value;
     node.setDirtyCanvas?.(true, true);
     node.graph?.setDirtyCanvas?.(true, true);
 }
+
+const ensureDebugWidget = (node) => ensureReadonlyTextPreview(node, {
+    cacheKey: "__bvAstDebugWidget",
+    widgetName: WIDGET_NAME,
+    placeholder: "Run the workflow to inspect the AST.",
+    ariaLabel: "BV Prompt AST Debug preview",
+    minHeight: 160,
+    minWidth: 280,
+    minNodeHeight: 300,
+});
+
+const setDebugText = (node, value) => setReadonlyTextPreview(node, value, ensureDebugWidget);
+
+const ensureTextLogPreview = (node) => ensureReadonlyTextPreview(node, {
+    cacheKey: "__bvTextLogPreviewWidget",
+    widgetName: TEXT_LOG_WIDGET_NAME,
+    placeholder: "Run the workflow to preview the received text.",
+    ariaLabel: "BV Text Log Writer preview",
+    minHeight: 220,
+    minWidth: 360,
+    minNodeHeight: 390,
+});
+
+const setTextLogPreview = (node, value) => setReadonlyTextPreview(node, value, ensureTextLogPreview);
 
 app.registerExtension({
     name: "bv_nodepack.ast_debug_output",
@@ -183,14 +178,14 @@ app.registerExtension({
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
-            ensureDebugWidget(this);
+            requestAnimationFrame(() => ensureDebugWidget(this));
             return result;
         };
 
         const onConfigure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function () {
             const result = onConfigure?.apply(this, arguments);
-            ensureDebugWidget(this);
+            requestAnimationFrame(() => ensureDebugWidget(this));
             return result;
         };
 

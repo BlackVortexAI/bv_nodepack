@@ -87,7 +87,7 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         applyProfile(node, profiles);
         loadProfiles(api, true);
       }
-    }));
+    }),{scope:"global"});
 };
 
 export const upgradeRemoteLLMProvider = (node: any, api: any) => {

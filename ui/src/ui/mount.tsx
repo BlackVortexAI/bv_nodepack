@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 
 type BvViewRenderer = (close: () => void, activationToken: number) => ReactNode;
 type WindowTransferState={mode:"workspace"|"floating";geometry?:{x:number;y:number;width:number;height:number}};
-type MountedView = { activate: (render?: BvViewRenderer) => void; minimize: () => void; state: () => WindowTransferState; setState: (state:WindowTransferState) => void; close: () => void };
+type BvViewScope="workflow"|"global";
+type MountedView = { scope:BvViewScope; activate: (render?: BvViewRenderer) => void; minimize: () => void; state: () => WindowTransferState; setState: (state:WindowTransferState) => void; close: () => void };
 const mountedViews = new Map<string, MountedView>();
+const allMountedViews = new Set<MountedView>();
 const pendingStates = new Map<string,WindowTransferState>();
 
 /** Mounts a framework view for imperative ComfyUI entry points without duplicating controls. */
-export function mountBvView(render: BvViewRenderer, options: { key?: string } = {}) {
+export function mountBvView(render: BvViewRenderer, options: { key?: string; scope?: "workflow" | "global" } = {}) {
     const existing = options.key ? mountedViews.get(options.key) : undefined;
     if (existing) {
         existing.activate(render);
@@ -26,6 +28,8 @@ export function mountBvView(render: BvViewRenderer, options: { key?: string } = 
         if (closed) return;
         closed = true;
         if (options.key && mountedViews.get(options.key)?.close === close) mountedViews.delete(options.key);
+        if(options.key)pendingStates.delete(options.key);
+        allMountedViews.delete(mounted);
         root.unmount();
         host.remove();
     };
@@ -39,14 +43,19 @@ export function mountBvView(render: BvViewRenderer, options: { key?: string } = 
     const minimize = () => host.querySelector<HTMLElement>(".bv-managed-window")?.dispatchEvent(new Event("bv-ui-minimize"));
     const state = ():WindowTransferState => {const shell=host.querySelector<HTMLElement>(".bv-managed-window"),box=shell?.getBoundingClientRect();return {mode:shell?.classList.contains("workspace")?"workspace":"floating",geometry:box?{x:box.left,y:box.top,width:box.width,height:box.height}:undefined}};
     const setState = (next:WindowTransferState) => host.querySelector<HTMLElement>(".bv-managed-window")?.dispatchEvent(new CustomEvent("bv-ui-set-window-state",{detail:next}));
+    const mounted:MountedView={ scope: options.scope ?? "workflow", activate, minimize, state, setState, close };
+    allMountedViews.add(mounted);
     if (options.key) {
-        const mounted={ activate, minimize, state, setState, close };
         mountedViews.set(options.key, mounted);
         const pending=pendingStates.get(options.key);
         if(pending){pendingStates.delete(options.key);requestAnimationFrame(()=>mounted.setState(pending));}
     }
     root.render(currentRender(close, activationToken));
     return close;
+}
+
+export function closeWorkflowBvViews(){
+    for(const view of [...allMountedViews])if(view.scope==="workflow")view.close();
 }
 
 export function switchBvView(currentKey: string, targetKey: string, openTarget: () => void, replaceCurrent: boolean) {

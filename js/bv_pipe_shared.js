@@ -528,7 +528,9 @@ export function updatePipeNodeUI(pipeNode, cfg) {
   ensureInputs(pipeNode, count, labels);
   ensureOutputs(pipeNode, count, labels);
 
-  try {
+  const presentation = globalThis.__bvNodePresentationBridge;
+  if (presentation?.applyClassic) presentation.applyClassic(pipeNode, "BV Pipe");
+  else try {
     if (pipeNode.computeSize) pipeNode.setSize(pipeNode.computeSize());
   } catch (e) {}
 

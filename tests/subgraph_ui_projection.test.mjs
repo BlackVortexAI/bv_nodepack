@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectSubgraphUIPresentation, synchronizeDynamicComboHost } from "../js/bv_subgraph_ui_projection.js";
+import { isSubgraphHost, isSubgraphProjectionStale, projectSubgraphUIPresentation, synchronizeDynamicComboHost } from "../js/bv_subgraph_ui_projection.js";
+
+test("modern Nodes 2 hosts are recognized from their subgraph definition", () => {
+  assert.equal(isSubgraphHost({ subgraph: {} }), true);
+  assert.equal(isSubgraphHost({ getSubgraph: () => ({}) }), true);
+  assert.equal(isSubgraphHost({ isSubgraphNode: () => true }), true);
+  assert.equal(isSubgraphHost({}), false);
+});
 
 test("promoted heading presentation is copied to the outer subgraph widget", () => {
   const draw = () => {};
@@ -288,9 +295,69 @@ test("projection is idempotent and repairs a proxy renderer reset", () => {
   assert.equal(dirtyCalls, dirtyAfterFirstProjection);
 
   proxy.drawWidget = function standardTextRenderer() {};
+  assert.equal(proxy.drawWidget, projectedRenderer);
   projectSubgraphUIPresentation(host);
   assert.equal(proxy.drawWidget, projectedRenderer);
-  assert.ok(dirtyCalls > dirtyAfterFirstProjection);
+  assert.equal(dirtyCalls, dirtyAfterFirstProjection);
+});
+
+test("Classic projected methods survive a late ComfyUI renderer assignment", () => {
+  const projectedDraw = () => {};
+  const projectedSize = () => [220, 40];
+  const sourceWidget = { type: "BV_HEADING", draw: projectedDraw, computeSize: projectedSize };
+  const proxy = { type: "text", draw() {}, computeSize() { return [220, 20]; }, drawWidget() {} };
+  const sourceNode = { __bvPresentationWidget: sourceWidget, getWidgetFromSlot: () => null };
+  const host = {
+    inputs: [{ name: "Header" }], widgets: [proxy], properties: {},
+    resolveSubgraphInputLinks: () => [{ inputNode: sourceNode, input: { name: "value" } }],
+    getWidgetFromSlot: () => proxy,
+  };
+  projectSubgraphUIPresentation(host);
+  proxy.draw = function lateNativeDraw() {};
+  proxy.computeSize = function lateNativeSize() { return [220, 20]; };
+  assert.equal(proxy.draw, projectedDraw);
+  assert.equal(proxy.computeSize, projectedSize);
+});
+
+test("Classic projection detects and repairs a complete promoted proxy replacement", () => {
+  const projectedDraw = () => {};
+  const projectedSize = () => [220, 40];
+  const sourceWidget = { type: "BV_HEADING", draw: projectedDraw, computeSize: projectedSize };
+  const sourceNode = { __bvPresentationWidget: sourceWidget, getWidgetFromSlot: () => null };
+  let proxy = { type: "text", draw() {}, computeSize() { return [220, 20]; }, drawWidget() {} };
+  const firstProxy = proxy;
+  const host = {
+    inputs: [{ name: "Header" }], widgets: [], properties: {},
+    resolveSubgraphInputLinks: () => [{ inputNode: sourceNode, input: { name: "value" } }],
+    getWidgetFromSlot: () => proxy,
+  };
+
+  projectSubgraphUIPresentation(host);
+  assert.equal(isSubgraphProjectionStale(host), false);
+  proxy = { type: "text", draw() {}, computeSize() { return [220, 20]; }, drawWidget() {} };
+  assert.equal(isSubgraphProjectionStale(host), true);
+
+  projectSubgraphUIPresentation(host);
+  assert.equal(proxy.draw, projectedDraw);
+  assert.equal(proxy.computeSize, projectedSize);
+  assert.equal(proxy.__bvProjectedFrom, sourceWidget);
+  assert.equal(isSubgraphProjectionStale(host), false);
+  assert.notEqual(proxy, firstProxy);
+});
+
+test("non-configurable native methods do not create a permanent stale loop", () => {
+  const sourceWidget = { type: "BV_HEADING", draw: () => {}, computeSize: () => [220, 40] };
+  const sourceNode = { __bvPresentationWidget: sourceWidget, getWidgetFromSlot: () => null };
+  const proxy = { type: "text", drawWidget() {} };
+  Object.defineProperty(proxy, "draw", { configurable: false, writable: true, value() {} });
+  Object.defineProperty(proxy, "computeSize", { configurable: false, get: () => () => [220, 20] });
+  const host = {
+    inputs: [{ name: "Header" }], widgets: [], properties: {},
+    resolveSubgraphInputLinks: () => [{ inputNode: sourceNode, input: { name: "value" } }],
+    getWidgetFromSlot: () => proxy,
+  };
+  assert.doesNotThrow(() => projectSubgraphUIPresentation(host));
+  assert.equal(isSubgraphProjectionStale(host), false);
 });
 
 test("technical exposed names migrate through the official subgraph rename API", () => {

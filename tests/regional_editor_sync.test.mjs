@@ -21,14 +21,23 @@ test("replacing document content preserves the target editor identity", () => {
 });
 
 test("region selectors are installed for direct selection and detailer mask nodes", () => {
-    assert.match(
+  assert.match(
         extensionSource,
         /\["BV Regional Select", "BV Regional Deconstructor", "BV Regional Detailer Mask"\]\.includes\(nodeData\.name\)/,
     );
     assert.match(
         extensionSource,
         /combo\.disabled = \(scopeWidget && scopeWidget\.value !== "region"\) \|\| !choices\.length;/,
-    );
+  );
+  assert.match(extensionSource,/computeLayoutSize = \(\) => \(\{ minWidth: 0, minHeight: 0, maxHeight: 0 \}\)/);
+});
+
+test("Regional Prompt lifecycle refreshes existing graph consumers after graph mutation", () => {
+    assert.match(extensionSource, /markRegionalConsumer\(node, \(\) => refreshRegionSelector\(node\)\)/);
+    assert.match(extensionSource, /markRegionalConsumer\(node, \(\) => refreshImageTargetSelector\(node, false, regionalWorkflowRoot\(node, activeGraph\(\)\)\)\)/);
+    assert.match(extensionSource, /schedulePromptConsumers\(promptNode\)/);
+    assert.match(extensionSource, /const ownerGraph=regionalWorkflowRoot\(this,activeGraph\(\)\)/);
+    assert.doesNotMatch(extensionSource, /bv-regional-document-changed/);
 });
 
 test("detailer context regions persist as weighted workflow JSON", () => {

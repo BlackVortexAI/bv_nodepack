@@ -34,6 +34,8 @@ test("Control Center configuration owns a responsive editor layout",()=>{
 test("Control Center node keeps conflict status after dynamic controls",()=>{
   assert.match(nodeIntegration,/function moveWidgetToEnd/);
   assert.match(nodeIntegration,/moveWidgetToEnd\(node, CONTROL_STATUS_WIDGET\);/);
+  assert.match(nodeIntegration,/queueMicrotask\(\(\) => syncNode\(this, readConfig\(\)\)\)/);
+  assert.match(nodeIntegration,/requestAnimationFrame\(\(\)=>\{node\.__bvControlFinalLayoutQueued=false;applyClassicNodePresentation/);
 });
 
 test("Regional legacy debug uses one setting and the native Ctrl Alt B command binding",()=>{

@@ -45,6 +45,7 @@ export function compactLoraConsumerNode(node:any){
     compactProjectedPortLayout(node);
 }
 export function scheduleCompactLoraConsumerNode(node:any){
+    if(node?.__bvPresentationManaged)return;
     scheduleProjectedPortLayout(node);
 }
 

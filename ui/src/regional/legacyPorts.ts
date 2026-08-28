@@ -2,18 +2,19 @@ export const SHOW_LEGACY_PORTS_SETTING_ID="BV.Regional.ShowLegacyPorts";
 export const LEGACY_DEBUG_SETTING_ID="BV.Regional.LegacyDebugMode";
 export const LEGACY_DEBUG_COMMAND_ID="bv.regional.toggleDebugWiring";
 export const LEGACY_USAGE_EVENT="bv-regional-legacy-usage";
+export const LEGACY_DEBUG_VISIBILITY_EVENT="bv-regional-legacy-debug-visibility";
 
 // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire Regional sidecar-port UX.
 // Remove this module, its command/setting hooks, and canvas projection branches with the ports.
 
 type Slot={name?:string;type?:string;link?:unknown;links?:unknown[]|null;hidden?:boolean;__bvLegacyPort?:boolean;__bvLegacySticky?:boolean;__bvLegacyWasConnected?:boolean;__bvM0PortHidden?:boolean;__bvM0VisualHidden?:boolean};
-type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void;__bvRefreshPortProjection?:()=>void};
+type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void;__bvApplyPresentation?:()=>void;__bvPresentationHasLegacy?:boolean;__bvRefreshPortProjection?:()=>void};
 export type LegacyPortDescriptor={direction:"input"|"output";name:string;type:string;guidance:string};
 let showAll=false;
 let debugVisible=false;
 const connected=(slot:Slot,direction:"input"|"output")=>direction==="input"?slot.link!=null:Boolean(slot.links?.length);
 const visitGraphNodes=(graph:any,visit:(node:Node)=>void)=>{for(const node of graph?._nodes??[]){visit(node);if((node as any).subgraph)visitGraphNodes((node as any).subgraph,visit)}};
-const LORA_CONSUMERS=new Set(["BV Regional Native Conditioning","BV Regional SDXL Attention","BV Regional Z-Image Attention","BV Regional FLUX.2 Klein 9B Attention","BV Regional Krea 2 Attention","BV Regional Anima Conditioning"]);
+const LORA_CONSUMERS=new Set<string>(REGIONAL_LORA_CONSUMER_NODE_TYPES);
 
 export function legacyPortDescriptors(nodeName:string):LegacyPortDescriptor[]{
     if(LORA_CONSUMERS.has(nodeName))return [
@@ -29,6 +30,7 @@ export function legacyPortsVisible(){return showAll}
 export function setLegacyDebugVisible(value:boolean,graph?:any){
     debugVisible=Boolean(value);
     if(typeof document!=="undefined")document.documentElement.classList.toggle("bv-regional-debug-wiring-active",debugVisible);
+    if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent(LEGACY_DEBUG_VISIBILITY_EVENT,{detail:{visible:debugVisible}}));
     visitGraphNodes(graph,refreshLegacyPorts);
     graph?.setDirtyCanvas?.(true,true);
     return debugVisible;
@@ -53,6 +55,10 @@ export function installLegacyPorts(node:Node,descriptors:LegacyPortDescriptor[])
 }
 
 export function refreshLegacyPorts(node:Node,dragType?:string|null){
+    if(node.__bvApplyPresentation){
+        if(node.__bvPresentationHasLegacy!==false)node.__bvApplyPresentation();
+        return;
+    }
     for(const [direction,slots] of [["input",node.inputs],["output",node.outputs]] as const)for(const slot of slots??[]){
         if(!slot.__bvLegacyPort)continue;const isConnected=connected(slot,direction);
         if(slot.__bvLegacyWasConnected&&!isConnected)slot.__bvLegacySticky=true;
@@ -71,3 +77,4 @@ export function refreshLegacyDragPorts(canvas:any){
 
 export function clearLegacyPortSticky(node:Node){for(const slot of [...(node.inputs??[]),...(node.outputs??[])])if(slot.__bvLegacyPort)slot.__bvLegacySticky=false;refreshLegacyPorts(node)}
 export function legacyUsage(node:Node){return [...(node.inputs??[]),...(node.outputs??[])].filter(slot=>slot.__bvLegacyPort&&(slot.link!=null||Boolean(slot.links?.length)))}
+import{REGIONAL_LORA_CONSUMER_NODE_TYPES}from"./nodePresentation.js";

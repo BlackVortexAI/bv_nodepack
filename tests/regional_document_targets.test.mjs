@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { documentTargetChoices, resolveDocumentTarget } from "../ui/src/regional/documentTargets.ts";
+import { documentTargetChoices, resolveDocumentTarget, resolveDocumentTargetState } from "../ui/src/regional/documentTargets.ts";
 
 const choices = documentTargetChoices([
     { documentId: "doc-a", nodeId: "12", title: "Characters" },
@@ -16,4 +16,15 @@ test("a new sender selects the first target but never silently retargets a delet
     assert.equal(resolveDocumentTarget("", choices, true), "doc-a");
     assert.equal(resolveDocumentTarget("doc-b", choices, false), "doc-b");
     assert.equal(resolveDocumentTarget("deleted", choices, false), "");
+});
+
+test("a sender created before any prompt binds once when the first prompt appears", () => {
+    const initiallyEmpty = resolveDocumentTargetState("", [], false);
+    assert.deepEqual(initiallyEmpty, { documentId: "", everResolved: false });
+    const firstPrompt = resolveDocumentTargetState("", choices, initiallyEmpty.everResolved);
+    assert.deepEqual(firstPrompt, { documentId: "doc-a", everResolved: true });
+    const deletedTarget = resolveDocumentTargetState("deleted", [choices[1]], true);
+    assert.deepEqual(deletedTarget, { documentId: "deleted", everResolved: true });
+    const afterReload = resolveDocumentTargetState(deletedTarget.documentId, [choices[1]], false);
+    assert.deepEqual(afterReload, { documentId: "deleted", everResolved: true });
 });

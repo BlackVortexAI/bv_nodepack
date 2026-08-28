@@ -15,3 +15,12 @@ export function resolveDocumentTarget(currentDocumentId: unknown, choices: Docum
     if (choices.some(choice => choice.documentId === current)) return current;
     return initialize ? choices[0]?.documentId ?? "" : "";
 }
+
+export function resolveDocumentTargetState(currentDocumentId: unknown, choices: DocumentTargetChoice[], everResolved: boolean, initialize = false) {
+    const current = typeof currentDocumentId === "string" ? currentDocumentId : "";
+    const resolvedBefore = everResolved || Boolean(current);
+    const firstBinding = !resolvedBefore && choices.length > 0;
+    const known = resolveDocumentTarget(current, choices, false);
+    const documentId = known || (resolvedBefore && current ? current : resolveDocumentTarget(current, choices, initialize || firstBinding));
+    return { documentId, everResolved: resolvedBefore || Boolean(documentId) };
+}

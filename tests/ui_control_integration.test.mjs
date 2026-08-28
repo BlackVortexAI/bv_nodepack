@@ -33,6 +33,8 @@ const smartPipeEditor = readFileSync(new URL("../ui/src/components/SmartPipeEdit
 const smartPipeBridge = readFileSync(new URL("../js/bv_smart_pipe.js", import.meta.url), "utf8");
 const historyController = readFileSync(new URL("../ui/src/ui/history.ts", import.meta.url), "utf8");
 const toastStore = readFileSync(new URL("../ui/src/ui/toastStore.tsx", import.meta.url), "utf8");
+const remoteLlm = readFileSync(new URL("../ui/src/remoteLLM.ts", import.meta.url), "utf8");
+const lutDownload = readFileSync(new URL("../ui/src/regional/lutDownloadDialog.tsx", import.meta.url), "utf8");
 
 test("regional inspector composes shared production controls instead of restyling raw widgets", () => {
     for (const component of ["BvSelect", "BvNumberField", "FieldFrame", "PromptTextarea"]) assert.match(options, new RegExp(`<${component}\\b`));
@@ -58,6 +60,15 @@ test("node-owned windows reactivate by type and node id instead of mounting dupl
     assert.match(windowChrome, /addEventListener\("bv-ui-activate"/);
     assert.match(uiEntry, /`detailer-plan:\$\{scopedNodeKey\(node\)\}`/);
     assert.match(uiEntry, /`detector-registry:\$\{scopedNodeKey\(node\)\}`/);
+});
+
+test("workflow switches close workflow-owned imperative windows but preserve global system windows", () => {
+    assert.match(windowMount, /scope\?:\s*"workflow"\s*\|\s*"global"/);
+    assert.match(windowMount, /scope:\s*options\.scope\s*\?\?\s*"workflow"/);
+    assert.match(windowMount, /export function closeWorkflowBvViews/);
+    assert.match(uiEntry, /closeWorkflowBvViews\(\);[\s\S]*bvReactRoot\?\.unmount\(\)/);
+    assert.match(remoteLlm, /scope:\s*"global"/);
+    assert.match(lutDownload, /scope:\s*"global"/);
 });
 
 test("every node editor uses the conditional shared window navigator", () => {
@@ -524,4 +535,9 @@ test("regional easy mode renders global LUT settings in the Global panel", () =>
 test("LUT Registry opens the shared download manager and adopts downloaded LUTs", () => {
     assert.match(lutRegistryView, /<Button onClick=\{\(\)=>openLutDownloadDialog\(downloaded\)\}>Download LUTs<\/Button>/);
     assert.match(lutRegistryView, /setAvailableLuts\(current=>current\.includes\(path\)\?current:/);
+});
+
+test("projected-port resizing is owned only by ComfyUI's active resize node",()=>{
+    assert.doesNotMatch(uiEntry,/bvPointerGestureActive/);
+    assert.match(uiEntry,/isUserResizing:node=>\(comfyApp as any\)\.canvas\?\.resizing_node===node/);
 });
