@@ -8,8 +8,6 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlparse
 
-import aiohttp
-
 from .lut_prototype import parse_cube
 
 
@@ -44,6 +42,8 @@ def load_lut_catalog(path: Path = CATALOG_PATH) -> dict[str, Any]:
 
 
 async def download_bytes(url: str, max_bytes: int = MAX_LUT_BYTES) -> bytes:
+    import aiohttp
+
     timeout = aiohttp.ClientTimeout(total=45)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.get(url, allow_redirects=True) as response:

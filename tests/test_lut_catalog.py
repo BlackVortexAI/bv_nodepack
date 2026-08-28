@@ -1,4 +1,7 @@
 import asyncio
+import builtins
+import importlib.util
+import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -15,6 +18,24 @@ IDENTITY = b"""TITLE \"Identity\"\nLUT_3D_SIZE 2\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1
 
 
 class LutCatalogTests(unittest.TestCase):
+    def test_catalog_module_import_does_not_require_aiohttp(self):
+        original_import = builtins.__import__
+
+        def import_without_aiohttp(name, *args, **kwargs):
+            if name == "aiohttp":
+                raise ModuleNotFoundError("No module named 'aiohttp'")
+            return original_import(name, *args, **kwargs)
+
+        module_name = "py.util._lut_catalog_without_aiohttp"
+        module_path = Path(__file__).parents[1] / "py" / "util" / "lut_catalog.py"
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        module = importlib.util.module_from_spec(spec)
+        self.addCleanup(sys.modules.pop, module_name, None)
+        sys.modules[module_name] = module
+        with patch("builtins.__import__", side_effect=import_without_aiohttp):
+            spec.loader.exec_module(module)
+        self.assertEqual(module.load_lut_catalog()["version"], 1)
+
     def test_catalog_is_versioned_and_uses_curated_https_cube_entries(self):
         catalog = load_lut_catalog()
         self.assertEqual(catalog["version"], 1)
