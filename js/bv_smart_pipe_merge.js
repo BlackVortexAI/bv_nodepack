@@ -1,3 +1,5 @@
+// Registered presentation exception: dynamic-pipe-slot-structure.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 import { activeDescriptorFor, collectExpandedPipeAddresses, propagate } from "./bv_smart_pipe.js";
 import {

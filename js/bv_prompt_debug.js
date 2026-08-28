@@ -1,3 +1,5 @@
+// Registered presentation exception: execution-result-preview-widgets.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 import { ComfyWidgets } from "../../scripts/widgets.js";
 

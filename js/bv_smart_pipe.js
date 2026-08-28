@@ -1,3 +1,5 @@
+// Registered presentation exception: dynamic-pipe-slot-structure.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 import { moveMarkedPortToEnd, nextFreeOrdinal, promoteConnectedInheritedSlots, promoteInheritedSlot, resolveLocalSlotNameCollisions, retainedMissingSlots, reusableSmartPipePortIndex, smartPipeSlotName, uniqueSmartPipeSlotName, updateSmartPipePort } from "./bv_smart_pipe_slots.js";
 import { mergePipeSchemas, SMART_PIPE_DEFAULT_TITLE } from "./bv_smart_pipe_merge_model.js";

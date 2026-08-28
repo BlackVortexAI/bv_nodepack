@@ -1,4 +1,6 @@
 // bv_pipe_shared.js
+// Registered presentation exception: dynamic-pipe-slot-structure.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 
 export const MAX_SLOTS = 100;

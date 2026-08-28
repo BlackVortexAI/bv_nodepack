@@ -1,3 +1,5 @@
+// Registered presentation exception: control-center-dynamic-widgets.
+// See PRESENTATION_EXCEPTIONS in regional/nodePresentation.ts for rationale and exit path.
 import { getApp } from "../../appHelper.js";
 import { collectAllGroups, collectNodesByType, nodeMatchesType } from "../../util/control/collector";
 import { BVControlConfig, CONFIG_CHANGED_EVENT, readConfig, writeConfig } from "../../util/control/configHandler";

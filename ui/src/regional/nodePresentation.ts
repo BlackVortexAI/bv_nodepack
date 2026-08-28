@@ -1,6 +1,70 @@
 export type PresentationSurface="classic"|"ghost"|"nodes2";
 export type PresentationRole="public"|"legacy"|"internalState"|"provider"|"dynamicReserve";
 
+/**
+ * Central contract for every BV node/widget presentation mutation.
+ *
+ * New UI must use the shared BV UI pack. New code must not hide, resize,
+ * replace, reorder or project ComfyUI nodes/widgets directly outside the
+ * central presentation modules. The entries below document the pre-existing
+ * adapters that still have to touch a ComfyUI-specific lifecycle seam. They
+ * are exceptions to be retired or absorbed here, not examples to copy.
+ *
+ * Full invariants, ownership rules and adapter rationale:
+ * docs/design/node-presentation.md
+ */
+export type PresentationException=Readonly<{
+    id:string;
+    implementation:readonly string[];
+    reason:string;
+    centralizationPath:string;
+}>;
+
+export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
+    {
+        id:"regional-prompt-bootstrap-measurement",
+        implementation:["ui/src/regional/portProjection.ts#installRegionalPromptCreationLayout"],
+        reason:"ComfyUI measures the backend definition before the Regional Prompt instance has its projected provider markers and action widgets.",
+        centralizationPath:"Keep this lifecycle adapter until the central presentation inventory can run before the first ComfyUI measurement.",
+    },
+    {
+        id:"m0-runtime-resource-projection",
+        implementation:["ui/src/regional/m0ResourceSpike.tsx"],
+        reason:"The M0 collector and consumers create graph-bound provider slots and DOM pickers dynamically, before the normal policy inventory is complete.",
+        centralizationPath:"Move its local widget hiding and slot flags behind central widget/port projection helpers before extending M0.",
+    },
+    {
+        id:"control-center-dynamic-widgets",
+        implementation:["ui/src/components/control/bv_control_center.ts"],
+        reason:"Control toggles and the conflict-status row are generated from runtime configuration and must be reconciled in a stable order.",
+        centralizationPath:"Keep dynamic widget creation local; move all hiding, sizing and ordering primitives into the central manipulation library.",
+    },
+    {
+        id:"subgraph-promoted-widget-proxies",
+        implementation:["js/bv_subgraph_ui_projection.js","js/bv_subgraph_nodes2_projection.js","js/bv_subgraph_layout.js"],
+        reason:"Promoted Subgraph widgets are ComfyUI-owned proxy objects that are recreated asynchronously and differ between Classic and Nodes 2.0.",
+        centralizationPath:"Keep the lifecycle adapter separate, but route shared visibility and sizing decisions through this module and the presentation bridge.",
+    },
+    {
+        id:"dynamic-pipe-slot-structure",
+        implementation:["js/bv_pipe_shared.js","js/bv_smart_pipe.js","js/bv_smart_pipe_merge.js"],
+        reason:"Pipe nodes add, remove and relabel structural graph slots from their runtime schema; this is domain behavior, not merely visual projection.",
+        centralizationPath:"Structural slot ownership remains local; every visual hide, compact or resize operation must use the central presentation bridge.",
+    },
+    {
+        id:"seed-action-projection",
+        implementation:["js/bv_seed.js"],
+        reason:"Seed actions are semantic controls that also project through promoted Subgraph widgets and therefore require a source/host adapter.",
+        centralizationPath:"Keep seed state transitions local and route widget construction, sizing and host projection through shared presentation primitives.",
+    },
+    {
+        id:"execution-result-preview-widgets",
+        implementation:["js/bv_prompt_debug.js"],
+        reason:"Prompt AST Debug and Text Log Writer expose read-only multiline content populated only by execution callbacks.",
+        centralizationPath:"Keep execution data handling local; create and style preview widgets exclusively through the shared BV UI/presentation helpers.",
+    },
+] as const;
+
 export type PresentationPort=Readonly<{
     direction:"input"|"output";
     name:string;

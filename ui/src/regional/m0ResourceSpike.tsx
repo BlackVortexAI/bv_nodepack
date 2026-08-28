@@ -1,3 +1,5 @@
+// Registered presentation exception: m0-runtime-resource-projection.
+// See PRESENTATION_EXCEPTIONS in nodePresentation.ts for rationale and exit path.
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { getApi, getApp } from "../appHelper.js";

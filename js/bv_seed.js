@@ -1,3 +1,5 @@
+// Registered presentation exception: seed-action-projection.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 import { applySeedAction, materializeSeedControl } from "./bv_seed_model.js";
 

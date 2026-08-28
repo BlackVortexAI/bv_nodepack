@@ -1,3 +1,5 @@
+// Registered presentation exception: subgraph-promoted-widget-proxies.
+// See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 const PRESENTATION_TYPES = new Set(["BV_HEADING", "BV_SPACER", "BV_DIVIDER"]);
 import { normalizeDynamicComboSelection } from "./bv_dynamic_combo_model.js";
 const PRESENTATION_NODE_TYPES = new Map([
