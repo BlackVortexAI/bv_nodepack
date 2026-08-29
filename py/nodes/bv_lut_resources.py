@@ -4,7 +4,7 @@ import json
 import uuid
 
 from ..util.lut_prototype import LUT_TYPE
-from .bv_lut_prototype import DOWNLOAD_MORE, BVLutLoaderPrototype, _lut_choices
+from .bv_lut_prototype import DOWNLOAD_MORE, BVLutLoaderPrototype, _canonical_lut_choice, _lut_choices
 
 
 LUT_REGISTRY = "BV_LUT_REGISTRY"
@@ -128,7 +128,7 @@ class BVLutRegistryNode:
             if not isinstance(entry, dict):
                 raise ValueError(f"luts[{index}] must be an object")
             resource_id = _required_text(entry.get("id"), f"luts[{index}].id")
-            lut_name = _required_text(entry.get("lut_name"), f"luts[{index}].lut_name")
+            lut_name = _canonical_lut_choice(_required_text(entry.get("lut_name"), f"luts[{index}].lut_name"))
             if lut_name not in available:
                 raise ValueError(f"LUT not found: {lut_name}")
             lut, _info = loader.load(lut_name)

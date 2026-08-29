@@ -7,6 +7,7 @@ from pathlib import Path
 import torch
 
 from ..util.lut_prototype import (
+    BUILTIN_LUT_NAMES,
     LUT_TYPE,
     apply_lut,
     builtin_lut,
@@ -18,12 +19,18 @@ from ..util.lut_prototype import (
 
 
 CATEGORY = "🌀 BV Node Pack/regional/LUT"
+CATEGORY_MANUAL = f"{CATEGORY}/Manual Chains (Optional)"
 LUT_FOLDER = "luts"
 LUT_EXTENSIONS = {".cube"}
-BUILTINS = ("Identity", "Warm Contrast", "Cool Graphite")
 DOWNLOAD_MORE = "Download more LUTs…"
 LUT_PLAN = "BV_LUT_PLAN"
 LUT_LOOP_STATE = "BV_LUT_LOOP_STATE"
+
+
+def _canonical_lut_choice(name: str) -> str:
+    if name.startswith("Built-in: ") or name == DOWNLOAD_MORE:
+        return name
+    return name.replace("\\", "/")
 
 
 class _AnyType(str):
@@ -68,7 +75,7 @@ def _disk_luts() -> dict[str, Path]:
         for name in folder_paths.get_filename_list(LUT_FOLDER):
             path = folder_paths.get_full_path(LUT_FOLDER, name)
             if path is not None:
-                result[name] = Path(path)
+                result.setdefault(_canonical_lut_choice(name), Path(path))
     except (ImportError, KeyError):
         pass
 
@@ -80,7 +87,15 @@ def _disk_luts() -> dict[str, Path]:
 
 
 def _lut_choices() -> list[str]:
-    return [*(f"Built-in: {name}" for name in BUILTINS), *(_disk_luts().keys()), DOWNLOAD_MORE]
+    return [*(f"Built-in: {name}" for name in BUILTIN_LUT_NAMES), *(_disk_luts().keys()), DOWNLOAD_MORE]
+
+
+def _disk_lut_path(name: str, luts: dict[str, Path]) -> Path | None:
+    exact = luts.get(name)
+    if exact is not None:
+        return exact
+    normalized = _canonical_lut_choice(name)
+    return next((path for key, path in luts.items() if _canonical_lut_choice(key) == normalized), None)
 
 
 class BVLutLoaderPrototype:
@@ -91,7 +106,7 @@ class BVLutLoaderPrototype:
     RETURN_TYPES = (LUT_TYPE, "STRING")
     RETURN_NAMES = ("lut", "info")
     FUNCTION = "load"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MANUAL
     DESCRIPTION = "Loads a built-in look or a 3D .cube file from ComfyUI/models/luts."
 
     def load(self, lut_name):
@@ -100,7 +115,7 @@ class BVLutLoaderPrototype:
         if lut_name.startswith("Built-in: "):
             lut = builtin_lut(lut_name.removeprefix("Built-in: "))
         else:
-            path = _disk_luts().get(lut_name)
+            path = _disk_lut_path(lut_name, _disk_luts())
             if path is None:
                 raise ValueError(f"LUT not found: {lut_name}")
             lut = parse_cube(path)
@@ -260,7 +275,7 @@ class BVLutJobPrototype:
     RETURN_TYPES = (LUT_PLAN, "INT", "STRING")
     RETURN_NAMES = ("plan", "job_count", "summary")
     FUNCTION = "append"
-    CATEGORY = CATEGORY
+    CATEGORY = CATEGORY_MANUAL
     DESCRIPTION = "Appends one LUT/mask operation to an immutable in-memory loop plan."
 
     def append(self, lut, strength=1.0, mask_invert=False, plan=None, mask=None):

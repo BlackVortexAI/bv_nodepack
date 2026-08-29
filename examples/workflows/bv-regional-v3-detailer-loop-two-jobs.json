@@ -254,10 +254,9 @@
       "mode": 0,
       "inputs": [{"label": "config json", "name": "config_json", "type": "STRING", "widget": {"name": "config_json"}, "link": null}],
       "outputs": [
-        {"label": "detector registry", "name": "detector_registry", "type": "BV_DETECTOR_REGISTRY", "links": null, "slot_index": 0},
-        {"label": "detector count", "name": "detector_count", "type": "INT", "links": null, "slot_index": 1},
-        {"label": "registry summary", "name": "registry_summary", "type": "STRING", "links": null, "slot_index": 2},
-        {"label": "resource provider", "name": "resource_provider", "type": "BV_RUNTIME_RESOURCE_PROVIDER", "links": [22], "slot_index": 3}
+        {"label": "detector count", "name": "detector_count", "type": "INT", "links": null, "slot_index": 0},
+        {"label": "registry summary", "name": "registry_summary", "type": "STRING", "links": null, "slot_index": 1},
+        {"label": "resource provider", "name": "resource_provider", "type": "BV_RUNTIME_RESOURCE_PROVIDER", "links": [22], "slot_index": 2}
       ],
       "properties": {"Node name for S&R": "BV Detector Registry", "bvWindowMenuVisible": true},
       "widgets_values": ["{\"schema\":\"bv.detector_registry_config\",\"version\":2,\"collector_id\":\"f3993446-d59a-49a3-9918-14817cadcdb9\",\"detectors\":[{\"id\":\"Face\",\"provider\":\"ultralytics\",\"model_name\":\"bbox/face_yolov8m.pt\"},{\"id\":\"Hand\",\"provider\":\"ultralytics\",\"model_name\":\"bbox/hand_yolov8s.pt\"}]}"]
@@ -308,7 +307,7 @@
     [19, 10, 3, 11, 2, "BASIC_PIPE"],
     [20, 11, 0, 12, 1, "IMAGE"],
     [21, 12, 0, 13, 0, "IMAGE"],
-    [22, 15, 3, 8, 3, "BV_RUNTIME_RESOURCE_PROVIDER"],
+    [22, 15, 2, 8, 3, "BV_RUNTIME_RESOURCE_PROVIDER"],
     [23, 10, 0, 16, 0, "BV_DETAILER_JOB"],
     [24, 10, 1, 16, 1, "IMAGE"],
     [25, 10, 2, 16, 2, "MASK"],

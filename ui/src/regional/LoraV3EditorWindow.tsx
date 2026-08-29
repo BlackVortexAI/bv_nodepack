@@ -3,7 +3,8 @@ import { Button, ResourcePicker, SelectField, SortableList, type SortableItem } 
 import { BvManagedWindow } from "../ui/window";
 import { setWindowMenuVisible, useWindowMenuVisibility } from "../ui/windowRegistry";
 import { type LoraV3Config, type LoraV3Operation, type LoraV3Step, loraV3TargetValue } from "./LoraV3ResourcePickerPanel";
-import { commitLoraV3Config, LORA_V3_INVENTORY_CHANGED_EVENT, loraV3Catalog, loraV3EntryResolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3EntrySource } from "./loraV3Ui";
+import { commitLoraV3Config, loraV3Catalog, loraV3EntryResolved, loraV3TargetOptions, readNodeLoraV3Config, setLoraV3EntrySource } from "./loraV3Ui";
+import { LORA_V3_INVENTORY_CHANGED_EVENT } from "./loraV3Inventory";
 
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 const operations=["replace","merge","subtract","clear"].map(value=>({value,label:value[0].toUpperCase()+value.slice(1)}));

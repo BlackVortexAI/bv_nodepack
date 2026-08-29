@@ -8,6 +8,7 @@ import types
 import numpy as np
 import torch
 
+import py.util.lut_prototype as lut_prototype
 from py.util.lut_prototype import apply_lut, builtin_lut, normalize_mask, parse_cube, refine_mask, select_segs
 from py.nodes.bv_lut_prototype import (
     BVApplyLutPrototype,
@@ -51,7 +52,7 @@ class LutPrototypeTests(unittest.TestCase):
             self.assertEqual(extensions, {".cube"})
 
     def test_loader_choices_refresh_from_registered_folder_paths(self):
-        state = {"names": ["cinema/first.cube"]}
+        state = {"names": [r"cinema\first.cube"]}
         fake = types.SimpleNamespace(
             get_filename_list=lambda _folder: list(state["names"]),
             get_full_path=lambda _folder, name: f"X:/models/luts/{name}",
@@ -62,12 +63,94 @@ class LutPrototypeTests(unittest.TestCase):
             refreshed = BVLutLoaderPrototype.INPUT_TYPES()["required"]["lut_name"][0]
 
         self.assertIn("cinema/first.cube", first)
+        self.assertNotIn(r"cinema\first.cube", first)
         self.assertNotIn("second.cube", first)
         self.assertIn("second.cube", refreshed)
+
+    def test_loader_resolves_disk_lut_across_relative_path_separators(self):
+        expected_path = Path("X:/models/luts/downloaded/Test.cube")
+        parsed = {"title": "Test", "size": 2, "source": str(expected_path)}
+        with (
+            patch("py.nodes.bv_lut_prototype._disk_luts", return_value={r"downloaded\Test.cube": expected_path}),
+            patch("py.nodes.bv_lut_prototype.parse_cube", return_value=parsed) as parse,
+        ):
+            BVLutLoaderPrototype().load("downloaded/Test.cube")
+
+        parse.assert_called_once_with(expected_path)
+
+        exact_path = Path("X:/models/luts/downloaded/Exact.cube")
+        with (
+            patch(
+                "py.nodes.bv_lut_prototype._disk_luts",
+                return_value={r"downloaded\Test.cube": expected_path, "downloaded/Test.cube": exact_path},
+            ),
+            patch("py.nodes.bv_lut_prototype.parse_cube", return_value=parsed) as parse,
+        ):
+            BVLutLoaderPrototype().load("downloaded/Test.cube")
+
+        parse.assert_called_once_with(exact_path)
 
     def test_builtin_identity_round_trips(self):
         image = torch.rand((2, 7, 5, 3))
         self.assertTrue(torch.allclose(apply_lut(image, builtin_lut("Identity")), image, atol=1e-6))
+
+    def test_builtin_registry_drives_choices_generation_and_semantic_anchors(self):
+        expected = (
+            "Identity", "Warm Contrast", "Cool Graphite",
+            "Digital Green", "Machine Blue", "Dustfire", "Steel Action",
+            "Sunbleached Coast", "Expired Film", "Classic Monochrome",
+            "Grayscale", "HDR Color Boost",
+        )
+        self.assertEqual(lut_prototype.BUILTIN_LUT_NAMES, expected)
+        with patch("py.nodes.bv_lut_prototype._disk_luts", return_value={}):
+            choices = BVLutLoaderPrototype.INPUT_TYPES()["required"]["lut_name"][0]
+        self.assertEqual(choices, [*(f"Built-in: {name}" for name in expected), "Download more LUTs…"])
+
+        for name in expected:
+            with self.subTest(name=name):
+                first = builtin_lut(name)
+                second = builtin_lut(name)
+                loaded, _info = BVLutLoaderPrototype().load(f"Built-in: {name}")
+                self.assertEqual(first["title"], f"BV {name}")
+                self.assertEqual(first["source"], f"builtin:{name}")
+                self.assertEqual(tuple(first["table"].shape), (17, 17, 17, 3))
+                self.assertEqual(first["table"].dtype, torch.float32)
+                self.assertTrue(torch.isfinite(first["table"]).all())
+                self.assertGreaterEqual(first["table"].min().item(), 0.0)
+                self.assertLessEqual(first["table"].max().item(), 1.0)
+                self.assertTrue(torch.equal(first["table"], second["table"]))
+                self.assertTrue(torch.equal(first["table"], loaded["table"]))
+
+        def grade(name, rgb):
+            image = torch.tensor([[[rgb]]], dtype=torch.float32)
+            return apply_lut(image, builtin_lut(name))[0, 0, 0]
+
+        neutral = [0.5, 0.5, 0.5]
+        self.assertGreater(grade("Digital Green", neutral)[1], grade("Digital Green", neutral)[0])
+        self.assertGreater(grade("Machine Blue", neutral)[2], grade("Machine Blue", neutral)[0])
+        self.assertGreater(grade("Dustfire", neutral)[0], grade("Dustfire", neutral)[2])
+        vivid = torch.tensor([0.8, 0.3, 0.1])
+        steel = grade("Steel Action", vivid.tolist())
+        self.assertLess(steel.max() - steel.min(), vivid.max() - vivid.min())
+        coast = grade("Sunbleached Coast", neutral)
+        self.assertGreater(coast[0], coast[2])
+        self.assertGreater(coast[1], coast[2])
+        expired_shadow = grade("Expired Film", [0.2, 0.2, 0.2])
+        expired_highlight = grade("Expired Film", [0.8, 0.8, 0.8])
+        self.assertGreater(expired_shadow[1], expired_shadow[0])
+        self.assertGreater(expired_highlight[0], expired_highlight[1])
+        colorful = [0.8, 0.35, 0.1]
+        classic = grade("Classic Monochrome", colorful)
+        grayscale = grade("Grayscale", colorful)
+        self.assertTrue(torch.allclose(classic, classic[0].expand(3), atol=1e-6))
+        self.assertTrue(torch.allclose(grayscale, grayscale[0].expand(3), atol=1e-6))
+        self.assertFalse(torch.allclose(classic, grayscale, atol=1e-4))
+        boosted = grade("HDR Color Boost", colorful)
+        source = torch.tensor(colorful)
+        self.assertGreater(boosted.max() - boosted.min(), source.max() - source.min())
+
+        with self.assertRaisesRegex(ValueError, "unknown built-in LUT"):
+            builtin_lut("Not A Look")
 
     def test_file_identity_round_trips_and_preserves_cube_channel_order(self):
         cube = """LUT_3D_SIZE 2

@@ -115,14 +115,13 @@ test("ComfyUI toolbar exposes a node-aware multi-column window launcher", () => 
 });
 
 test("toolbar primary actions restore the last active node per editor type", () => {
-    assert.match(windowActivity, /const lastActive = new Map<BvWindowType, string>/);
-    assert.match(uiEntry, /lastBvWindowInstance\("quick"\)/);
-    assert.match(uiEntry, /lastBvWindowInstance\("regional"\)/);
-    assert.match(quickPromptEditor, /rememberBvWindowInstance\("quick",nextId\)/);
-    assert.match(regionalEditor, /rememberBvWindowInstance\("regional",nextId\)/);
-    assert.match(uiEntry, /rememberBvWindowInstance\("detailer",scopedNodeKey\(node\)\)/);
-    assert.match(uiEntry, /rememberBvWindowInstance\("detector",scopedNodeKey\(node\)\)/);
-    assert.match(uiEntry, /rememberBvWindowInstance\("lora",scopedNodeKey\(node\)\)/);
+    assert.match(windowActivity, /const states=new WeakMap<object,BvWindowActivityState>/);
+    assert.match(uiEntry, /createOpenLastBvEditorAction/);
+    assert.match(uiEntry, /activity\.lastInstance\("regional"\)/);
+    assert.match(quickPromptEditor, /bvWindowActivity\(activityScope\)\.remember\("quick",nextId\)/);
+    assert.match(regionalEditor, /bvWindowActivity\(activityScope\)\.remember\("regional",nextId\)/);
+    assert.match(uiEntry, /activityFor\(scope\)\.remember\("lora",scopedNodeKey\(node\)\)/);
+    assert.doesNotMatch(uiEntry, /lastBvWindowInstance|rememberBvWindowInstance|lastBvFullWindowType/);
 });
 
 test("detector and detailer editors use shared compact collection and grid modules", () => {
@@ -533,8 +532,10 @@ test("regional easy mode renders global LUT settings in the Global panel", () =>
 });
 
 test("LUT Registry opens the shared download manager and adopts downloaded LUTs", () => {
-    assert.match(lutRegistryView, /<Button onClick=\{\(\)=>openLutDownloadDialog\(downloaded\)\}>Download LUTs<\/Button>/);
-    assert.match(lutRegistryView, /setAvailableLuts\(current=>current\.includes\(path\)\?current:/);
+    assert.match(lutRegistryView, /useSyncExternalStore\(lutLibrary\.subscribe,lutLibrary\.getSnapshot,lutLibrary\.getSnapshot\)/);
+    assert.match(lutRegistryView, /lutLibrary\.seed\(catalog\.luts\)/);
+    assert.doesNotMatch(lutRegistryView, /setAvailableLuts|const downloaded=/);
+    assert.match(lutRegistryView, /<Button onClick=\{\(\)=>openLutDownloadDialog\(\)\}>Download LUTs<\/Button>/);
 });
 
 test("projected-port resizing is owned only by ComfyUI's active resize node",()=>{

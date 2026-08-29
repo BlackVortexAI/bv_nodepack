@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,installLoraSizePolicy,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,migrateLegacyLoraCollectorLink,reconcileDownstreamLoraWriters,reconcileLoraWriterCollectors,trimUnusedLoraConsumerInputs,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
+import {compactLoraConsumerNode,connectLocalLoraCollector,connectLocalLoraCollectors,connectLoraConsumerTree,downstreamLoraConsumers,ensureLoraCollectorOutput,ensureLoraConsumerInput,ensureLoraConsumerInputs,installLoraSizePolicy,linkedLocalLoraCollector,linkedLocalLoraCollectors,localLoraCollectors,loraProviderIdentity,loraProviderResources,loraRegistryResources,loraV3GraphOf,reconcileDownstreamLoraWriters,reconcileLoraWriterCollectors,trimUnusedLoraConsumerInputs,upstreamLoraTransformer} from "../ui/src/regional/loraV3Graph.ts";
 
 const graph=()=>({_nodes:[],links:new Map(),getNodeById(id){return this._nodes.find(node=>node.id===id)}});
 const node=(id,type,g)=>({id,type,graph:g,inputs:[],outputs:[],addInput(name,type){this.inputs.push({name,type,link:null})},addOutput(name,type){this.outputs.push({name,type,links:null})}});
@@ -48,10 +48,9 @@ test("an unresolved middle collector keeps later provider ordinals stable",()=>{
   let next=40;for(const collector of [first,third])collector.connect=function(output,target,input){const id=next++;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[...(this.outputs[output].links??[]),id];target.inputs[input].link=id};
   assert.equal(connectLocalLoraCollectors(consumer,[first,null,third]),true);assert.deepEqual(linkedLocalLoraCollectors(consumer).slice(0,3),[first,null,third]);
 });
-test("a legacy single provider link migrates to the first multi-provider input",()=>{
+test("a V3 Regional LoRA never consumes an unnumbered provider slot",()=>{
   const g=graph(),collector=node(1,"BV LoRA Stack Collector",g),consumer=node(2,"BV Regional LoRA",g);g._nodes.push(collector,consumer);ensureLoraCollectorOutput(collector);consumer.inputs=[{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",link:7}];g.links.set(7,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});collector.outputs[0].links=[7];
-  collector.connect=function(output,target,input){g.links.set(8,{origin_id:1,origin_slot:output,target_id:2,target_slot:input});this.outputs[output].links.push(8);target.inputs[input].link=8};consumer.disconnectInput=function(index){const id=this.inputs[index].link;g.links.delete(id);this.inputs[index].link=null};
-  assert.equal(migrateLegacyLoraCollectorLink(consumer),true);assert.equal(consumer.inputs[0].link,null);assert.equal(linkedLocalLoraCollectors(consumer)[0],collector);
+  assert.equal(linkedLocalLoraCollector(consumer),null);assert.deepEqual(linkedLocalLoraCollectors(consumer).filter(Boolean),[]);
 });
 
 test("cross-graph collectors are rejected without fallback",()=>{
@@ -82,6 +81,78 @@ test("picker catalog is restricted to the concrete consumer graph",()=>{
 test("collector discovery supports the Nodes 2.0 comfyClass identity",()=>{
   const g=graph(),collector=node(1,undefined,g),consumer=node(2,"BV Regional Prompt",g);collector.comfyClass="BV LoRA Stack Collector";g._nodes.push(collector,consumer);
   assert.deepEqual(localLoraCollectors(consumer),[collector]);
+});
+
+test("main LoRA Registry participates in the unchanged local provider graph contract",()=>{
+  const g=graph(),registry=node(1,"BV LoRA Registry",g),consumer=node(2,"BV Regional LoRA",g);g._nodes.push(registry,consumer);
+  registry.connect=function(output,target,input){const id=81;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[id];target.inputs[input].link=id};
+  assert.deepEqual(localLoraCollectors(consumer),[registry]);
+  assert.equal(connectLocalLoraCollector(consumer,registry),true);
+  assert.equal(linkedLocalLoraCollector(consumer),registry);
+  assert.equal(registry.outputs[0].type,"BV_RUNTIME_RESOURCE_PROVIDER");
+});
+
+test("Regional editor discovers a LoRA Registry through concrete graph ownership",()=>{
+  const g=graph(),registry=node(1,"BV LoRA Registry",g),prompt=node(2,"BV Regional Prompt",g),registryId=crypto.randomUUID(),stackId=crypto.randomUUID();g._nodes.push(registry,prompt);
+  registry.widgets=[{name:"config_json",value:JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[{id:stackId,name:"Portrait",enabled:true,entries:[]}]})}];
+  registry.connect=function(output,target,input){const id=93;g.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[id];target.inputs[input].link=id};
+  registry.__bvConcreteGraph=g;prompt.__bvConcreteGraph=g;delete registry.graph;delete prompt.graph;
+  assert.deepEqual(localLoraCollectors(prompt),[registry]);
+  assert.deepEqual(loraProviderResources(localLoraCollectors(prompt)[0]).map(({id,label})=>({id,label})),[{id:stackId,label:"Portrait"}]);
+  assert.equal(connectLocalLoraCollectors(prompt,[registry]),true);assert.equal(prompt.inputs[0].name,"resource_provider_1");assert.ok(prompt.inputs[0].link!=null);
+  assert.deepEqual(linkedLocalLoraCollectors(prompt).slice(0,1),[registry]);
+});
+
+test("bound concrete ownership overrides stale renderer graph pointers",()=>{
+  const root=graph(),subgraph=graph(),rootRegistry=node(1,"BV LoRA Registry",root),registry=node(2,"BV LoRA Registry",root),prompt=node(3,"BV Regional Prompt",root),registryId=crypto.randomUUID(),stackId=crypto.randomUUID();
+  root._nodes.push(rootRegistry);subgraph._nodes.push(registry,prompt);
+  registry.widgets=[{name:"config_json",value:JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[{id:stackId,name:"Subgraph Stack",enabled:true,entries:[]}]})}];
+  registry.__bvConcreteGraph=subgraph;prompt.__bvConcreteGraph=subgraph;
+  registry.connect=function(output,target,input){const id=94;subgraph.links.set(id,{origin_id:this.id,origin_slot:output,target_id:target.id,target_slot:input});this.outputs[output].links=[id];target.inputs[input].link=id};
+  assert.equal(loraV3GraphOf(prompt),subgraph);
+  assert.deepEqual(localLoraCollectors(prompt),[registry]);
+  assert.equal(connectLocalLoraCollectors(prompt,[registry]),true);
+  assert.equal(prompt.inputs[0].name,"resource_provider_1");
+  assert.ok(subgraph.links.has(94));assert.equal(root.links.has(94),false);
+  assert.deepEqual(linkedLocalLoraCollectors(prompt).slice(0,1),[registry]);
+});
+
+test("concrete graph ownership keeps root and subgraph LoRA registries isolated",()=>{
+  const root=graph(),subgraph=graph(),rootRegistry=node(1,"BV LoRA Registry",root),subRegistry=node(2,"BV LoRA Registry",subgraph),prompt=node(3,"BV Regional Prompt",subgraph);
+  root._nodes.push(rootRegistry);subgraph._nodes.push(subRegistry,prompt);for(const candidate of root._nodes)candidate.__bvConcreteGraph=root;for(const candidate of subgraph._nodes)candidate.__bvConcreteGraph=subgraph;delete rootRegistry.graph;delete subRegistry.graph;delete prompt.graph;
+  assert.deepEqual(localLoraCollectors(prompt),[subRegistry]);
+});
+
+test("local LoRA discovery excludes unrelated nodes even when they share the graph",()=>{
+  const g=graph(),registry=node(1,"BV LoRA Registry",g),foreign=node(2,"Unrelated Registry",g),consumer=node(3,"BV Regional LoRA",g);g._nodes.push(registry,foreign,consumer);
+  assert.deepEqual(localLoraCollectors(consumer),[registry]);
+});
+
+test("LoRA provider adapters preserve manual collectors and expose configured registry stacks",()=>{
+  const manual={type:"BV LoRA Stack Collector",widgets:[{name:"collector_id",value:"manual-id"}]};
+  assert.equal(loraProviderIdentity(manual),"manual-id");assert.equal(loraRegistryResources(manual),null);
+  const registryId=crypto.randomUUID(),enabledId=crypto.randomUUID(),disabledId=crypto.randomUUID();
+  const registry={type:"BV LoRA Registry",widgets:[{name:"config_json",value:JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[{id:enabledId,name:"Enabled",enabled:true,entries:[]},{id:disabledId,name:"Comparison off",enabled:false,entries:[]}]})}]};
+  assert.equal(loraProviderIdentity(registry),registryId);
+  assert.deepEqual(loraRegistryResources(registry).map(item=>({id:item.id,label:item.label})),[{id:enabledId,label:"Enabled"},{id:disabledId,label:"Comparison off"}]);
+});
+
+test("a V3-native manual provider chain exposes every named stack behind its Collector",()=>{
+  const g=graph(),first=node(1,"BV Named LoRA Stack",g),second=node(2,"BV Named LoRA Stack",g),collector=node(3,"BV LoRA Stack Collector",g),prompt=node(4,"BV Regional Prompt",g);g._nodes.push(first,second,collector,prompt);
+  first.widgets=[{name:"stack_id",value:"stack-a"},{name:"name",value:"Portrait"}];second.widgets=[{name:"stack_id",value:"stack-b"},{name:"name",value:"Style"}];collector.widgets=[{name:"collector_id",value:"22222222-2222-4222-8222-222222222222"}];
+  first.outputs=[{name:"registry",type:"BV_LORA_STACK_REGISTRY",links:null},{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",links:[11]}];
+  second.inputs=[{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",link:11}];second.outputs=[{name:"registry",type:"BV_LORA_STACK_REGISTRY",links:null},{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",links:[12]}];
+  collector.inputs=[{name:"resource_provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",link:12}];
+  g.links.set(11,{origin_id:1,origin_slot:1,target_id:2,target_slot:0});g.links.set(12,{origin_id:2,origin_slot:1,target_id:3,target_slot:0});
+  assert.deepEqual(loraProviderResources(collector).map(({id,label})=>({id,label})),[{id:"stack-a",label:"Portrait"},{id:"stack-b",label:"Style"}]);
+  assert.deepEqual(localLoraCollectors(prompt),[collector]);
+});
+
+test("malformed or missing registry config fails closed without inventing identity",()=>{
+  const entryId=crypto.randomUUID(),stackId=crypto.randomUUID(),registryId=crypto.randomUUID(),invalid=["{broken","",JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:"not-a-uuid",stacks:[]}),JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[null]}),JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[{id:"",name:"Missing identity",enabled:true,entries:[]}]}),JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:registryId,stacks:[{id:stackId,name:"Bad raw type",enabled:true,entries:[{id:entryId,lora_name:["model.safetensors"],enabled:true,model_strength:null,clip_strength:[]}]}]})];
+  for(const value of invalid){const registry={type:"BV LoRA Registry",widgets:[{name:"config_json",value}]};assert.equal(loraProviderIdentity(registry),"");assert.deepEqual(loraRegistryResources(registry),[])}
+  const uppercase=crypto.randomUUID().toUpperCase(),registry={type:"BV LoRA Registry",widgets:[{name:"config_json",value:JSON.stringify({schema:"bv.lora_registry_config",version:1,registry_id:uppercase,stacks:[]})}]};
+  assert.equal(loraProviderIdentity(registry),uppercase.toLowerCase());assert.deepEqual(loraRegistryResources(registry),[]);
 });
 
 test("collector links stop at the Regional LoRA context transformer",()=>{

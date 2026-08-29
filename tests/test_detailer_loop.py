@@ -304,11 +304,10 @@ class DetailerLoopTests(unittest.TestCase):
     def test_registry_collects_named_bindings_in_parallel(self):
         first = BVDetectorBindingNode().bind("eyes", bbox_detector=FakeBBoxDetector())[0]
         second = BVDetectorBindingNode().bind("faces", bbox_detector=FakeBBoxDetector())[0]
-        registry, count, summary, provider = BVDetectorRegistryNode().collect(
+        count, summary, provider = BVDetectorRegistryNode().collect(
             external_detector_1=first, external_detector_2=second,
         )
         self.assertEqual(count, 2)
-        self.assertEqual(set(registry["entries"]), {"eyes", "faces"})
         self.assertEqual(summary, "eyes\nfaces")
         self.assertIsNone(provider)
 
@@ -373,26 +372,25 @@ class DetailerLoopTests(unittest.TestCase):
             "detectors": [{"id": "eyes", "provider": "ultralytics", "model_name": "bbox/eyes.pt"}],
         })
         with mock.patch.object(BVDetectorRegistryNode, "_provider", return_value=provider):
-            registry, count, summary, runtime_provider = BVDetectorRegistryNode().collect(config)
+            count, summary, runtime_provider = BVDetectorRegistryNode().collect(config)
         self.assertEqual(count, 1)
         self.assertEqual(summary, "eyes")
-        self.assertTrue(registry["entries"]["eyes"]["capabilities"]["bbox"])
-        self.assertFalse(registry["entries"]["eyes"]["capabilities"]["segmentation"])
         self.assertIsNone(runtime_provider)
         provider.doit.assert_called_once_with("bbox/eyes.pt")
 
-    def test_registry_v2_appends_runtime_provider_without_shifting_legacy_outputs(self):
+    def test_registry_v2_exposes_only_diagnostics_and_runtime_provider(self):
         binding = BVDetectorBindingNode().bind("eyes", bbox_detector=FakeBBoxDetector())[0]
         config = json.dumps({
             "schema": "bv.detector_registry_config", "version": 2,
             "collector_id": "22222222-2222-4222-8222-222222222222", "detectors": [],
         })
-        registry, count, summary, provider = BVDetectorRegistryNode().collect(
+        count, summary, provider = BVDetectorRegistryNode().collect(
             config, external_detector_1=binding,
         )
-        self.assertEqual(BVDetectorRegistryNode.RETURN_NAMES[:3], ("detector_registry", "detector_count", "registry_summary"))
+        self.assertEqual(BVDetectorRegistryNode.RETURN_NAMES, ("detector_count", "registry_summary", "resource_provider"))
+        self.assertEqual(BVDetectorRegistryNode.RETURN_TYPES, ("INT", "STRING", "BV_RUNTIME_RESOURCE_PROVIDER"))
         self.assertEqual((count, summary), (1, "eyes"))
-        self.assertIs(provider["resources"]["eyes"], registry["entries"]["eyes"])
+        self.assertIs(provider["resources"]["eyes"], binding)
         self.assertEqual(provider["provider_id"], "22222222-2222-4222-8222-222222222222")
 
 

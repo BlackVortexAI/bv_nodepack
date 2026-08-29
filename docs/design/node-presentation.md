@@ -13,8 +13,9 @@ The machine-readable exception registry is `PRESENTATION_EXCEPTIONS` in
    delegate hiding, projection, ordering, measurement, compaction and resizing.
 4. Classic, Node Library Ghost and Nodes 2.0 consume the same semantic policy.
 5. A connected Legacy port stays visible even when Legacy Debug is disabled.
-6. Internal state and provider plumbing remain serialized and executable while
-   their visual representation is hidden.
+6. Automatically reconciled internal provider plumbing remains serialized and
+   executable while hidden. Provider ports that form the explicit interface of
+   optional manual chains remain visible and direction-aware.
 7. User-controlled dimensions are never overwritten by an automatic refresh.
 8. Direct `converted-widget`, `hidden`, `computeSize`, `setSize`, DOM projection
    or slot-visibility code outside the central modules requires a registered
@@ -29,6 +30,7 @@ The machine-readable exception registry is `PRESENTATION_EXCEPTIONS` in
 | `ui/src/regional/nodes2NodePresentation.ts` | Nodes 2.0 DOM adapter |
 | `ui/src/regional/nodePreviewProjection.ts` | Node Library Ghost adapter |
 | `ui/src/regional/portProjection.ts` | Runtime provider-port projection and connection-aware layout |
+| `ui/src/regional/reactNodeWidgetHost.tsx` | Central React/addDOMWidget lifecycle, native ComfyUI actions, bounded measurement, canvas-event isolation and cleanup for inline BVUI widgets |
 
 Node-specific code may request these operations. It must not reimplement them.
 
@@ -55,3 +57,13 @@ Before implementation:
 
 No presentation task is complete until implementation, automated coverage,
 visual acceptance and this architecture contract agree.
+
+## Runtime port contract cuts
+
+- `BV Detector Registry` no longer exposes the V2 `detector_registry` output.
+  Its public diagnostics remain `detector_count` and `registry_summary`; the
+  V3 `resource_provider` output remains serialized but presentation-hidden.
+  This is an intentional hard cut without an output-port migration adapter.
+- The V2 `detector_registry` input on `BV Regional Detailer Plan` remains as a
+  separate compatibility seam for existing external detector-registry sources.
+  Its continued presence does not restore the removed Registry output.

@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import { hasNodePresentationPolicy, REGIONAL_LORA_CONSUMER_NODE_TYPES, resolveNodePresentation } from "../ui/src/regional/nodePresentation.ts";
 import { applyClassicNodePresentation, applyClassicSubgraphLayout } from "../ui/src/regional/classicNodePresentation.ts";
 import { setLegacyDebugVisible } from "../ui/src/regional/legacyPorts.ts";
 import { scheduleCompactLoraConsumerNode } from "../ui/src/regional/loraV3Graph.ts";
 import { configureNodes2NodePresentation, installNodes2NodePresentation, projectNodes2NodePresentation, removeNodes2NodePresentation } from "../ui/src/regional/nodes2NodePresentation.ts";
+import { installLutNodePresentation } from "../ui/src/regional/lutNodePresentation.ts";
+import { lutLibrary } from "../ui/src/regional/lutLibrary.ts";
+
+const indexSource=readFileSync(new URL("../ui/src/index.tsx",import.meta.url),"utf8");
+const lutV3CatalogSource=readFileSync(new URL("../ui/src/regional/lutV3Catalog.ts",import.meta.url),"utf8");
 
 const regionalPromptInventory = {
   ports: [
@@ -26,7 +32,6 @@ const regionalLoraInventory = {
   ports: [
     { direction: "input", name: "regional", connected: false },
     { direction: "output", name: "regional", connected: false },
-    { direction: "input", name: "resource_provider", connected: false },
     { direction: "input", name: "resource_provider_1", connected: false },
   ],
   widgets: [{ name: "operation" }, { name: "config_json" }],
@@ -195,10 +200,10 @@ test("LUT Plan and Loop Start hide all forty provider ports independently of deb
   }
 });
 
-test("LUT Registry and LoRA Collector hide provider outputs and internal configuration on every surface",()=>{
+test("LUT Registry and manual LoRA chain apply direction-aware provider presentation on every surface",()=>{
   const fixtures=[
     ["BV LUT Registry",{ports:[{direction:"output",name:"lut_count",connected:false},{direction:"output",name:"registry_summary",connected:false},{direction:"output",name:"resource_provider",connected:true}],widgets:[{name:"config_json"},{name:"configure_lut_registry"}]}],
-    ["BV LoRA Stack Collector",{ports:[{direction:"input",name:"lora_registry",connected:false},{direction:"output",name:"resource_provider",connected:true}],widgets:[{name:"collector_id"}]}],
+    ["BV LoRA Stack Collector",{ports:[{direction:"input",name:"resource_provider",connected:false},{direction:"output",name:"resource_provider",connected:true}],widgets:[{name:"collector_id"}]}],
   ];
   for(const[nodeType,inventory]of fixtures)for(const surface of["classic","ghost","nodes2"]){
     const normal=resolveNodePresentation(nodeType,inventory,{surface,legacyDebug:false});
@@ -210,8 +215,8 @@ test("LUT Registry and LoRA Collector hide provider outputs and internal configu
   }
 });
 
-test("Named LoRA Stack hides only its generated identity on every surface",()=>{
-  const inventory={ports:[{direction:"input",name:"lora_stack",connected:false},{direction:"input",name:"registry",connected:false},{direction:"output",name:"registry",connected:false}],widgets:[{name:"name"},{name:"stack_id"}]};
+test("Named LoRA Stack keeps both V2 and manually wired V3 chain ports public",()=>{
+  const inventory={ports:[{direction:"input",name:"lora_stack",connected:false},{direction:"input",name:"registry",connected:false},{direction:"output",name:"registry",connected:false},{direction:"input",name:"resource_provider",connected:false},{direction:"output",name:"resource_provider",connected:false}],widgets:[{name:"name"},{name:"stack_id"}]};
   for(const surface of["classic","ghost","nodes2"]){
     const plan=resolveNodePresentation("BV Named LoRA Stack",inventory,{surface,legacyDebug:false});
     assert.ok(plan.ports.every(({role,visible})=>role==="public"&&visible));
@@ -219,11 +224,29 @@ test("Named LoRA Stack hides only its generated identity on every surface",()=>{
   }
 });
 
+test("LoRA Registry exposes one semantic action and keeps config state internal",()=>{
+  const inventory={ports:[{direction:"output",name:"resource_provider",connected:false}],widgets:[{name:"config_json"},{name:"open_lora_registry"},{name:"lora_registry_widget"}]};
+  for(const surface of["classic","ghost","nodes2"]){
+    const plan=resolveNodePresentation("BV LoRA Registry",inventory,{surface,legacyDebug:false});
+    assert.deepEqual(plan.actions,["Open LoRA Registry"]);
+    assert.deepEqual(plan.ports.map(port=>[port.name,port.visible]),[["resource_provider",false]]);
+    assert.deepEqual(plan.widgets.map(widget=>[widget.name,widget.visible]),[["config_json",false],["open_lora_registry",surface!=="ghost"],["lora_registry_widget",true]]);
+  }
+});
+
+test("the manual Collector keeps its provider input connectable and hides only its final output",()=>{
+  const inventory={ports:[{direction:"input",name:"resource_provider",connected:false},{direction:"output",name:"resource_provider",connected:false}],widgets:[{name:"collector_id"}]};
+  for(const surface of["classic","ghost","nodes2"]){
+    const plan=resolveNodePresentation("BV LoRA Stack Collector",inventory,{surface,legacyDebug:false});
+    assert.deepEqual(plan.ports.map(port=>[port.direction,port.role,port.visible]),[["input","public",true],["output","provider",false]]);
+  }
+});
+
 test("Detector Registry hides external reserves only in Ghost and always hides provider state",()=>{
   const inventory={
     ports:[
       ...Array.from({length:10},(_,index)=>({direction:"input",name:`external_detector_${index+1}`,connected:index===0})),
-      {direction:"output",name:"detector_registry",connected:false},{direction:"output",name:"detector_count",connected:false},{direction:"output",name:"registry_summary",connected:false},{direction:"output",name:"resource_provider",connected:true},
+      {direction:"output",name:"detector_count",connected:false},{direction:"output",name:"registry_summary",connected:false},{direction:"output",name:"resource_provider",connected:true},
     ],
     widgets:[{name:"config_json"},{name:"configure_detector_registry"}],
   };
@@ -287,7 +310,6 @@ test("Regional LoRA presentation keeps only public wiring visible on every Class
     assert.deepEqual(plan.ports.map(({ name, role, visible }) => [name, role, visible]), [
       ["regional", "public", true],
       ["regional", "public", true],
-      ["resource_provider", "provider", false],
       ["resource_provider_1", "provider", false],
     ]);
     assert.deepEqual(plan.widgets.map(({ name, role, visible }) => [name, role, visible]), [
@@ -420,7 +442,6 @@ test("Regional LoRA Classic reconciliation keeps one stable height across debug 
     size:[300,220],
     inputs:[
       {name:"regional",link:null},
-      {name:"resource_provider",link:null},
       {name:"resource_provider_1",link:null},
     ],
     outputs:[{name:"regional",links:null}],
@@ -441,7 +462,7 @@ test("Regional LoRA Classic reconciliation keeps one stable height across debug 
   applyClassicNodePresentation(node,"BV Regional LoRA",{legacyDebug:false});
   assert.deepEqual(node.size,[300,80]);
   assert.equal(sizes.length,1);
-  assert.deepEqual(node.inputs.map(port=>port.hidden),[false,true,true]);
+  assert.deepEqual(node.inputs.map(port=>port.hidden),[false,true]);
   assert.ok(node.widgets.slice(0,2).every(widget=>widget.hidden));
 
   applyClassicNodePresentation(node,"BV Regional LoRA",{legacyDebug:true});
@@ -616,7 +637,7 @@ test("Nodes 2.0 keeps connected legacy source and target sockets visible without
 });
 
 test("Regional LoRA Nodes 2.0 removes internal and provider rows without changing in debug mode",()=>{
-  const inputRows=[nodes2Row("regional"),nodes2Row("resource_provider"),nodes2Row("resource_provider_1")];
+  const inputRows=[nodes2Row("regional"),nodes2Row("resource_provider_1")];
   const outputRows=[nodes2Row("regional")];
   const widgetRows=[nodes2Row("operation"),nodes2Row("config_json"),nodes2Row("Open LoRA Editor")];
   const element={
@@ -629,13 +650,13 @@ test("Regional LoRA Nodes 2.0 removes internal and provider rows without changin
     },
   };
   const documentLike={querySelector:()=>element};
-  const node={id:2,inputs:[{name:"regional"},{name:"resource_provider"},{name:"resource_provider_1"}],outputs:[{name:"regional"}],widgets:[
+  const node={id:2,inputs:[{name:"regional"},{name:"resource_provider_1"}],outputs:[{name:"regional"}],widgets:[
     {name:"operation"},{name:"config_json"},{name:"open_lora_editor"},
   ]};
 
   for(const legacyDebug of[false,true,false]){
     assert.equal(projectNodes2NodePresentation(node,"BV Regional LoRA",documentLike,{legacyDebug}),true);
-    assert.deepEqual(inputRows.map(row=>[row.style.display,row.style.visibility]),[["",""],["none",""],["none",""]]);
+    assert.deepEqual(inputRows.map(row=>[row.style.display,row.style.visibility]),[["",""],["none",""]]);
     assert.deepEqual(outputRows.map(row=>[row.style.display,row.style.visibility]),[["",""]]);
     assert.deepEqual(widgetRows.map(row=>[row.style.display,row.style.visibility]),[["none",""],["none",""],["",""]]);
   }
@@ -733,6 +754,127 @@ test("Nodes 2.0 presentation releases its node-owned callback on removal",()=>{
   assert.equal(typeof node.__bvApplyNodes2Presentation,"function");
   removeNodes2NodePresentation(node);
   assert.equal(node.__bvApplyNodes2Presentation,undefined);
+});
+
+test("LUT node lifecycle and widget manipulation is owned by the central presentation installer",()=>{
+  assert.match(indexSource,/import \{ installLutNodePresentation \} from "\.\/regional\/lutNodePresentation"/);
+  assert.match(indexSource,/if\(installLutNodePresentation\(nodeType,nodeData,/);
+  const legacyLutBlock=indexSource.slice(indexSource.indexOf('if(nodeData.name==="BV LUT Registry")'),indexSource.indexOf('if(["BV Control Center"'));
+  assert.equal(legacyLutBlock,"","index.tsx must not retain LUT-specific lifecycle or widget manipulation blocks");
+  assert.doesNotMatch(lutV3CatalogSource,/const hide=|hide\(item\)/,"the LUT domain catalog must not own widget presentation");
+  assert.doesNotMatch(lutV3CatalogSource,/\.hidden\s*=/,"the LUT domain catalog must not mutate port visibility directly");
+  assert.match(lutV3CatalogSource,/markProjectedProvider\(output\)/,"provider output presentation must use the central projection helper");
+});
+
+const lutPresentationDeps=(overrides={})=>({
+  api:{},graphOwner:node=>node.graph,scopedNodeKey:node=>String(node.id),workflowNodesOfType:()=>[],windowMenuVisible:()=>true,
+  switchView:()=>{},sourceDocument:()=>null,detectorCollectors:()=>[],openRegistry:async()=>{},openPlan:()=>{},openDownload:()=>{},...overrides,
+});
+
+test("central LUT installer owns exactly the four LUT lifecycle node types",()=>{
+  for(const name of ["BV LUT Registry","BV LUT Loader","BV LUT Loop Start","BV Regional LUT Plan"]){
+    class NodeType{}
+    assert.equal(installLutNodePresentation(NodeType,{name},lutPresentationDeps()),true,name);
+  }
+  class ForeignNode{}
+  assert.equal(installLutNodePresentation(ForeignNode,{name:"BV Regional Prompt"},lutPresentationDeps()),false);
+});
+
+test("central LUT loader preserves lifecycle semantics and guards repeated preparation",async()=>{
+  let createdCalls=0,removedCalls=0,downloadCallback,callbackValues=[],dirtyCalls=0;
+  class LoaderNode{}
+  LoaderNode.prototype.onNodeCreated=function(value){createdCalls++;assert.equal(this.marker,"loader");return `created:${value}`};
+  LoaderNode.prototype.onConfigure=function(){return "configured"};
+  LoaderNode.prototype.onRemoved=function(value){removedCalls++;return `removed:${value}`};
+  installLutNodePresentation(LoaderNode,{name:"BV LUT Loader"},lutPresentationDeps({openDownload:callback=>{downloadCallback=callback}}));
+  const combo={name:"lut_name",value:"Built-in: Identity",options:{values:["Built-in: Identity","downloaded\\Existing.cube","Download more LUTs…"]},callback(value){callbackValues.push(value)}};
+  let secondDirtyCalls=0;
+  const secondCombo={name:"lut_name",value:"Built-in: Identity",options:{values:["Built-in: Identity","Download more LUTs…"]},callback(){}};
+  const node=new LoaderNode();Object.assign(node,{marker:"loader",widgets:[combo],graph:{setDirtyCanvas(){dirtyCalls++}}});
+  const secondNode=new LoaderNode();Object.assign(secondNode,{marker:"loader",widgets:[secondCombo],graph:{setDirtyCanvas(){secondDirtyCalls++}}});
+  assert.equal(node.onNodeCreated("x"),"created:x");
+  assert.equal(secondNode.onNodeCreated("y"),"created:y");
+  await new Promise(resolve=>queueMicrotask(resolve));
+  assert.ok(combo.options.values.includes("downloaded/Existing.cube"));
+  assert.ok(!combo.options.values.includes("downloaded\\Existing.cube"));
+  const wrapped=combo.callback;
+  combo.value="Built-in: Warm Contrast";combo.callback("Built-in: Warm Contrast");
+  combo.value="Download more LUTs…";
+  combo.callback("Download more LUTs…");
+  assert.equal(combo.value,"Built-in: Warm Contrast");
+  lutLibrary.publish("downloaded/External.cube");
+  assert.ok(combo.options.values.includes("downloaded/External.cube"));
+  assert.ok(secondCombo.options.values.includes("downloaded/External.cube"));
+  assert.equal(combo.value,"Built-in: Warm Contrast","external installs must not change selection");
+  assert.equal(secondCombo.value,"Built-in: Identity","external installs must not change another loader selection");
+  lutLibrary.publish("downloaded/Test.cube");
+  downloadCallback("downloaded/Test.cube");
+  assert.ok(combo.options.values.includes("downloaded/Test.cube"));
+  assert.equal(combo.value,"downloaded/Test.cube");
+  assert.deepEqual(callbackValues,["Built-in: Warm Contrast","downloaded/Test.cube"]);
+  downloadCallback("downloaded/Test.cube");
+  assert.equal(combo.options.values.filter(value=>value==="downloaded/Test.cube").length,1,"slash variants must not create duplicate entries");
+  assert.deepEqual(callbackValues,["Built-in: Warm Contrast","downloaded/Test.cube","downloaded/Test.cube"]);
+  assert.equal(node.onConfigure(),"configured");
+  await new Promise(resolve=>queueMicrotask(resolve));
+  assert.equal(combo.callback,wrapped,"configure must not wrap the callback twice");
+  assert.equal(createdCalls,2);
+  assert.equal(node.onRemoved("x"),"removed:x");assert.equal(removedCalls,1);
+  secondNode.onConfigure();secondNode.onConfigure();await new Promise(resolve=>queueMicrotask(resolve));
+  const secondDirtyBeforePublish=secondDirtyCalls;
+  lutLibrary.publish("downloaded/AfterRemoval.cube");
+  assert.ok(!combo.options.values.includes("downloaded/AfterRemoval.cube"),"removed loaders must unsubscribe");
+  assert.ok(secondCombo.options.values.includes("downloaded/AfterRemoval.cube"),"remaining loaders stay subscribed");
+  assert.equal(secondDirtyCalls,secondDirtyBeforePublish+1,"repeated configure must not duplicate the subscription");
+  secondNode.onRemoved("y");
+  assert.ok(dirtyCalls>=2);
+});
+
+test("central LUT registry normalizes once, reuses its action, and exposes save and navigation",async()=>{
+  const previousWindow=globalThis.window,previousCustomEvent=globalThis.CustomEvent;
+  globalThis.window={dispatchEvent(){}};globalThis.CustomEvent=class{constructor(type,init){this.type=type;this.detail=init?.detail}};
+  try{
+    let registryArgs,dirtyCalls=0,hiddenCallbacks=0,switched=0;
+    class RegistryNode{}
+    RegistryNode.prototype.onNodeCreated=function(){return "registry-created"};
+    const targetAction={callback(){}};const target={id:2,title:"Target",widgets:[{name:"configure_lut_registry",...targetAction}]};
+    installLutNodePresentation(RegistryNode,{name:"BV LUT Registry"},lutPresentationDeps({workflowNodesOfType:()=>[target],openRegistry:async(...args)=>{registryArgs=args},switchView:()=>{switched++}}));
+    const hidden={name:"config_json",value:JSON.stringify({schema:"old",version:0,collector_id:"11111111-1111-4111-8111-111111111111",luts:[{id:"a",lut_name:"One"}]}),callback(){hiddenCallbacks++}};
+    const node=new RegistryNode();Object.assign(node,{id:1,comfyClass:"BV LUT Registry",widgets:[hidden],outputs:[],graph:{nodes:[],setDirtyCanvas(){dirtyCalls++}},addOutput(name,type){this.outputs.push({name,type})},addWidget(_type,name,_value,callback){const widget={name,callback};this.widgets.push(widget);return widget}});node.graph.nodes=[node,target];
+    assert.equal(node.onNodeCreated(),"registry-created");await new Promise(resolve=>queueMicrotask(resolve));
+    const action=node.widgets.find(item=>item.name==="configure_lut_registry");
+    assert.equal(hidden.hidden,true);assert.match(hidden.value,/"schema":"bv\.lut_registry_config"/);assert.equal(hiddenCallbacks,1);assert.equal(action.label,"Configure LUT Registry · 1 LUT");assert.equal(action.serialize,false);
+    node.onConfigure?.();await new Promise(resolve=>queueMicrotask(resolve));assert.equal(node.widgets.filter(item=>item.name==="configure_lut_registry").length,1);
+    action.callback();await new Promise(resolve=>queueMicrotask(resolve));
+    const save=registryArgs[2],navigate=registryArgs[5];save(JSON.stringify({schema:"bv.lut_registry_config",version:1,collector_id:"11111111-1111-4111-8111-111111111111",luts:[]}));
+    assert.match(action.label,/0 LUTs/);navigate("2",false);assert.equal(switched,1);assert.ok(dirtyCalls>=2);
+  }finally{globalThis.window=previousWindow;globalThis.CustomEvent=previousCustomEvent}
+});
+
+test("central LUT loop chains all lifecycle paths and preserves returns",async()=>{
+  class LoopNode{}
+  LoopNode.prototype.onNodeCreated=function(value){this.calls=(this.calls??0)+1;return `created:${value}`};
+  LoopNode.prototype.onConfigure=function(){this.calls++;return "configured"};
+  LoopNode.prototype.onConnectionsChange=function(){this.calls++;return "changed"};
+  installLutNodePresentation(LoopNode,{name:"BV LUT Loop Start"},lutPresentationDeps());
+  const node=new LoopNode();Object.assign(node,{comfyClass:"BV LUT Loop Start",widgets:[],inputs:[],outputs:[],graph:{nodes:[]}});node.graph.nodes=[node];
+  assert.equal(node.onNodeCreated("x"),"created:x");assert.equal(node.onConfigure(),"configured");assert.equal(node.onConnectionsChange(),"changed");await new Promise(resolve=>queueMicrotask(resolve));
+  assert.equal(node.calls,3);assert.equal(node.__bvPresentationManaged,true);
+});
+
+test("central LUT plan handles disconnected, connected, save and navigation states idempotently",async()=>{
+  let document=null,planOptions,switched=0,dirtyCalls=0;
+  class PlanNode{}
+  PlanNode.prototype.onNodeCreated=function(){return "plan-created"};
+  const targetAction={callback(){}};const target={id:9,title:"Other Plan",widgets:[{name:"configure_lut_plan",...targetAction}]};
+  installLutNodePresentation(PlanNode,{name:"BV Regional LUT Plan"},lutPresentationDeps({sourceDocument:()=>document,workflowNodesOfType:()=>[target],openPlan:options=>{planOptions=options},switchView:()=>{switched++}}));
+  const hidden={name:"config_json",value:'{"version":1,"jobs":[]}',callback(){}};
+  const node=new PlanNode();Object.assign(node,{id:3,comfyClass:"BV Regional LUT Plan",widgets:[hidden],inputs:[],outputs:[],graph:{nodes:[],setDirtyCanvas(){dirtyCalls++}},addWidget(_type,name,_value,callback){const widget={name,callback};this.widgets.push(widget);return widget}});node.graph.nodes=[node,target];
+  assert.equal(node.onNodeCreated(),"plan-created");await new Promise(resolve=>queueMicrotask(resolve));
+  const action=node.widgets.find(item=>item.name==="configure_lut_plan");assert.equal(action.label,"Connect a BV Regional Prompt");assert.equal(action.disabled,true);
+  document={regions:[{id:"r1",name:"Region 1",enabled:true}]};node.onConfigure?.();await new Promise(resolve=>queueMicrotask(resolve));
+  assert.equal(node.widgets.filter(item=>item.name==="configure_lut_plan").length,1);assert.equal(action.label,"Configure LUT Plan · 0 Jobs");assert.equal(action.disabled,false);
+  action.callback();assert.equal(planOptions.nodeId,"3");planOptions.save('{"version":1,"jobs":[]}');planOptions.onNavigate("9",true);assert.equal(switched,1);assert.ok(dirtyCalls>=2);
 });
 
 test("Nodes 2.0 projection is idempotent after its final visibility state",()=>{

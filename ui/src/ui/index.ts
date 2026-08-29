@@ -5,6 +5,7 @@ export * from "./theme";
 export * from "./window";
 export * from "./ToolbarWindowLauncher";
 export * from "./windowActivity";
+export * from "./windowOpenGate";
 export * from "./windowFocus";
 export * from "./windowRegistry";
 export * from "./history";

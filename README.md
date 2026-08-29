@@ -11,7 +11,9 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.1.0 includes Regional V3.** The accompanying
+> **BV Node Pack 1.2.0 is prepared but not yet released.** The current source
+> includes Regional V3 plus the new workflow-local LoRA and LUT library tooling.
+> The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
 > missing runtime features.
@@ -46,6 +48,18 @@ compile them through native conditioning or supported model-specific attention
 backends. Regional V3 supports independently resolved workflow-local LoRA resources.
 
 [Read the Regional V3 guide →](https://blackvortexai.github.io/bv_nodepack_wiki/node-guides/regional-v3)
+
+### LUT and LoRA libraries
+
+Configure workflow-local LUT and LoRA resources through the shared BV interfaces.
+The LUT catalog has separate Stable and Experimental channels, retains a local
+working copy for offline startup, refreshes asynchronously and verifies downloads
+against pinned checksums. Built-in LUTs and files below `ComfyUI/models/luts` use
+the same loader and registry path.
+
+[Read the LUT library guide →](https://blackvortexai.github.io/bv_nodepack_wiki/node-guides/lut-library)
+
+[Read the LoRA library guide →](https://blackvortexai.github.io/bv_nodepack_wiki/node-guides/lora-library)
 
 ### Smart Pipes
 
@@ -110,8 +124,28 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Changelog
 
-The README keeps the four most recent release entries. The complete history is
+The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
+
+### 1.2.0 — prepared 2026-08-29, not released
+
+- Add the workflow-local `BV LoRA Registry`, catalog library and Full/Quick
+  selection flows while retaining the published V2 registry chain.
+- Complete the asynchronous LUT catalog with separate Stable and Experimental
+  channels, offline working-copy fallback, manual refresh and checksum-verified
+  downloads.
+- Add nine deterministic built-in looks: Digital Green, Machine Blue, Dustfire,
+  Steel Action, Sunbleached Coast, Expired Film, Classic Monochrome, Grayscale
+  and HDR Color Boost.
+- Expand the Experimental LUT channel to 46 profile- and license-documented
+  candidates without changing the tested Stable channel.
+- Normalize newly discovered LUT paths across Windows and browser-facing choices
+  so Registry and Loader selections remain interoperable.
+
+The built-in looks were manually tested and the Experimental catalog was confirmed
+to load on 2026-08-29. This entry describes the prepared source state; it
+does not claim a release, tag, published package or verification of every external
+LUT download.
 
 ### 1.1.0 — 2026-08-28
 
@@ -145,16 +179,6 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
   pre-1.0 Regional workflows.
 - Publish the task-oriented documentation site and runtime-derived node
   reference.
-
-### 0.18.2 — 2026-08-23
-
-- Adopt the Fluent Cyclone mark and the `#1345B7` CI palette across published
-  brand assets and shared UI accent states.
-- Add canonical white, black and light-tinted logo variants with the required
-  Microsoft Fluent Emoji attribution.
-- Replace the legacy Regional Editor and minimized-window marks with the
-  canonical Cyclone geometry.
-- Keep the layout-profile icon compact when a session layout is modified.
 
 ---
 

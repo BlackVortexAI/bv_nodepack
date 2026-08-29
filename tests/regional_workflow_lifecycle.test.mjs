@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activeWorkflowIdentity, watchActiveWorkflow } from "../ui/src/regional/workflowLifecycle.ts";
+import { activeWorkflowIdentity, activeWorkflowScope, watchActiveWorkflow } from "../ui/src/regional/workflowLifecycle.ts";
 
 test("regional windows close only when the active workflow identity changes", () => {
     const api = new EventTarget();
@@ -60,4 +60,14 @@ test("stable workflow key is authoritative when ComfyUI reuses canvas graph stat
     assert.equal(activeWorkflowIdentity(app),"key:unstable");
     app.canvas.graph=graphB;
     assert.equal(activeWorkflowIdentity(app),"key:unstable");
+});
+
+test("activity scope follows the stable workflow key when ComfyUI reuses one graph object",()=>{
+    const graph={},workflow={key:"workflow-a"},app={canvas:{graph},extensionManager:{workflow:{activeWorkflow:workflow}}};
+    const scopeA=activeWorkflowScope(app);
+    workflow.key="workflow-b";
+    const scopeB=activeWorkflowScope(app);
+    assert.notEqual(scopeB,scopeA);
+    workflow.key="workflow-a";
+    assert.equal(activeWorkflowScope(app),scopeA);
 });

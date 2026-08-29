@@ -1,12 +1,38 @@
 export const LORA_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
 export const LORA_PROVIDER_SLOT="resource_provider";
 export const LORA_COLLECTOR_NODE="BV LoRA Stack Collector";
+export const LORA_REGISTRY_NODE="BV LoRA Registry";
+export const LORA_PROVIDER_NODES=new Set([LORA_COLLECTOR_NODE,LORA_REGISTRY_NODE]);
 export const LORA_MAX_COLLECTORS=20;
 import{compactProjectedPortLayout,markProjectedProvider,scheduleProjectedPortLayout}from"./portProjection.js";
+import{strictLoraRegistryConfig}from"./loraRegistryConfig";
+import{connectRuntimeResource,disconnectRuntimeResource}from"./runtimeResourceGraph";
 export const loraProviderSlot=(ordinal:number)=>`${LORA_PROVIDER_SLOT}_${ordinal}`;
 const LORA_PROVIDER_SLOT_HEIGHT=20;
 
 const graphLink=(graph:any,id:any)=>id==null?null:(graph?._links?.get?.(id)??graph?.links?.get?.(id)??graph?.links?.[id]??null);
+export const loraV3GraphOf=(node:any)=>node?.__bvConcreteGraph??node?.graph??null;
+export function bindLoraV3Graph(node:any,graph:any){if(node&&graph)node.__bvConcreteGraph=graph;return graph;}
+const inLoraV3Graph=(node:any,graph:any)=>(loraV3GraphOf(node)??bindLoraV3Graph(node,graph))===graph;
+const loraProviderNode=(node:any)=>LORA_PROVIDER_NODES.has(String(node?.comfyClass??node?.type));
+const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
+const registryConfig=(node:any)=>strictLoraRegistryConfig(widget(node,"config_json")?.value);
+
+export function loraProviderIdentity(node:any):string{
+    if(String(node?.comfyClass??node?.type)===LORA_REGISTRY_NODE)return registryConfig(node)?.registry_id??"";
+    return String(widget(node,"collector_id")?.value??"").trim();
+}
+export function loraRegistryResources(node:any):Array<{id:string;label:string;node:any}>|null{
+    if(String(node?.comfyClass??node?.type)!==LORA_REGISTRY_NODE)return null;
+    return(registryConfig(node)?.stacks??[]).map(stack=>({id:stack.id,label:stack.name,node}));
+}
+export function loraProviderResources(node:any):Array<{id:string;label:string;node:any}>{
+    const registry=loraRegistryResources(node);if(registry!==null)return registry;
+    if(String(node?.comfyClass??node?.type)!==LORA_COLLECTOR_NODE)return[];
+    const found:Array<{id:string;label:string;node:any}>=[],queue=[node],seen=new Set<any>();
+    while(queue.length){const target=queue.shift();if(!target||seen.has(target))continue;seen.add(target);const graph=loraV3GraphOf(target);for(const input of target.inputs??[]){if(input.name!==LORA_PROVIDER_SLOT)continue;const link=graphLink(graph,input.link),source=link&&graph?.getNodeById?.(link.origin_id);if(!source||!inLoraV3Graph(source,graph)||seen.has(source))continue;if(String(source.comfyClass??source.type)==="BV Named LoRA Stack"){const id=String(widget(source,"stack_id")?.value??"").trim(),label=String(widget(source,"name")?.value??"").trim();if(id&&label&&!found.some(item=>item.id===id))found.push({id,label,node:source});}queue.push(source);}}
+    return found.reverse();
+}
 
 const slotIndex=(slots:any[]|undefined)=>slots?.findIndex(slot=>slot?.name===LORA_PROVIDER_SLOT||slot?.type===LORA_PROVIDER_TYPE)??-1;
 
@@ -50,67 +76,64 @@ export function scheduleCompactLoraConsumerNode(node:any){
 }
 
 export function linkedLocalLoraCollector(node:any){
-    const input=node.inputs?.find((item:any)=>item.name===LORA_PROVIDER_SLOT||item.name===loraProviderSlot(1));
-    const link=graphLink(node.graph,input?.link);
+    const graph=loraV3GraphOf(node);
+    const input=node.inputs?.find((item:any)=>item.name===loraProviderSlot(1));
+    const link=graphLink(graph,input?.link);
     if(!link||String(link.target_id)!==String(node.id))return null;
-    const source=node.graph?.getNodeById?.(link.origin_id);
+    const source=graph?.getNodeById?.(link.origin_id);
     const output=source?.outputs?.[Number(link.origin_slot)];
-    return source?.graph===node.graph&&(source?.type===LORA_COLLECTOR_NODE||output?.type===LORA_PROVIDER_TYPE)?source:null;
+    return inLoraV3Graph(source,graph)&&(loraProviderNode(source)||output?.type===LORA_PROVIDER_TYPE)?source:null;
 }
 
 export function linkedLocalLoraCollectors(node:any){return Array.from({length:LORA_MAX_COLLECTORS},(_,index)=>{
-    const input=node.inputs?.find((slot:any)=>slot?.name===loraProviderSlot(index+1)),link=graphLink(node.graph,input?.link);if(!link||String(link.target_id)!==String(node.id))return null;
-    const source=node.graph?.getNodeById?.(link.origin_id),output=source?.outputs?.[Number(link.origin_slot)];
-    return source?.graph===node.graph&&(source?.type===LORA_COLLECTOR_NODE||source?.comfyClass===LORA_COLLECTOR_NODE||output?.type===LORA_PROVIDER_TYPE)?source:null;
+    const graph=loraV3GraphOf(node),input=node.inputs?.find((slot:any)=>slot?.name===loraProviderSlot(index+1)),link=graphLink(graph,input?.link);if(!link||String(link.target_id)!==String(node.id))return null;
+    const source=graph?.getNodeById?.(link.origin_id),output=source?.outputs?.[Number(link.origin_slot)];
+    return inLoraV3Graph(source,graph)&&(loraProviderNode(source)||output?.type===LORA_PROVIDER_TYPE)?source:null;
 });}
 
 export function connectLocalLoraCollector(consumer:any,collector:any|null){
+    const graph=loraV3GraphOf(consumer);
     const input=ensureLoraConsumerInput(consumer);
     if(input<0)return false;
-    if(consumer.inputs?.[input]?.link!=null)consumer.disconnectInput?.(input);
+    if(linkedLocalLoraCollector(consumer)===collector)return true;
+    if(consumer.inputs?.[input]?.link!=null&&!disconnectRuntimeResource(graph,consumer,input))return false;
     if(!collector)return true;
-    if(collector.graph!==consumer.graph)return false;
+    if(loraV3GraphOf(collector)!==graph)return false;
     const output=ensureLoraCollectorOutput(collector);
     if(output<0)return false;
-    collector.connect?.(output,consumer,input);
+    if(!connectRuntimeResource(graph,collector,output,consumer,input))return false;
     return linkedLocalLoraCollector(consumer)===collector;
 }
 
 export function connectLocalLoraCollectors(consumer:any,collectors:(any|null)[]){
-    if(collectors.length>LORA_MAX_COLLECTORS)return false;const inputs=ensureLoraConsumerInputs(consumer,collectors.length);
+    const graph=loraV3GraphOf(consumer);if(collectors.length>LORA_MAX_COLLECTORS)return false;const inputs=ensureLoraConsumerInputs(consumer,collectors.length),linked=linkedLocalLoraCollectors(consumer);
     for(let ordinal=0;ordinal<collectors.length;ordinal++){
-        const index=inputs[ordinal],current=consumer.inputs?.[index];if(current?.link!=null)consumer.disconnectInput?.(index);
-        const collector=collectors[ordinal];if(!collector)continue;if(collector.graph!==consumer.graph)return false;
-        const output=ensureLoraCollectorOutput(collector);if(output<0)return false;collector.connect?.(output,consumer,index);
+        if(linked[ordinal]===collectors[ordinal])continue;
+        const index=inputs[ordinal],current=consumer.inputs?.[index];if(current?.link!=null&&!disconnectRuntimeResource(graph,consumer,index))return false;
+        const collector=collectors[ordinal];if(!collector)continue;if(loraV3GraphOf(collector)!==graph)return false;
+        const output=ensureLoraCollectorOutput(collector);if(output<0||!connectRuntimeResource(graph,collector,output,consumer,index))return false;
     }
-    for(const {slot,index,ordinal} of (consumer.inputs??[]).map((slot:any,index:number)=>({slot,index,ordinal:Number(slot?.__bvLoraProviderOrdinal??String(slot?.name??"").match(/^resource_provider_(\d+)$/)?.[1]??0)})))if(ordinal>collectors.length&&slot?.type===LORA_PROVIDER_TYPE&&slot.link!=null)consumer.disconnectInput?.(index);
+    for(const {slot,index,ordinal} of (consumer.inputs??[]).map((slot:any,index:number)=>({slot,index,ordinal:Number(slot?.__bvLoraProviderOrdinal??String(slot?.name??"").match(/^resource_provider_(\d+)$/)?.[1]??0)})))if(ordinal>collectors.length&&slot?.type===LORA_PROVIDER_TYPE&&slot.link!=null&&!disconnectRuntimeResource(graph,consumer,index))return false;
     trimUnusedLoraConsumerInputs(consumer,collectors.length);
     return linkedLocalLoraCollectors(consumer).slice(0,collectors.length).every((collector,index)=>collector===collectors[index]);
 }
 
-// BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Single resource_provider -> ordinal V3 input.
-// Remove after workflows saved before multi-collector support have passed the migration window.
-export function migrateLegacyLoraCollectorLink(consumer:any){
-    const legacyIndex=consumer.inputs?.findIndex((item:any)=>item.name===LORA_PROVIDER_SLOT)??-1;if(legacyIndex<0||consumer.inputs?.[legacyIndex]?.link==null)return false;
-    const link=graphLink(consumer.graph,consumer.inputs[legacyIndex].link),source=link&&consumer.graph?.getNodeById?.(link.origin_id);if(!source||source.graph!==consumer.graph)return false;
-    if(!connectLocalLoraCollectors(consumer,[source]))return false;consumer.disconnectInput?.(legacyIndex);return true;
-}
-
 export function localLoraCollectors(node:any){
-    return (node.graph?._nodes??[]).filter((candidate:any)=>candidate!==node&&candidate.graph===node.graph&&String(candidate.comfyClass??candidate.type)===LORA_COLLECTOR_NODE);
+    const graph=loraV3GraphOf(node);
+    return (graph?._nodes??graph?.nodes??[]).filter((candidate:any)=>candidate!==node&&inLoraV3Graph(candidate,graph)&&loraProviderNode(candidate));
 }
 
 const LORA_EXECUTORS=new Set(["BV Regional LoRA"]);
 
 export function downstreamLoraConsumers(transformer:any){
-    const graph=transformer.graph,queue=[transformer],seen=new Set<any>([transformer]),found:any[]=[];
+    const graph=loraV3GraphOf(transformer),queue=[transformer],seen=new Set<any>([transformer]),found:any[]=[];
     while(queue.length){
         const source=queue.shift();
         for(const output of source?.outputs??[]){
             if(output?.type!=="BV_REGIONAL")continue;
             for(const linkId of output.links??[]){
                 const link=graphLink(graph,linkId),target=link&&graph?.getNodeById?.(link.target_id);
-                if(!target||target.graph!==graph||seen.has(target))continue;
+                if(!target||!inLoraV3Graph(target,graph)||seen.has(target))continue;
                 seen.add(target);
                 if(LORA_EXECUTORS.has(String(target.comfyClass??target.type)))found.push(target);
                 if((target.outputs??[]).some((item:any)=>item.type==="BV_REGIONAL")){queue.push(target);}
@@ -129,13 +152,13 @@ export function connectLoraConsumerTreeCollectors(transformer:any,collectors:(an
 }
 
 export function upstreamLoraTransformer(consumer:any){
-    const graph=consumer.graph,queue=[consumer],seen=new Set<any>([consumer]);
+    const graph=loraV3GraphOf(consumer),queue=[consumer],seen=new Set<any>([consumer]);
     while(queue.length){
         const target=queue.shift();
         for(const input of target?.inputs??[]){
             if(input?.type!=="BV_REGIONAL")continue;
             const link=graphLink(graph,input.link),source=link&&graph?.getNodeById?.(link.origin_id);
-            if(!source||source.graph!==graph||seen.has(source))continue;
+            if(!source||!inLoraV3Graph(source,graph)||seen.has(source))continue;
             if(["BV Regional LoRA","BV Regional Prompt"].includes(String(source.comfyClass??source.type)))return source;
             seen.add(source);queue.push(source);
         }

@@ -14,6 +14,98 @@ LUT_TYPE = "BV_LUT_PROTOTYPE"
 MAX_CUBE_BYTES = 16 * 1024 * 1024
 
 
+def _identity(rgb: torch.Tensor) -> torch.Tensor:
+    return rgb
+
+
+def _warm_contrast(rgb: torch.Tensor) -> torch.Tensor:
+    contrast = torch.clamp((rgb - 0.5) * 1.12 + 0.5, 0.0, 1.0)
+    return contrast * torch.tensor([1.06, 1.0, 0.93])
+
+
+def _cool_graphite(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    muted = rgb * 0.72 + luminance.unsqueeze(-1) * 0.28
+    shadows = (1.0 - luminance).unsqueeze(-1)
+    return muted + shadows * torch.tensor([-0.015, 0.005, 0.035])
+
+
+def _digital_green(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    muted = rgb * 0.68 + luminance.unsqueeze(-1) * 0.32
+    shadows = (1.0 - luminance).unsqueeze(-1)
+    return muted * torch.tensor([0.94, 1.04, 0.88]) + shadows * torch.tensor([-0.01, 0.025, -0.015])
+
+
+def _machine_blue(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    muted = rgb * 0.74 + luminance.unsqueeze(-1) * 0.26
+    shadows = (1.0 - luminance).unsqueeze(-1)
+    return muted * torch.tensor([0.9, 0.98, 1.07]) + shadows * torch.tensor([-0.015, 0.008, 0.035])
+
+
+def _dustfire(rgb: torch.Tensor) -> torch.Tensor:
+    contrast = (rgb - 0.5) * 1.16 + 0.5
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    shadows = (1.0 - luminance).unsqueeze(-1)
+    return contrast * torch.tensor([1.12, 0.94, 0.72]) + shadows * torch.tensor([-0.01, 0.01, 0.025])
+
+
+def _steel_action(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    muted = rgb * 0.5 + luminance.unsqueeze(-1) * 0.5
+    contrast = (muted - 0.5) * 1.12 + 0.5
+    return contrast + (1.0 - luminance).unsqueeze(-1) * torch.tensor([-0.01, 0.005, 0.025])
+
+
+def _sunbleached_coast(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    softened = (rgb - 0.5) * 0.9 + 0.55
+    highlights = luminance.unsqueeze(-1)
+    return softened * torch.tensor([1.06, 1.025, 0.9]) + highlights * torch.tensor([0.025, 0.018, -0.01])
+
+
+def _expired_film(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    faded = (rgb - 0.5) * 0.84 + 0.53
+    split = (luminance - 0.5).unsqueeze(-1)
+    return faded + split * torch.tensor([0.06, -0.05, 0.045])
+
+
+def _classic_monochrome(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.299, 0.587, 0.114])
+    filmic = (luminance - 0.5) * 1.08 + 0.5
+    return filmic.unsqueeze(-1).expand_as(rgb)
+
+
+def _grayscale(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
+    return luminance.unsqueeze(-1).expand_as(rgb)
+
+
+def _hdr_color_boost(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = (rgb @ torch.tensor([0.2126, 0.7152, 0.0722])).unsqueeze(-1)
+    saturated = luminance + (rgb - luminance) * 1.25
+    return (saturated - 0.5) * 1.16 + 0.5
+
+
+BUILTIN_LUT_REGISTRY = {
+    "Identity": _identity,
+    "Warm Contrast": _warm_contrast,
+    "Cool Graphite": _cool_graphite,
+    "Digital Green": _digital_green,
+    "Machine Blue": _machine_blue,
+    "Dustfire": _dustfire,
+    "Steel Action": _steel_action,
+    "Sunbleached Coast": _sunbleached_coast,
+    "Expired Film": _expired_film,
+    "Classic Monochrome": _classic_monochrome,
+    "Grayscale": _grayscale,
+    "HDR Color Boost": _hdr_color_boost,
+}
+BUILTIN_LUT_NAMES = tuple(BUILTIN_LUT_REGISTRY)
+
+
 def _finite_triplet(values: list[str], label: str) -> torch.Tensor:
     if len(values) != 3:
         raise ValueError(f"{label} requires exactly three values")
@@ -86,18 +178,10 @@ def builtin_lut(name: str, size: int = 17) -> dict[str, Any]:
     axis = torch.linspace(0.0, 1.0, size, dtype=torch.float32)
     blue, green, red = torch.meshgrid(axis, axis, axis, indexing="ij")
     rgb = torch.stack((red, green, blue), dim=-1)
-    if name == "Identity":
-        result = rgb
-    elif name == "Warm Contrast":
-        contrast = torch.clamp((rgb - 0.5) * 1.12 + 0.5, 0.0, 1.0)
-        result = contrast * torch.tensor([1.06, 1.0, 0.93])
-    elif name == "Cool Graphite":
-        luminance = rgb @ torch.tensor([0.2126, 0.7152, 0.0722])
-        muted = rgb * 0.72 + luminance.unsqueeze(-1) * 0.28
-        shadows = (1.0 - luminance).unsqueeze(-1)
-        result = muted + shadows * torch.tensor([-0.015, 0.005, 0.035])
-    else:
+    transform = BUILTIN_LUT_REGISTRY.get(name)
+    if transform is None:
         raise ValueError(f"unknown built-in LUT: {name}")
+    result = transform(rgb)
     return {
         "schema": "bv.lut.prototype",
         "version": 1,

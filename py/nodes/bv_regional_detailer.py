@@ -235,10 +235,8 @@ class BVDetectorRegistryNode:
             },
         }
 
-    # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): First output is the V2 registry.
-    # Remove it only with the detector_registry plan input; resource_provider is the V3 output.
-    RETURN_TYPES = (DETECTOR_REGISTRY, "INT", "STRING", RUNTIME_PROVIDER)
-    RETURN_NAMES = ("detector_registry", "detector_count", "registry_summary", "resource_provider")
+    RETURN_TYPES = ("INT", "STRING", RUNTIME_PROVIDER)
+    RETURN_NAMES = ("detector_count", "registry_summary", "resource_provider")
     FUNCTION = "collect"
     CATEGORY = CATEGORY
     DESCRIPTION = "Loads several named Impact-compatible detector models in one node; external bindings remain optional advanced inputs."
@@ -306,7 +304,7 @@ class BVDetectorRegistryNode:
         if registry is None:
             registry = {"schema": "bv.detector_registry", "version": 1, "entries": {}}
         provider = build_detector_provider(collector_id, registry["entries"]) if collector_id else None
-        return registry, len(names), "\n".join(names) or "No detectors connected", provider
+        return len(names), "\n".join(names) or "No detectors connected", provider
 
 
 class BVImpactDetailerDetectNode:

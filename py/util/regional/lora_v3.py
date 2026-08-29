@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import uuid
 from typing import Any
 
 from .context import (
@@ -13,7 +14,7 @@ from .context import (
     ResourceRegistry,
     normalize_context,
 )
-from .lora_hooks import parse_registry
+from .lora_hooks import add_named_stack, parse_registry
 
 
 LORA_CAPABILITY = "bv-nodepack.lora"
@@ -207,6 +208,49 @@ def build_lora_provider(provider_id: str, stacks: Any) -> dict[str, Any]:
         "resource_type": LORA_RESOURCE_TYPE,
         "resources": registry["stacks"],
     }
+
+
+_LORA_PROVIDER_FIELDS = {"schema", "version", "provider_id", "resource_type", "resources"}
+
+
+def normalize_lora_provider(provider: Any) -> dict[str, Any]:
+    """Validate and copy the complete LoRA runtime-provider wire contract."""
+    if not isinstance(provider, dict) or set(provider) != _LORA_PROVIDER_FIELDS:
+        raise RegionalContextError("LoRA runtime resource provider has unknown or missing fields")
+    provider_id = _required_uuid(provider.get("provider_id"), "LoRA provider_id")
+    if provider.get("schema") != "bv.runtime_resource_provider" or provider.get("version") != 1:
+        raise RegionalContextError("LoRA runtime resource provider is invalid")
+    if provider.get("resource_type") != LORA_RESOURCE_TYPE:
+        raise RegionalContextError("LoRA runtime resource provider has the wrong resource type")
+    return build_lora_provider(provider_id, provider.get("resources"))
+
+
+def _manual_chain_provider_id(stacks: dict[str, Any]) -> str:
+    identity = "\x1f".join(stacks)
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"bv-nodepack:manual-lora-chain:{identity}"))
+
+
+def extend_lora_provider(provider: Any, stack_id: str, name: str, lora_stack: Any) -> dict[str, Any]:
+    """Immutably extend a manual chain; repeated V3 IDs replace for idempotent execution.
+
+    The published V2 registry path deliberately keeps its stricter duplicate rejection.
+    This intermediate provider ID is deterministic transport state and is never persisted.
+    """
+    resources = normalize_lora_provider(provider)["resources"] if provider is not None else {}
+    without_replaced = {key: value for key, value in resources.items() if key != str(stack_id).strip()}
+    registry = add_named_stack(
+        {"schema": "bv.lora_stack_registry", "version": 1, "stacks": without_replaced},
+        stack_id,
+        name,
+        lora_stack,
+    )
+    return build_lora_provider(_manual_chain_provider_id(registry["stacks"]), registry["stacks"])
+
+
+def reidentify_lora_provider(provider: Any, provider_id: str) -> dict[str, Any]:
+    """Create the final collector identity without changing the validated resources."""
+    normalized = normalize_lora_provider(provider)
+    return build_lora_provider(provider_id, normalized["resources"])
 
 
 def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityRegistry, operation: str = "replace") -> RegionalContext:

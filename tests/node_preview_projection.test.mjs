@@ -23,6 +23,7 @@ test("technical and dynamic nodes declare shared ghost projections",()=>{
   assert.deepEqual(nodePreviewPolicy("BV Regional LoRA"),{actions:["Open LoRA Editor"]});
   assert.deepEqual(nodePreviewPolicy("BV Regional Native Conditioning"),{actions:[]});
   assert.equal(nodePreviewPolicy("BV Regional Debug"),undefined);
+  assert.deepEqual(nodePreviewPolicy("BV LoRA Registry"),{actions:["Open LoRA Registry"]});
 });
 
 test("preview projection appends native-looking button rows only to the Vue preview body", () => {
@@ -132,14 +133,13 @@ test("Regional LoRA ghost hides internal and provider rows in body and lower det
     {textContent:"regional BV_REGIONAL",hidden:false,style:{display:""},classList:{contains:name=>name==="lg-slot--output"}},
     {textContent:"operation COMBO",hidden:false,style:{display:""}},
     {textContent:"config_json STRING",hidden:false,style:{display:""}},
-    {textContent:"resource_provider BV_RUNTIME_RESOURCE_PROVIDER",hidden:false,style:{display:""},classList:{contains:name=>name==="lg-slot--input"}},
+    {textContent:"resource_provider_1 BV_RUNTIME_RESOURCE_PROVIDER",hidden:false,style:{display:""},classList:{contains:name=>name==="lg-slot--input"}},
   ];
   const detailRows=[
     {textContent:"regional BV_REGIONAL",hidden:false,style:{display:""},dataset:{bvPreviewPort:"input"}},
     {textContent:"regional BV_REGIONAL",hidden:false,style:{display:""},dataset:{bvPreviewPort:"output"}},
     {textContent:"operation COMBO",hidden:false,style:{display:""},dataset:{bvPreviewPort:"input"}},
     {textContent:"config_json STRING",hidden:false,style:{display:""},dataset:{bvPreviewPort:"input"}},
-    {textContent:"resource_provider BV_RUNTIME_RESOURCE_PROVIDER",hidden:false,style:{display:""},dataset:{bvPreviewPort:"input"}},
     {textContent:"resource_provider_1 BV_RUNTIME_RESOURCE_PROVIDER",hidden:false,style:{display:""},dataset:{bvPreviewPort:"input"}},
   ];
   const preview=previewFixture("BV Regional LoRA",bodyRows,detailRows);
@@ -147,7 +147,7 @@ test("Regional LoRA ghost hides internal and provider rows in body and lower det
     setLegacyDebugVisible(legacyDebug);
     assert.equal(applyNodePreviewProjection(preview,{createElement(){return{className:"",dataset:{},append(){},setAttribute(){},textContent:""}}}),true);
     assert.deepEqual(bodyRows.map(row=>row.hidden),[false,false,true,true,true]);
-    assert.deepEqual(detailRows.map(row=>row.hidden),[false,false,true,true,true,true]);
+    assert.deepEqual(detailRows.map(row=>row.hidden),[false,false,true,true,true]);
   }
   setLegacyDebugVisible(false);
 });

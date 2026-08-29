@@ -16,6 +16,15 @@ export function activeWorkflowIdentity(app: any): unknown {
     return app?.canvas?.graph??app?.graph??workflow;
 }
 
+const primitiveWorkflowScopes=new Map<unknown,object>();
+export function activeWorkflowScope(app:any):object{
+    const identity=activeWorkflowIdentity(app);
+    if(identity&&typeof identity==="object")return identity;
+    let scope=primitiveWorkflowScopes.get(identity);
+    if(!scope){scope={identity};primitiveWorkflowScopes.set(identity,scope);}
+    return scope;
+}
+
 export function watchActiveWorkflow(
     app: any,
     api: WorkflowEventSource,

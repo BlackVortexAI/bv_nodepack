@@ -1,5 +1,6 @@
 export * from "./actions";
 export * from "./content";
+export * from "./compactInteractions";
 export * from "./data";
 export * from "./feedback";
 export * from "./forms";

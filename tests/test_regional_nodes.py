@@ -1,6 +1,7 @@
 import importlib.util
 import inspect
 import json
+import copy
 from pathlib import Path
 import sys
 import types
@@ -102,9 +103,10 @@ class RegionalNodeTests(unittest.TestCase):
     def test_nodes_are_grouped_by_role_and_model_in_the_menu(self):
         expected_categories = {
             "BV Regional Prompt": "🌀 BV Node Pack/regional/core",
-            "BV Named LoRA Stack": "🌀 BV Node Pack/regional/core",
-            "BV LoRA Stack Collector": "🌀 BV Node Pack/regional/core",
-            "BV Regional LoRA": "🌀 BV Node Pack/regional/core",
+            "BV LoRA Registry": "🌀 BV Node Pack/regional/LoRA",
+            "BV Named LoRA Stack": "🌀 BV Node Pack/regional/LoRA/Manual Chains (Optional)",
+            "BV LoRA Stack Collector": "🌀 BV Node Pack/regional/LoRA/Manual Chains (Optional)",
+            "BV Regional LoRA": "🌀 BV Node Pack/regional/LoRA",
             "BV Regional Debug": "🌀 BV Node Pack/regional/core",
             "BV Regional Select": "🌀 BV Node Pack/regional/core",
             "BV Regional Deconstructor": "🌀 BV Node Pack/regional/core",
@@ -298,8 +300,11 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
     def test_only_regional_context_writers_expose_typed_provider_inputs(self):
-        for node_type in (self.module.BVRegionalPromptNode, self.module.BVRegionalLoraNode):
-            optional = node_type.INPUT_TYPES()["optional"]
+        prompt_optional = self.module.BVRegionalPromptNode.INPUT_TYPES()["optional"]
+        self.assertIn("resource_provider", prompt_optional)
+        lora_optional = self.module.BVRegionalLoraNode.INPUT_TYPES()["optional"]
+        self.assertEqual(set(lora_optional), {f"resource_provider_{index}" for index in range(1, 21)})
+        for optional in (prompt_optional, lora_optional):
             providers = [optional[f"resource_provider_{index}"] for index in range(1, 21)]
             self.assertTrue(all(spec[0] == self.module.RUNTIME_PROVIDER and spec[1]["forceInput"] for spec in providers))
         for node_type in (
@@ -323,6 +328,55 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.NODE_CLASS_MAPPINGS["BV Named LoRA Stack"],
             self.module.BVNamedLoraStackNode,
         )
+
+    def test_named_lora_stack_builds_an_immutable_parallel_v3_provider_chain(self):
+        first_registry, first_provider = self.module.BVNamedLoraStackNode().register(
+            [("portrait.safetensors", 0.8, 0.6)], "Portrait", "stack-a"
+        )
+        first_snapshot = copy.deepcopy(first_provider)
+
+        second_registry, second_provider = self.module.BVNamedLoraStackNode().register(
+            [("style.safetensors", 0.7, 0.5)],
+            "Style",
+            "stack-b",
+            registry=first_registry,
+            resource_provider=first_provider,
+        )
+
+        self.assertEqual(first_provider, first_snapshot)
+        self.assertEqual(list(second_registry["stacks"]), ["stack-a", "stack-b"])
+        self.assertEqual(list(second_provider["resources"]), ["stack-a", "stack-b"])
+        self.assertEqual(second_provider["resources"]["stack-a"]["stack"][0][0], "portrait.safetensors")
+        self.assertEqual(second_provider["resources"]["stack-b"]["stack"][0][0], "style.safetensors")
+        self.assertEqual(self.module.BVNamedLoraStackNode.RETURN_NAMES, ("registry", "resource_provider"))
+
+    def test_named_lora_stack_replaces_a_duplicate_v3_stack_id_deterministically(self):
+        _, first_provider = self.module.BVNamedLoraStackNode().register(
+            [("old.safetensors", 1.0, 1.0)], "Old", "stack-a"
+        )
+        _, replaced = self.module.BVNamedLoraStackNode().register(
+            [("new.safetensors", 0.6, 0.4)],
+            "New",
+            "stack-a",
+            resource_provider=first_provider,
+        )
+
+        self.assertEqual(list(replaced["resources"]), ["stack-a"])
+        self.assertEqual(replaced["resources"]["stack-a"]["name"], "New")
+        self.assertEqual(replaced["resources"]["stack-a"]["stack"], [("new.safetensors", 0.6, 0.4)])
+
+    def test_lora_registry_node_materializes_the_existing_runtime_contract(self):
+        registry = {"schema": "bv.lora_stack_registry", "version": 1, "stacks": {
+            "22222222-2222-4222-8222-222222222222": {
+                "id": "22222222-2222-4222-8222-222222222222", "name": "Disabled", "stack": [],
+            },
+        }}
+        with mock.patch.object(self.module, "materialize_lora_registry", return_value=(registry, "11111111-1111-4111-8111-111111111111")):
+            provider, = self.module.BVLoraRegistryNode().collect("{}")
+        self.assertEqual(provider["provider_id"], "11111111-1111-4111-8111-111111111111")
+        self.assertEqual(provider["resources"], registry["stacks"])
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, (self.module.RUNTIME_PROVIDER,))
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("resource_provider",))
 
     def test_helper_pipeline_selects_extracts_and_renders(self):
         document = fixture()
@@ -350,14 +404,38 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(tuple(rendered[0].shape), (1, 100, 100))
 
     def test_lora_collector_keeps_live_stack_resources_outside_the_context(self):
-        registry = self.module.BVNamedLoraStackNode().register(
+        _, chain_provider = self.module.BVNamedLoraStackNode().register(
             [("portrait.safetensors", 0.8, 0.6)], "Portrait", "stack-a"
-        )[0]
+        )
+        snapshot = copy.deepcopy(chain_provider)
         provider = self.module.BVLoraStackCollectorNode().collect(
-            registry, "22222222-2222-4222-8222-222222222222"
+            chain_provider, "22222222-2222-4222-8222-222222222222"
         )[0]
+        required = self.module.BVLoraStackCollectorNode.INPUT_TYPES()["required"]
+        self.assertEqual(set(required), {"resource_provider", "collector_id"})
+        self.assertNotIn("lora_registry", required)
+        self.assertEqual(chain_provider, snapshot)
+        self.assertEqual(provider["provider_id"], "22222222-2222-4222-8222-222222222222")
         self.assertEqual(provider["resource_type"], "bv-nodepack.lora-stack")
         self.assertEqual(provider["resources"]["stack-a"]["stack"][0][0], "portrait.safetensors")
+
+    def test_lora_collector_rejects_invalid_v3_provider_payloads(self):
+        collector = self.module.BVLoraStackCollectorNode()
+        collector_id = "22222222-2222-4222-8222-222222222222"
+        valid = self.module.build_lora_provider(
+            "11111111-1111-4111-8111-111111111111",
+            {"stack-a": {"id": "stack-a", "name": "A", "stack": [("a.safetensors", 1.0, 1.0)]}},
+        )
+        invalid = [
+            {**valid, "resource_type": "bv-nodepack.detector"},
+            {**valid, "provider_id": "not-a-uuid"},
+            {**valid, "resources": []},
+            {**valid, "future": True},
+        ]
+        for provider in invalid:
+            with self.subTest(provider=provider):
+                with self.assertRaises(ValueError):
+                    collector.collect(provider, collector_id)
 
     def test_regional_lora_node_returns_a_new_v3_context(self):
         source = fixture()

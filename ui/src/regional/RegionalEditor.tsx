@@ -19,9 +19,11 @@ import { applyTreeMove, type TreeMove } from "./treeMoves";
 import { canRemoveGeometry } from "./operationOrder";
 import { getWindowSwitchMode } from "../ui/preferences";
 import { showBvToast } from "../ui/toastStore";
-import { rememberBvWindowInstance } from "../ui/windowActivity";
+import { bvWindowActivity } from "../ui/windowActivity";
 import { OptionalLoraV3ScopePicker, type LoraV3Config, type LoraV3Target } from "./LoraV3ResourcePickerPanel";
-import { addLoraV3TargetEntry, clearLoraV3Target, LORA_V3_INVENTORY_CHANGED_EVENT, loraV3Catalog, loraV3EntryResolved, loraV3Resolved, readNodeLoraV3Config, removeLoraV3TargetEntry, setLoraV3EntrySource } from "./loraV3Ui";
+import { loraV3Resolved, readNodeLoraV3Config } from "./loraV3Ui";
+import { regionalLoraScopeViewProps } from "./regionalLoraScopeActions";
+import { LORA_V3_INVENTORY_CHANGED_EVENT } from "./loraV3Inventory";
 import { DetailerEasyRegionPicker, emptyDetailerEasyConfig, readDetailerEasyConfig, reconcileDetailerEasyConfig, writeDetailerEasyConfig } from "./detailerEasyMode";
 import type { DetailerPlanConfig } from "./detailerPlanConfig";
 import { DETAILER_V3_INVENTORY_CHANGED_EVENT, detailerV3Catalog } from "./detailerV3Graph";
@@ -31,7 +33,7 @@ import { applyRegionalPrimitiveDraft, persistRegionalEditorDraft, regionalEditor
 
 type NodeRef = { id: number | string; title?: string; properties?:Record<string,unknown>; widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>; graph?: { change?:()=>void;setDirtyCanvas?: (a: boolean, b: boolean) => void } };
 const keyFor=(node:NodeRef|null|undefined)=>scopedNodeKey((getApp() as any).rootGraph??(getApp() as any).graph,node);
-type Props = { open: boolean; activationToken?:number; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; loraStacks: NamedLoraStack[]; onClose: () => void };
+type Props = { open: boolean; activationToken?:number; activityScope:object; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; loraStacks: NamedLoraStack[]; onClose: () => void };
 type Gesture =
     | { mode: "draw-box" | "draw-brush"; start: Point; commit: "add" | "subtract" }
     | { mode: "draw-polygon"; start: Point; startScreen: { x: number; y: number }; commit: "add" | "subtract" }
@@ -64,7 +66,7 @@ function remapImportedRegions(regions: Region[]): Region[] {
     });
 }
 
-export default function RegionalEditor({ open, activationToken=0, nodes, initialNode, backgrounds, loraStacks, onClose }: Props) {
+export default function RegionalEditor({ open, activationToken=0, activityScope, nodes, initialNode, backgrounds, loraStacks, onClose }: Props) {
     const [node, setNode] = useState<NodeRef | null>(initialNode), [documentValue, setDocumentValue] = useState<RegionalDocument | null>(null);
     const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null), [selectedLayerId, setSelectedLayerId] = useState<string | null>(null), [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
     const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
@@ -336,7 +338,7 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
     const windowGeometry = activeWindowGeometry(viewState, { width: window.innerWidth, height: window.innerHeight });
     const navigateNode = (nextId:string, replaceCurrent:boolean, transferWindow=true) => {
         const currentId=keyFor(node);
-        rememberBvWindowInstance("regional",nextId);
+        bvWindowActivity(activityScope).remember("regional",nextId);
         if(nextId===currentId)return;
         setKeptNodeIds(ids=>replaceCurrent?ids.filter(id=>id!==nextId):[...new Set([...ids,currentId])].filter(id=>id&&id!==nextId));
         if(transferWindow)transferredWindow.current={mode:viewState.mode,geometry:windowGeometry};
@@ -345,8 +347,8 @@ export default function RegionalEditor({ open, activationToken=0, nodes, initial
     const legacyLoraWarnings = documentValue ? bindingWarnings(loraBindings, loraStacks, new Set(documentValue.regions.map(region => region.id))) : [];
     const loraWarnings = loraV3Config.entries.length&&(!node||!loraV3Resolved(node,loraV3Config))?["V3 LoRA collector link is unresolved"]:legacyLoraWarnings;
     const loraSummary = loraV3Config.entries.length?`${loraV3Config.entries.length} V3 LoRA assignment${loraV3Config.entries.length===1?"":"s"}`:documentValue ? bindingSummary(loraBindings, loraStacks, Object.fromEntries(documentValue.regions.map(region => [region.id, region.name]))) : "";
-    const loraV3Collectors=node?loraV3Catalog(node).filter(item=>item.resources.length>0):[],loraV3IsResolved=node?loraV3Resolved(node,loraV3Config):false;
-    const v3ScopeProps={collectors:loraV3Collectors,config:loraV3Config,resolved:(entry:any)=>Boolean(node)&&loraV3EntryResolved(node,loraV3Config,entry),onSelection:(entryId:string,collectorId:string,resourceId:string)=>node&&setLoraV3Config(setLoraV3EntrySource(node,loraV3Config,entryId,collectorId,resourceId)),onAdd:(target:LoraV3Target)=>node&&setLoraV3Config(addLoraV3TargetEntry(node,loraV3Config,target)),onRemove:(entryId:string,target:LoraV3Target)=>node&&setLoraV3Config(removeLoraV3TargetEntry(node,loraV3Config,entryId,target)),onClear:(target:LoraV3Target)=>node&&setLoraV3Config(clearLoraV3Target(node,loraV3Config,target))};
+    const loraV3IsResolved=node?loraV3Resolved(node,loraV3Config):false;
+    const v3ScopeProps=regionalLoraScopeViewProps(node,loraV3Config,setLoraV3Config);
     const draftIssue=(field:string)=>primitiveDraft?.issues.find(issue=>issue.field===field)?.message;
     const globalLutSettings=<LutEasyGlobalPicker node={node} config={lutEasyConfig} collectors={node?lutV3Catalog(node):[]} detectorCollectors={node?detailerV3Catalog(node):[]} onConfig={setLutEasyConfig}/>;
     const documentSettings=documentValue?<div className="bv-ui-stack" data-bv-regional-section="document"><div data-bv-regional-field="title"><TextField label="Title" value={String(primitiveDraft?.raw.title??documentValue.title)} error={draftIssue("title")} onValue={value=>updatePrimitiveDraft("title",value)}/></div><div data-bv-regional-field="canvas.width"><TextField label="Canvas width" value={String(primitiveDraft?.raw["canvas.width"]??documentValue.canvas.width)} error={draftIssue("canvas.width")} onValue={value=>updatePrimitiveDraft("canvas.width",value)}/></div><div data-bv-regional-field="canvas.height"><TextField label="Canvas height" value={String(primitiveDraft?.raw["canvas.height"]??documentValue.canvas.height)} error={draftIssue("canvas.height")} onValue={value=>updatePrimitiveDraft("canvas.height",value)}/></div></div>:null;

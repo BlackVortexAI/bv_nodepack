@@ -18,3 +18,8 @@ test("invalid and duplicate LUT entries are removed during normalization",()=>{
   assert.equal(parsed.luts[0].lut_name,"a");
   assert.notEqual(parsed.collector_id,"x");
 });
+
+test("legacy disk separators become canonical without changing built-ins",()=>{
+  const parsed=parseLutRegistryConfig({version:1,collector_id:"11111111-1111-4111-8111-111111111111",luts:[{id:"disk",lut_name:"downloaded\\Test.cube"},{id:"builtin",lut_name:"Built-in: Warm Contrast"}]});
+  assert.deepEqual(parsed.luts,[{id:"disk",lut_name:"downloaded/Test.cube"},{id:"builtin",lut_name:"Built-in: Warm Contrast"}]);
+});

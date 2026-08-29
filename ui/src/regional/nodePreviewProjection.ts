@@ -13,6 +13,7 @@ type PreviewDocument = Pick<Document,"createElement">;
 const POLICIES:Record<string,PreviewPolicy>={
     "BV Control Center":{actions:["Configure Control Center"],hideWidgets:["bv_control_config_json"]},
     "BV LUT Registry":{actions:["Configure LUT Registry"],hideWidgets:["config_json"]},
+    "BV LoRA Registry":{actions:["Open LoRA Registry"],hideWidgets:["config_json"]},
     "BV Regional LUT Plan":{actions:["Connect a BV Regional Prompt"],hideWidgets:["config_json"],hidePrefixes:["resource_provider"]},
     "BV Detector Registry":{actions:["Configure Detector Registry"],hideWidgets:["config_json"],hidePrefixes:["resource_provider"]},
     "BV Regional Detailer Plan":{actions:["Connect a BV Regional Prompt"],hideWidgets:["config_json"],hidePrefixes:["resource_provider"]},

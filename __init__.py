@@ -22,7 +22,15 @@ except Exception as error:
     print(f"BV Node Pack: detector model API unavailable: {error}")
 
 try:
+    from .py.util import lora_routes as _lora_routes  # noqa: F401
+except Exception as error:
+    print(f"BV Node Pack: LoRA catalog API unavailable: {error}")
+
+try:
     from .py.util import lut_routes as _lut_routes  # noqa: F401
+    from .py.util.lut_catalog import start_lut_catalog_refresh
+
+    start_lut_catalog_refresh()
 except Exception as error:
     print(f"BV Node Pack: LUT catalog API unavailable: {error}")
 

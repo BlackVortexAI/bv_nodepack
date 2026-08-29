@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from py.nodes.bv_lut_resources import BVLutRegistryNode, build_lut_provider, register_lut_resource
 from py.util.lut_prototype import builtin_lut
@@ -29,6 +30,23 @@ class LutResourceTests(unittest.TestCase):
         self.assertEqual(count, 2)
         self.assertIn("warm", summary)
         self.assertEqual(set(provider["resources"]), {"warm", "cool"})
+
+    def test_registry_migrates_legacy_disk_separator_before_validation(self):
+        config = '{"schema":"bv.lut_registry_config","version":1,"collector_id":"11111111-1111-4111-8111-111111111111","luts":[{"id":"test","lut_name":"downloaded\\\\Test.cube"}]}'
+        lut = builtin_lut("Identity")
+        with (
+            patch("py.nodes.bv_lut_resources._lut_choices", return_value=["downloaded/Test.cube"]),
+            patch("py.nodes.bv_lut_resources.BVLutLoaderPrototype.load", return_value=(lut, "loaded")) as load,
+        ):
+            count, summary, _provider = BVLutRegistryNode().collect(config)
+
+        self.assertEqual(count, 1)
+        self.assertIn("downloaded/Test.cube", summary)
+        load.assert_called_once_with("downloaded/Test.cube")
+
+        with patch("py.nodes.bv_lut_resources._lut_choices", return_value=["downloaded/Test.cube"]):
+            with self.assertRaisesRegex(ValueError, "LUT not found"):
+                BVLutRegistryNode().collect(config.replace("Test.cube", "Missing.cube"))
 
 
 if __name__ == "__main__":

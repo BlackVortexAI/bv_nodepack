@@ -1,0 +1,45 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {bootstrapLoraCatalog,createLoraCatalogClient} from "../ui/src/regional/loraCatalogClient.ts";
+
+const catalog={schema:"bv.lora_catalog",version:1,items:[]};
+
+test("local LoRA catalog client caches success and deduplicates in-flight loads",async()=>{
+  let calls=0,resolveFetch;
+  const client=createLoraCatalogClient(()=>{calls++;return new Promise(resolve=>{resolveFetch=resolve})});
+  const api={apiURL:path=>`local:${path}`},first=client.load(api),second=client.load(api);
+  assert.equal(calls,1);resolveFetch({ok:true,json:async()=>catalog});
+  assert.deepEqual(await first,catalog);assert.deepEqual(await second,catalog);
+  assert.deepEqual(await client.load(api),catalog);assert.equal(calls,1);
+});
+
+test("local LoRA catalog client publishes one stable snapshot to passive node subscribers",async()=>{
+  let calls=0,updates=0;
+  const loaded={...catalog,items:[{name:"demo.safetensors",preview_url:"/preview",preview_safe:true}]};
+  const client=createLoraCatalogClient(async()=>{calls++;return{ok:true,json:async()=>loaded}}),api={apiURL:path=>`local:${path}`};
+  const empty=client.getSnapshot(),seen=[];
+  const unsubscribe=client.subscribe(()=>{updates++;seen.push(client.getSnapshot())});
+  assert.equal(empty,client.empty());
+  await Promise.all([client.load(api),client.load(api)]);
+  assert.equal(calls,1);assert.equal(updates,1);assert.equal(seen[0],client.getSnapshot());assert.equal(client.getSnapshot().items[0].preview_url,"/preview");
+  await client.load(api);assert.equal(calls,1);assert.equal(updates,1);
+  client.invalidate();assert.equal(updates,2);assert.equal(client.getSnapshot(),empty);
+  client.invalidate();assert.equal(updates,2);
+  unsubscribe();await client.load(api);assert.equal(calls,2);assert.equal(updates,2);
+});
+
+test("local LoRA catalog client does not permanently cache failures",async()=>{
+  let calls=0,updates=0;
+  const client=createLoraCatalogClient(async()=>{calls++;if(calls===1)throw new Error("offline");return{ok:true,json:async()=>catalog}}),api={apiURL:path=>`local:${path}`};
+  const unsubscribe=client.subscribe(()=>updates++);
+  await assert.rejects(client.load(api),/offline/);assert.equal(updates,0);assert.equal(client.getSnapshot(),client.empty());
+  assert.deepEqual(await client.load(api),catalog);assert.equal(calls,2);assert.equal(updates,1);unsubscribe();
+});
+
+test("LoRA catalog bootstrap is non-blocking, singleflight and handles startup failure",async()=>{
+  let calls=0,resolveFetch;
+  const client=createLoraCatalogClient(()=>{calls++;return new Promise(resolve=>{resolveFetch=resolve})}),api={apiURL:path=>`local:${path}`};
+  assert.equal(bootstrapLoraCatalog(api,client),undefined);assert.equal(bootstrapLoraCatalog(api,client),undefined);assert.equal(calls,1);
+  resolveFetch({ok:false,status:503,json:async()=>({})});await new Promise(resolve=>setTimeout(resolve,0));assert.equal(client.getSnapshot(),client.empty());
+  bootstrapLoraCatalog(api,client);assert.equal(calls,2);resolveFetch({ok:true,json:async()=>catalog});await new Promise(resolve=>setTimeout(resolve,0));assert.deepEqual(client.getSnapshot(),catalog);
+});

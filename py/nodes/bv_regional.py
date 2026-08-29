@@ -36,12 +36,15 @@ from ..util.regional.lora_v3 import (
     LORA_CAPABILITY_REGISTRY,
     RUNTIME_PROVIDER,
     build_lora_provider,
+    extend_lora_provider,
     materialize_lora_capability,
     materialized_lora_scopes,
     normalize_lora_prompt_config,
+    reidentify_lora_provider,
     transform_lora_capability,
     transform_lora_sequence,
 )
+from ..util.lora_registry import materialize_lora_registry
 from ..util.regional.detailer_v3 import transform_detailer_capability
 from ..util.regional.lut_v3 import MAX_LUT_RESOURCE_PROVIDERS, transform_lut_capability
 from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
@@ -58,6 +61,8 @@ from ..util.regional.krea2_token_lora import apply_krea2_token_lora_patch
 AST = "BV_AST"
 CATEGORY_ROOT = "🌀 BV Node Pack/regional"
 CATEGORY_CORE = f"{CATEGORY_ROOT}/core"
+CATEGORY_LORA = f"{CATEGORY_ROOT}/LoRA"
+CATEGORY_LORA_MANUAL = f"{CATEGORY_LORA}/Manual Chains (Optional)"
 CATEGORY_OUTPUT = f"{CATEGORY_ROOT}/output"
 CATEGORY_INTEGRATIONS = f"{CATEGORY_ROOT}/integrations"
 CATEGORY_INTEGRATION_IMPACT = f"{CATEGORY_INTEGRATIONS}/Impact Pack"
@@ -91,6 +96,14 @@ def _lora_provider_map(resource_provider=None, **providers):
     return {
         value["provider_id"]: value
         for value in values
+        if isinstance(value, dict) and isinstance(value.get("provider_id"), str)
+    }
+
+
+def _ordinal_lora_provider_map(**providers):
+    return {
+        value["provider_id"]: value
+        for value in (providers.get(f"resource_provider_{index}") for index in range(1, MAX_LORA_COLLECTORS + 1))
         if isinstance(value, dict) and isinstance(value.get("provider_id"), str)
     }
 
@@ -182,17 +195,42 @@ class BVNamedLoraStackNode:
                 "name": ("STRING", {"default": "LoRA Stack", "multiline": False}),
                 "stack_id": ("STRING", {"default": "", "multiline": False}),
             },
-            "optional": {"registry": (REGISTRY, {})},
+            "optional": {
+                "registry": (REGISTRY, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
+            },
         }
 
-    RETURN_TYPES = (REGISTRY,)
-    RETURN_NAMES = ("registry",)
+    RETURN_TYPES = (REGISTRY, RUNTIME_PROVIDER)
+    RETURN_NAMES = ("registry", "resource_provider")
     FUNCTION = "register"
-    CATEGORY = CATEGORY_CORE
-    DESCRIPTION = "Names an external LORA_STACK and adds it to a chainable BV regional registry."
+    CATEGORY = CATEGORY_LORA_MANUAL
+    DESCRIPTION = (
+        "Names an external LORA_STACK, preserves the published V2 registry chain, "
+        "and appends it to the optional V3 resource-provider chain."
+    )
 
-    def register(self, lora_stack, name, stack_id, registry=None):
-        return (add_named_stack(registry, stack_id, name, lora_stack),)
+    def register(self, lora_stack, name, stack_id, registry=None, resource_provider=None):
+        return (
+            add_named_stack(registry, stack_id, name, lora_stack),
+            extend_lora_provider(resource_provider, stack_id, name, lora_stack),
+        )
+
+
+class BVLoraRegistryNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {"config_json": ("STRING", {"default": "", "multiline": True})}}
+
+    RETURN_TYPES = (RUNTIME_PROVIDER,)
+    RETURN_NAMES = ("resource_provider",)
+    FUNCTION = "collect"
+    CATEGORY = CATEGORY_LORA
+    DESCRIPTION = "Builds several named, independently switchable LoRA stacks from ComfyUI's local LoRA catalog."
+
+    def collect(self, config_json=""):
+        registry, registry_id = materialize_lora_registry(config_json)
+        return (build_lora_provider(registry_id, registry["stacks"]),)
 
 
 class BVLoraStackCollectorNode:
@@ -200,9 +238,7 @@ class BVLoraStackCollectorNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): V2 stack registry bridge.
-                # Remove only when named stacks expose the V3 provider contract without this adapter.
-                "lora_registry": (REGISTRY, {}),
+                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
                 "collector_id": ("STRING", {"default": "", "multiline": False}),
             }
         }
@@ -210,12 +246,11 @@ class BVLoraStackCollectorNode:
     RETURN_TYPES = (RUNTIME_PROVIDER,)
     RETURN_NAMES = ("resource_provider",)
     FUNCTION = "collect"
-    CATEGORY = CATEGORY_CORE
+    CATEGORY = CATEGORY_LORA_MANUAL
     DESCRIPTION = "Exposes live named LoRA stacks through the typed BV v3 runtime-resource protocol."
 
-    def collect(self, lora_registry, collector_id):
-        stacks = parse_registry(lora_registry)["stacks"]
-        return (build_lora_provider(collector_id, stacks),)
+    def collect(self, resource_provider, collector_id):
+        return (reidentify_lora_provider(resource_provider, collector_id),)
 
 
 class BVRegionalLoraNode:
@@ -227,19 +262,16 @@ class BVRegionalLoraNode:
                 "operation": (["replace", "merge", "subtract", "clear"], {"default": "replace"}),
                 "config_json": ("STRING", {"default": DEFAULT_LORA_V3_JSON, "multiline": True}),
             },
-            "optional": {
-                "resource_provider": (RUNTIME_PROVIDER, {"forceInput": True}),
-                **_lora_provider_inputs(),
-            },
+            "optional": _lora_provider_inputs(),
         }
 
     RETURN_TYPES = (REGIONAL,)
     RETURN_NAMES = ("regional",)
     FUNCTION = "transform"
-    CATEGORY = CATEGORY_CORE
+    CATEGORY = CATEGORY_LORA
     DESCRIPTION = "Adds or replaces the immutable BV Regional v3 LoRA capability."
 
-    def transform(self, regional, operation, config_json, resource_provider=None, **providers):
+    def transform(self, regional, operation, config_json, **providers):
         payload = json.loads(config_json) if isinstance(config_json, str) else config_json
         transformed = transform_lora_sequence(
             regional, payload, registry=LORA_CAPABILITY_REGISTRY, fallback_operation=operation
@@ -247,7 +279,7 @@ class BVRegionalLoraNode:
         result = transformed.capabilities.get(LORA_CAPABILITY)
         if result is not None:
             transformed = materialize_lora_capability(
-                transformed, _lora_provider_map(resource_provider, **providers), registry=LORA_CAPABILITY_REGISTRY
+                transformed, _ordinal_lora_provider_map(**providers), registry=LORA_CAPABILITY_REGISTRY
             )
         return (transformed.to_dict(),)
 
@@ -1003,6 +1035,7 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
 
 NODE_CLASS_MAPPINGS = {
     "BV Regional Prompt": BVRegionalPromptNode,
+    "BV LoRA Registry": BVLoraRegistryNode,
     "BV Named LoRA Stack": BVNamedLoraStackNode,
     "BV LoRA Stack Collector": BVLoraStackCollectorNode,
     "BV Regional LoRA": BVRegionalLoraNode,
@@ -1027,6 +1060,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "BV Regional Prompt": "🌀 BV Regional Prompt",
+    "BV LoRA Registry": "🌀 BV LoRA Registry",
     "BV Named LoRA Stack": "🌀 BV Named LoRA Stack",
     "BV LoRA Stack Collector": "🌀 BV LoRA Stack Collector",
     "BV Regional LoRA": "🌀 BV Regional LoRA",
