@@ -947,7 +947,9 @@ class RegionalNodeTests(unittest.TestCase):
             }},
             "10": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model.safetensors"}},
         }
-        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as directory:
+        temporary_root = ROOT / ".tmp"
+        temporary_root.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=temporary_root) as directory:
             fake_paths = types.ModuleType("folder_paths")
             fake_paths.get_save_image_path = lambda *_args: (directory, "regional", 1, "", "regional")
             fake_paths.get_full_path = lambda *_args: None
