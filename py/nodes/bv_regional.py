@@ -56,6 +56,7 @@ from ..util.regional.flux2_klein_attention import (
 )
 from ..util.regional.krea2_attention import compile_krea2_attention, apply_krea2_attention_patch
 from ..util.regional.krea2_token_lora import apply_krea2_token_lora_patch
+from ..util.regional.civitai_metadata import build_regional_metadata, metadata_json
 
 
 AST = "BV_AST"
@@ -1017,7 +1018,8 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
                 "filename_prefix": ("STRING", {"default": "BV_Regional"}),
                 "document_id": ("STRING", {"default": "", "multiline": False}),
             },
-            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
+            "optional": {"regional": (REGIONAL, {})},
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -1025,11 +1027,62 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = CATEGORY_OUTPUT
-    DESCRIPTION = "Saves an image, sends the saved result to a selected BV Regional Editor, and passes the image through."
+    DESCRIPTION = "Saves an image, optionally embeds Civitai-compatible BV Regional metadata, sends it to a selected Regional Editor, and passes it through."
 
-    def save(self, images, filename_prefix, document_id, prompt=None, extra_pnginfo=None):
+    def _save_regional_images(self, images, filename_prefix, prompt, extra_pnginfo, unique_id, regional):
+        import os
+
+        import numpy as np
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+        import folder_paths
+        from comfy.cli_args import args
+
+        filename_prefix += self.prefix_append
+        width, height = int(images[0].shape[1]), int(images[0].shape[0])
+        full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
+            filename_prefix, self.output_dir, width, height
+        )
+        try:
+            parameters, bv_metadata = build_regional_metadata(
+                regional, prompt=prompt, unique_id=unique_id, width=width, height=height
+            )
+        except Exception as error:
+            print(f"BV Node Pack: Civitai metadata unavailable; saving native metadata only: {error}")
+            parameters, bv_metadata = None, None
+        results = []
+        for batch_number, image in enumerate(images):
+            pixels = 255.0 * image.cpu().numpy()
+            rendered = Image.fromarray(np.clip(pixels, 0, 255).astype(np.uint8))
+            metadata = None
+            if not args.disable_metadata:
+                metadata = PngInfo()
+                if prompt is not None:
+                    metadata.add_text("prompt", json.dumps(prompt))
+                if extra_pnginfo is not None:
+                    for key, value in extra_pnginfo.items():
+                        metadata.add_text(key, json.dumps(value))
+                if parameters is not None:
+                    metadata.add_text("parameters", parameters)
+                if bv_metadata is not None:
+                    metadata.add_text("bv_regional", metadata_json(bv_metadata))
+            filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
+            file = f"{filename_with_batch_num}_{counter:05}_.png"
+            rendered.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=self.compress_level)
+            results.append({"filename": file, "subfolder": subfolder, "type": self.type})
+            counter += 1
+        return {"ui": {"images": results}, "result": (images,)}
+
+    def save(self, images, filename_prefix, document_id, prompt=None, extra_pnginfo=None, unique_id=None, regional=None):
         target = self._validate_target(document_id)
-        output = self.save_images(images, filename_prefix, prompt, extra_pnginfo)
+        if regional is None:
+            output = self.save_images(images, filename_prefix, prompt, extra_pnginfo)
+        else:
+            context = normalize_context(regional, registry=REGIONAL_V3_CAPABILITY_REGISTRY)
+            context_target = str(context.core["document_id"]).strip()
+            if context_target != target:
+                raise ValueError(f"document_id does not match connected RegionalContext: {target!r} != {context_target!r}")
+            output = self._save_regional_images(images, filename_prefix, prompt, extra_pnginfo, unique_id, context)
         return self._targeted_output(output, images, target)
 
 

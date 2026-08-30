@@ -31,6 +31,7 @@ const POLICIES:Record<string,PreviewPolicy>={
     "BV Dynamic Combo":{rows:[{label:"value · option_a",kind:"value"}]},
     "BV Prompt AST Debug":{rows:[{label:"AST preview available after execution",kind:"value"}]},
     "BV Text Log Writer":{rows:[{label:"Preview available after execution",kind:"value"}],hideWidgets:["text"]},
+    "BV Inspect Any":{rows:[{label:"Value preview available after execution",kind:"value"}]},
     "BV Subgraph Divider":{rows:[{label:"Divider",kind:"value"}],hideWidgets:["thickness","padding","alpha","_"]},
     "BV Subgraph Heading":{rows:[{label:"Heading",kind:"value"}],hideWidgets:["value","_"]},
     "BV Subgraph Spacer":{rows:[{label:"Spacer",kind:"value"}],hideWidgets:["height","scale","_"]},

@@ -48,6 +48,7 @@ import { configureProjectedPortLayout, setProjectedSlotLabel, suppressInitialPro
 import { applyClassicNodePresentation, applyClassicSubgraphLayout } from "./regional/classicNodePresentation";
 import { installNodePreviewProjection } from "./regional/nodePreviewProjection";
 import { configureNodes2NodePresentation, removeNodes2NodePresentation } from "./regional/nodes2NodePresentation";
+import { installExecutionResultPreview } from "./regional/executionResultPreview";
 import { hasNodePresentationPolicy } from "./regional/nodePresentation";
 import { installLoraRegistryUi } from "./regional/loraRegistryUi";
 import { ExportDialog } from "./export/ExportDialog";
@@ -735,6 +736,10 @@ comfyApp.registerExtension({
         onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if(nodeData.name==="BV Inspect Any"){
+            installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
+            return;
+        }
         if(nodeData.name==="BV Regional Prompt")suppressInitialProjectedProviderDefinitions(nodeData);
         if (installM0ResourceSpike(nodeType, nodeData)) return;
         if(nodeData.name==="BV LoRA Registry"){installLoraRegistryUi(nodeType,nodeData,comfyApi,detailerGraphOwner);return}

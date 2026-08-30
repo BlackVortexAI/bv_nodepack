@@ -7,6 +7,7 @@ export * from "./forms";
 export * from "./navigation";
 export * from "./overlays";
 export * from "./ResourcePicker";
+export * from "./ReadonlyTextBlock";
 export { default as RegionLayerTree } from "./RegionLayerTree";
 export { default as RegionalToolPalette } from "./RegionalToolPalette";
 export type { BrushSettings, Tool } from "./RegionalToolPalette";

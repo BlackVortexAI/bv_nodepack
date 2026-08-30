@@ -5,6 +5,7 @@ import copy
 from pathlib import Path
 import sys
 import types
+import tempfile
 import unittest
 from unittest import mock
 
@@ -159,6 +160,7 @@ class RegionalNodeTests(unittest.TestCase):
             "BV Regional Anima Conditioning",
             "BV Regional Color Control Image",
             "BV Regional Anima LLLite",
+            "BV Regional Image Save",
         }
         selection_consumers = {
             name
@@ -907,6 +909,66 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(output["ui"]["images"][0]["type"], "output")
         self.assertEqual(output["ui"]["bv_regional_background"], [{"document_id": "doc-b"}])
         self.assertIs(output["result"][0], images)
+
+    def test_image_save_keeps_regional_metadata_strictly_optional(self):
+        inputs = self.module.BVRegionalImageSaveNode.INPUT_TYPES()
+        self.assertEqual(inputs["optional"]["regional"][0], "BV_REGIONAL")
+        self.assertEqual(inputs["hidden"]["unique_id"], "UNIQUE_ID")
+        saver = self.module.BVRegionalImageSaveNode()
+        calls = []
+        saver.save_images = lambda *args: calls.append(args) or {"ui": {"images": []}}
+        images, prompt, pnginfo = object(), {"graph": True}, {"workflow": {}}
+        saver.save(images, "legacy", "doc-a", prompt, pnginfo, "99")
+        self.assertEqual(calls, [(images, "legacy", prompt, pnginfo)])
+
+    def test_image_save_uses_connected_context_and_rejects_wrong_target(self):
+        regional = fixture()
+        target = regional["document_id"]
+        saver = self.module.BVRegionalImageSaveNode()
+        calls = []
+        saver._save_regional_images = lambda *args: calls.append(args) or {"ui": {"images": []}}
+        images = object()
+        saver.save(images, "regional", target, {}, {}, "99", regional)
+        self.assertEqual(calls[0][:5], (images, "regional", {}, {}, "99"))
+        with self.assertRaisesRegex(ValueError, "does not match connected RegionalContext"):
+            saver.save(images, "regional", "wrong-document", {}, {}, "99", regional)
+
+    def test_image_save_writes_raw_civitai_parameters_and_structured_bv_context(self):
+        from PIL import Image
+
+        regional = fixture()
+        target = regional["document_id"]
+        graph = {
+            "90": {"class_type": "BV Regional Image Save", "inputs": {"images": ["30", 0]}},
+            "30": {"class_type": "VAEDecode", "inputs": {"samples": ["20", 0]}},
+            "20": {"class_type": "KSampler", "inputs": {
+                "model": ["10", 0], "steps": 20, "cfg": 7, "seed": 42,
+                "sampler_name": "euler", "scheduler": "normal", "denoise": 1,
+            }},
+            "10": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model.safetensors"}},
+        }
+        with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as directory:
+            fake_paths = types.ModuleType("folder_paths")
+            fake_paths.get_save_image_path = lambda *_args: (directory, "regional", 1, "", "regional")
+            fake_paths.get_full_path = lambda *_args: None
+            fake_cli = types.ModuleType("comfy.cli_args")
+            fake_cli.args = types.SimpleNamespace(disable_metadata=False)
+            fake_comfy = types.ModuleType("comfy")
+            fake_comfy.__path__ = []
+            saver = self.module.BVRegionalImageSaveNode()
+            saver.output_dir = directory
+            saver.type = "output"
+            saver.prefix_append = ""
+            saver.compress_level = 4
+            with mock.patch.dict(sys.modules, {"folder_paths": fake_paths, "comfy": fake_comfy, "comfy.cli_args": fake_cli}):
+                output = saver.save(torch.zeros((1, 4, 5, 3)), "regional", target, graph, {"workflow": {"nodes": []}}, "90", regional)
+            saved = Path(directory, output["ui"]["images"][0]["filename"])
+            text = Image.open(saved).text
+            self.assertTrue(text["parameters"].startswith("masterpiece"))
+            self.assertNotEqual(text["parameters"][0], '"')
+            self.assertEqual(json.loads(text["prompt"])["20"]["class_type"], "KSampler")
+            self.assertEqual(json.loads(text["workflow"]), {"nodes": []})
+            self.assertEqual(json.loads(text["bv_regional"])["schema"], "bv.regional-generation")
 
 
 if __name__ == "__main__":

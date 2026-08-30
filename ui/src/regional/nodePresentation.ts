@@ -65,9 +65,9 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
     },
     {
         id:"execution-result-preview-widgets",
-        implementation:["js/bv_prompt_debug.js"],
-        reason:"Prompt AST Debug and Text Log Writer expose read-only multiline content populated only by execution callbacks.",
-        centralizationPath:"Keep execution data handling local; create and style preview widgets exclusively through the shared BV UI/presentation helpers.",
+        implementation:["ui/src/regional/executionResultPreview.tsx","js/bv_prompt_debug.js"],
+        reason:"Execution-result previews require ComfyUI lifecycle callbacks: BV Inspect Any uses the central adapter, while Prompt AST Debug and Text Log Writer still use the legacy local adapter.",
+        centralizationPath:"Route every new execution preview through executionResultPreview and the shared BV UI host; migrate the two legacy preview nodes out of bv_prompt_debug.js into that adapter.",
     },
 ] as const;
 

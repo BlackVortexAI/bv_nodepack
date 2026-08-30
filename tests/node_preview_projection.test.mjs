@@ -17,6 +17,7 @@ test("Regional Prompt declares its ghost-only action widgets outside the backend
 });
 
 test("technical and dynamic nodes declare shared ghost projections",()=>{
+  assert.deepEqual(nodePreviewPolicy("BV Inspect Any"),{rows:[{label:"Value preview available after execution",kind:"value"}]});
   assert.deepEqual(nodePreviewPolicy("BV Seed")?.actions,["🎲 Randomize Each Time","🎲 New Fixed Random","♻️ (Use Last Queued Seed)"]);
   assert.deepEqual(nodePreviewPolicy("BV Smart Pipe"),{actions:["Configure Smart Pipe"]});
   assert.deepEqual(nodePreviewPolicy("BV Pipe"),{actions:[]});

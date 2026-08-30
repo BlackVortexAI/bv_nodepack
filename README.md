@@ -11,8 +11,8 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.2.0 is prepared but not yet released.** The current source
-> includes Regional V3 plus the new workflow-local LoRA and LUT library tooling.
+> **BV Node Pack 1.2.1 includes Regional V3, workflow-local LoRA and LUT
+> library tooling, ComfyUI-aware widget themes and expanded output metadata.**
 > The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
@@ -127,7 +127,17 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
-### 1.2.0 — prepared 2026-08-29, not released
+### 1.2.1 — 2026-08-30
+
+- Add `BV Inspect Any` for readable in-node previews and string pass-through of
+  arbitrary values.
+- Make BV node widgets follow the active ComfyUI light or dark theme through the
+  shared widget UI layer.
+- Extend `BV Regional Image Save` with an optional Regional Context input and
+  Civitai-compatible prompt, sampler, model, LoRA and hash metadata while
+  preserving existing workflows when the input is disconnected.
+
+### 1.2.0 — 2026-08-29
 
 - Add the workflow-local `BV LoRA Registry`, catalog library and Full/Quick
   selection flows while retaining the published V2 registry chain.
@@ -143,9 +153,8 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
   so Registry and Loader selections remain interoperable.
 
 The built-in looks were manually tested and the Experimental catalog was confirmed
-to load on 2026-08-29. This entry describes the prepared source state; it
-does not claim a release, tag, published package or verification of every external
-LUT download.
+to load on 2026-08-29. This does not claim verification of every external LUT
+download.
 
 ### 1.1.0 — 2026-08-28
 

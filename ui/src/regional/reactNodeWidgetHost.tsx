@@ -1,6 +1,7 @@
 import type{ReactNode}from"react";
 import{createRoot,type Root}from"react-dom/client";
 import{applyClassicNodePresentation}from"./classicNodePresentation";
+import{removeNodes2NodePresentation}from"./nodes2NodePresentation";
 
 // Lifecycle exception registered centrally as `react-node-dom-widget-host` in
 // nodePresentation.ts; feature modules delegate all DOM-widget ownership here.
@@ -74,6 +75,7 @@ export function renderReactNodeWidget(node:any,nodeType:string,spec:ReactNodeWid
 }
 
 export function refreshReactNodeWidget(node:any,nodeType:string,spec:ReactNodeWidgetSpec){return renderReactNodeWidget(node,nodeType,spec,false)}
+export function reactNodeWidgetsRemoved(node:any){return Boolean((node.__bvReactNodeWidgetLifecycle as HostLifecycle|undefined)?.removed)}
 
 export function removeReactNodeWidgets(node:any){
     const widgets=node.__bvReactNodeWidgets as Map<string,MountedWidget>|undefined;
@@ -88,5 +90,5 @@ export function installReactNodeWidgetHost(nodeType:any,nodeTypeName:string,spec
     const schedulePrepare=(node:any,revive=false)=>{const marker=lifecycle(node);if(revive)marker.removed=false;if(marker.removed)return;const generation=++marker.generation;platform.schedule(()=>{if(!marker.removed&&marker.generation===generation)prepare(node)})};
     nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);schedulePrepare(this,true);return result};
     nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);schedulePrepare(this);return result};
-    nodeType.prototype.onRemoved=function(){const marker=lifecycle(this);marker.removed=true;marker.generation++;removeReactNodeWidgets(this);return removed?.apply(this,arguments)};
+    nodeType.prototype.onRemoved=function(){const marker=lifecycle(this);marker.removed=true;marker.generation++;removeReactNodeWidgets(this);removeNodes2NodePresentation(this);return removed?.apply(this,arguments)};
 }

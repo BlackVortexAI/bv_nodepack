@@ -26,6 +26,8 @@ The machine-readable exception registry is `PRESENTATION_EXCEPTIONS` in
 | Module | Responsibility |
 | --- | --- |
 | `ui/src/regional/nodePresentation.ts` | Semantic roles, node policies and exception registry |
+| `ui/src/regional/executionResultPreview.tsx` | Shared execution-result lifecycle and BVUI preview rendering |
+| `ui/src/ui/components/ReadonlyTextBlock.tsx` | Bounded read-only text display and copy action |
 | `ui/src/regional/classicNodePresentation.ts` | Classic adapter and measured layout |
 | `ui/src/regional/nodes2NodePresentation.ts` | Nodes 2.0 DOM adapter |
 | `ui/src/regional/nodePreviewProjection.ts` | Node Library Ghost adapter |

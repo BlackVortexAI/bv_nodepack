@@ -113,6 +113,7 @@ EXPECTED_NODE_NAMES_BY_CATEGORY = {
     },
     "🌀 BV Node Pack/utils": {
         "BV Hex Color To Int",
+        "BV Inspect Any",
         "BV Seed",
         "BV Text Log Writer",
     },

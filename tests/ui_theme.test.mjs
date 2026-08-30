@@ -34,6 +34,25 @@ test("semantic controls and portals consume theme tokens without naming a concre
     assert.ok(showcase.includes(`intent="${intent}"`), `showcase misses ${intent}`);
 });
 
+test("canvas widget hosts bridge shared controls to ComfyUI node-widget tokens", async () => {
+  const css = await read("ui/src/index.css");
+  const hostRule = css.match(/\.bv-react-node-widget-host\{[^}]+\}/)?.[0] ?? "";
+  assert.match(hostRule, /--bv-widget-text:var\(--color-base-foreground,currentColor\)/);
+  assert.match(hostRule, /--bv-widget-surface:var\(--color-component-node-widget-background,transparent\)/);
+  for (const mapping of [
+    "--bv-ui-bg:var(--bv-widget-surface)",
+    "--bv-ui-surface:var(--bv-widget-surface)",
+    "--bv-ui-surface-raised:var(--bv-widget-surface)",
+    "--bv-ui-surface-subtle:var(--bv-widget-subtle)",
+    "--bv-ui-surface-hover:var(--bv-widget-hover)",
+    "--bv-ui-surface-active:var(--bv-widget-active)",
+    "--bv-ui-input:var(--bv-widget-surface)",
+  ]) assert.ok(hostRule.includes(mapping), `widget host misses ${mapping}`);
+  assert.match(css, /\.bv-readonly-text-block\{[^}]*background:var\(--bv-ui-input\)/);
+  assert.match(css, /\.bv-compact-resource-row\{[^}]*background:var\(--bv-ui-surface-subtle\)/);
+  assert.doesNotMatch(css, /\.bv-readonly-text-block\{[^}]*#[0-9a-f]{3,8}/i);
+});
+
 test("alternative concepts remain non-production catalog specifications", async () => {
   const catalog = JSON.parse(await read("docs/design/theme-catalog.json"));
   assert.deepEqual(catalog.productionThemes.map(theme => theme.id), ["cool-graphite"]);
