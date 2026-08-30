@@ -25,3 +25,11 @@ BV_DOCS_PLAN.local.md
 /user/default/bv_nodepack/lut_catalog.experimental.json
 /user/default/bv_nodepack/lut_catalog_settings.json
 /models/luts/downloaded/
+
+# Local Remote LLM preferences, credentials and response cache
+/user/default/bv_nodepack/remote_llm_settings.json
+/user/default/bv_nodepack/remote_llm_secrets.json
+/user/default/bv_nodepack/cache/remote_llm/
+
+# Isolated local ComfyUI audit user roots
+/.tmp/codex-node-audit-*/

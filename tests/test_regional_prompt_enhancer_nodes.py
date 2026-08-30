@@ -1,8 +1,10 @@
 import copy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import types
 import unittest
 from unittest.mock import patch
@@ -90,6 +92,24 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
         self.assertEqual(provider.provider_id, "venice_chat_completions")
         self.assertEqual(provider.model, "zai-org-glm-5-1")
         self.assertFalse(provider.capabilities.local_execution)
+
+    def test_remote_provider_input_types_do_not_create_user_state(self):
+        folder_paths = types.ModuleType("folder_paths")
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+            sys.modules, {"folder_paths": folder_paths}
+        ):
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(directory)
+                inputs = self.module.BVRemoteLLMProviderNode.INPUT_TYPES()["required"]
+            finally:
+                os.chdir(previous_cwd)
+
+            user_root = Path(directory) / "user" / "default" / "bv_nodepack"
+            self.assertEqual(inputs["provider_profile"][1]["default"], "OpenAI Compatible")
+            self.assertFalse((user_root / "remote_llm_settings.json").exists())
+            self.assertFalse((user_root / "remote_llm_secrets.json").exists())
+            self.assertFalse((user_root / "cache" / "remote_llm").exists())
 
     def test_invalid_model_output_flows_to_unchanged_apply_result(self):
         document = fixture()

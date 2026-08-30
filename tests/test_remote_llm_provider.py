@@ -198,6 +198,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
             ensure_user_settings_file(path, profiles)
             original = path.read_text(encoding="utf-8")
             ensure_user_settings_file(path, profiles)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
         value = json.loads(original)
         self.assertEqual(value["default_profile_id"], "openai-compatible")

@@ -47,7 +47,7 @@ class BVRemoteLLMProviderNode:
     @classmethod
     def INPUT_TYPES(cls):
         profiles = load_provider_catalog()
-        defaults = load_user_defaults(profiles, create_if_missing=True)
+        defaults = load_user_defaults(profiles)
         profile = next(item for item in profiles if item.id == defaults.profile_id)
         return {
             "required": {
