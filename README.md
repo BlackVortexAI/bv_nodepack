@@ -11,8 +11,9 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.2.1 includes Regional V3, workflow-local LoRA and LUT
-> library tooling, ComfyUI-aware widget themes and expanded output metadata.**
+> **BV Node Pack 1.2.2 is prepared but not yet released.** This source
+> centralizes native node presentation, adds Regional Canvas image sources and
+> aligns LoRA Registry interaction and outputs.
 > The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
@@ -127,6 +128,17 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.2.2 — prepared 2026-08-31, not released
+
+- Centralize native node, port and widget presentation across Classic and Nodes
+  2.0, including titlebar routing for hidden infrastructure connections.
+- Add Regional Canvas image selection from connected inputs and sender sources,
+  including a compact thumbnail picker and automatic latest-image selection.
+- Align LoRA Registry count and summary outputs and use stable 0.05 increments
+  for strength scrubbing.
+- Remove the temporary titlebar-port Canary after the shared production path
+  passed the complete regression suite.
+
 ### 1.2.1 — 2026-08-30
 
 - Add `BV Inspect Any` for readable in-node previews and string pass-through of
@@ -168,26 +180,6 @@ download.
   nodes, editors or regions are created, replaced or removed.
 - Normalize Control Center, Seed, prompt-debug and text-preview presentation and
   add regression coverage for the shared UI rules.
-
-### 1.0.1 — 2026-08-26
-
-- Add deterministic PNG export for the active graph, selected nodes and groups,
-  and open BV-managed windows.
-- Add transparent, BV Documentation Grid and current ComfyUI background modes
-  with configurable scale and padding.
-- Add optional complete-workflow PNG metadata and the versioned
-  `window.bvNodepack.export.v1` automation API.
-- Preserve native Subgraph capture compatibility with guarded offscreen-canvas
-  attachment and cleanup.
-
-### 1.0.0 — 2026-08-25
-
-- Release Regional V3 with workflow-scoped documents, stable region identity,
-  resource providers and model-specific execution paths.
-- Add migration support and temporary Legacy Debug visibility for compatible
-  pre-1.0 Regional workflows.
-- Publish the task-oriented documentation site and runtime-derived node
-  reference.
 
 ---
 
