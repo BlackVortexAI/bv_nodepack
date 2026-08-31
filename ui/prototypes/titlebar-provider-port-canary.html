@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BV Titlebar Provider-Port Canary</title>
+  <style>
+    :root{color-scheme:dark;font:14px/1.45 Inter,Segoe UI,sans-serif;background:#111214;color:#e9e7ee}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#24222c 0,#111214 55%);min-height:100vh}main{max-width:1180px;margin:auto;padding:34px 30px 110px}header{display:grid;gap:7px;margin-bottom:20px}h1,h2,p{margin:0}.prototype-badge{width:max-content;padding:4px 8px;border:1px solid #e4a35e;border-radius:999px;color:#ffd5a7;background:#3a2919;font-size:11px;font-weight:800;letter-spacing:.08em}svg{display:block;width:100%;border:1px solid #35343b;border-radius:12px;background:#17181b;box-shadow:0 18px 60px #0008}.grid{fill:url(#grid)}#grid path{fill:none;stroke:#25272a;stroke-width:1}.node-title{fill:#39383d;stroke:#4b4a50}.node-body{fill:#303035;stroke:#4b4a50}.node-label{fill:#d8d5dd;font-size:15px}.widget{fill:#222327;stroke:#59585e}.provider-link{fill:none;stroke:#a9bdb0;stroke-width:4;stroke-dasharray:10 7}.port{stroke:#151618;stroke-width:2}.port-output{fill:#a7b6cd}.port-input{fill:#a8c0ae}.hitbox{fill:#8ecaa522;stroke:#8ecaa588;stroke-dasharray:3 3}.evidence{margin-top:18px;padding:16px;border:1px solid #35343b;border-radius:10px;background:#18191d}.evidence h2{font-size:14px}.evidence pre{overflow:auto;max-height:330px;margin:10px 0 0;color:#b9c6bd;font:12px/1.45 Consolas,monospace}.switcher{position:fixed;left:50%;bottom:24px;display:flex;align-items:center;gap:14px;transform:translateX(-50%);padding:8px 10px;border:1px solid #5a5961;border-radius:999px;background:#24252aee;box-shadow:0 12px 38px #000a;backdrop-filter:blur(10px)}.switcher button{width:34px;height:34px;border:0;border-radius:50%;background:#3a3b43;color:#fff;font-size:20px;cursor:pointer}.switcher button:hover{background:#565864}.switcher strong{min-width:180px;text-align:center}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module">
+    import {installTitlebarProviderPortCanary} from "../src/prototypes/titlebarProviderPortCanary.ts";
+    installTitlebarProviderPortCanary(document.querySelector("#app"));
+  </script>
+</body>
+</html>
