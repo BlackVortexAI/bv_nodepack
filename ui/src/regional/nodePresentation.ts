@@ -29,9 +29,9 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
     },
     {
         id:"regional-prompt-bootstrap-measurement",
-        implementation:["ui/src/regional/portProjection.ts#installRegionalPromptCreationLayout"],
-        reason:"ComfyUI measures the backend definition before the Regional Prompt instance has its projected provider markers and action widgets.",
-        centralizationPath:"Keep this lifecycle adapter until the central presentation inventory can run before the first ComfyUI measurement.",
+        implementation:["ui/src/regional/portProjection.ts#installRegionalPromptCreationLayout","ui/src/regional/portProjection.ts#suppressInitialProjectedProviderDefinitions","ui/src/regional/portProjection.ts#reconcileDeferredPublicInputs","ui/src/index.tsx#BV Regional Prompt bootstrap"],
+        reason:"ComfyUI measures and materializes the backend definition before the Regional Prompt instance has its projected provider markers, action widgets and dynamically reconciled provider slots. Public inputs added after those providers must therefore be deferred or old saved target-slot indices would reconnect to the wrong type.",
+        centralizationPath:"The exception invokes generic centralized suppression/reconciliation helpers and preserves existing slot objects. Remove the bootstrap seam when ComfyUI exposes a supported pre-materialization order in which dynamic provider slots and public inputs can be declared without changing saved indices.",
     },
     {
         id:"m0-runtime-resource-projection",
@@ -43,7 +43,7 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         id:"control-center-dynamic-widgets",
         implementation:["ui/src/components/control/bv_control_center.ts"],
         reason:"Control toggles and the conflict-status row are generated from runtime configuration and must be reconciled in a stable order.",
-        centralizationPath:"Keep dynamic widget creation local; move all hiding, sizing and ordering primitives into the central manipulation library.",
+        centralizationPath:"Keep only domain-driven widget creation and ordering local; semantic roles, first-action spacing, hiding and sizing are owned by the central presentation modules.",
     },
     {
         id:"subgraph-promoted-widget-proxies",
@@ -74,6 +74,7 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
 export type PresentationPort=Readonly<{
     direction:"input"|"output";
     name:string;
+    type?:string;
     connected?:boolean;
     sticky?:boolean;
 }>;
@@ -110,7 +111,10 @@ const REGIONAL_LORA_CONSUMER_POLICY:NodePresentationPolicy={
 const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     ...Object.fromEntries(REGIONAL_LORA_CONSUMER_NODE_TYPES.map(nodeType=>[nodeType,REGIONAL_LORA_CONSUMER_POLICY])),
     "BV Control Center":{
-        widgets:[{role:"internalState",names:["bv_control_config_json"]}],
+        widgets:[
+            {role:"internalState",names:["bv_control_config_json"]},
+            {role:"nativeAction",names:["configure_control_center"]},
+        ],
         actions:["Configure Control Center"],
     },
     "BV Regional Prompt":{
@@ -140,6 +144,8 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
         widgets:[{role:"internalState",names:["config_json"]}],
         actions:["Connect a BV Regional Prompt"],
     },
+    "BV Detailer Loop Start":{},
+    "BV Detailer Loop End":{},
     "BV Regional LUT Plan":{
         ports:[{role:"provider",names:["resource_provider"],prefixes:["resource_provider_"]}],
         widgets:[{role:"internalState",names:["config_json"]}],
@@ -148,6 +154,7 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     "BV LUT Loop Start":{
         ports:[{role:"provider",names:["resource_provider"],prefixes:["resource_provider_"]}],
     },
+    "BV LUT Loop End":{},
     "BV LUT Registry":{
         ports:[{role:"provider",names:["resource_provider"]}],
         widgets:[{role:"internalState",names:["config_json"]}],
@@ -159,10 +166,14 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
         actions:["Open LoRA Registry"],
     },
     "BV LoRA Stack Collector":{
-        ports:[{role:"provider",names:["resource_provider"],directions:["output"]}],
+        ports:[
+            {role:"public",names:["resource_provider"],directions:["input"]},
+            {role:"provider",names:["resource_provider"],directions:["output"]},
+        ],
         widgets:[{role:"internalState",names:["collector_id"]}],
     },
     "BV Named LoRA Stack":{
+        ports:[{role:"public",names:["resource_provider"]}],
         widgets:[{role:"internalState",names:["stack_id"]}],
     },
     "BV Detector Registry":{
@@ -203,7 +214,12 @@ export const hasNodePresentationPolicy=(nodeType:string)=>Object.prototype.hasOw
 const matches=(item:PresentationPort|PresentationWidget,matcher:Matcher)=>
     (!matcher.directions||("direction" in item&&matcher.directions.includes(item.direction)))&&
     (matcher.names?.includes(item.name)||(matcher.prefixes??[]).some(prefix=>item.name.startsWith(prefix)));
-const roleOf=(item:PresentationPort|PresentationWidget,matchers:readonly Matcher[]|undefined):PresentationRole=>matchers?.find(matcher=>matches(item,matcher))?.role??"public";
+const PROVIDER_PORT_TYPES=new Set(["BV_RUNTIME_RESOURCE_PROVIDER","BV_RUNTIME_RESOURCE_PROVIDER_M0"]);
+const roleOf=(item:PresentationPort|PresentationWidget,matchers:readonly Matcher[]|undefined):PresentationRole=>{
+    const matched=matchers?.find(matcher=>matches(item,matcher));
+    if(matched)return matched.role;
+    return"direction"in item&&PROVIDER_PORT_TYPES.has(String(item.type??""))?"provider":"public";
+};
 const visible=(role:PresentationRole,item:PresentationPort|PresentationWidget,context:PresentationContext)=>{
     if(role==="public")return true;
     if(role==="legacy")return context.legacyDebug||("connected" in item&&item.connected===true);

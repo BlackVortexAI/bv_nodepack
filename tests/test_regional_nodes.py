@@ -368,17 +368,46 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(replaced["resources"]["stack-a"]["stack"], [("new.safetensors", 0.6, 0.4)])
 
     def test_lora_registry_node_materializes_the_existing_runtime_contract(self):
+        config = {
+            "schema": "bv.lora_registry_config", "version": 1,
+            "registry_id": "11111111-1111-4111-8111-111111111111",
+            "stacks": [
+                {"id": "22222222-2222-4222-8222-222222222222", "name": "Portrait", "enabled": True, "entries": [
+                    {"id": "33333333-3333-4333-8333-333333333331", "lora_name": "portrait-a.safetensors", "enabled": True, "model_strength": 1.0, "clip_strength": 1.0},
+                    {"id": "33333333-3333-4333-8333-333333333332", "lora_name": "portrait-b.safetensors", "enabled": False, "model_strength": 1.0, "clip_strength": 1.0},
+                    {"id": "33333333-3333-4333-8333-333333333333", "lora_name": "portrait-c.safetensors", "enabled": True, "model_strength": 0.0, "clip_strength": 0.0},
+                ]},
+                {"id": "44444444-4444-4444-8444-444444444444", "name": "Style", "enabled": False, "entries": [
+                    {"id": "55555555-5555-4555-8555-555555555551", "lora_name": "style-a.safetensors", "enabled": True, "model_strength": 1.0, "clip_strength": 1.0},
+                    {"id": "55555555-5555-4555-8555-555555555552", "lora_name": "style-b.safetensors", "enabled": True, "model_strength": 1.0, "clip_strength": 1.0},
+                ]},
+                {"id": "66666666-6666-4666-8666-666666666666", "name": "Empty", "enabled": True, "entries": []},
+            ],
+        }
         registry = {"schema": "bv.lora_stack_registry", "version": 1, "stacks": {
-            "22222222-2222-4222-8222-222222222222": {
-                "id": "22222222-2222-4222-8222-222222222222", "name": "Disabled", "stack": [],
-            },
+            stack["id"]: {"id": stack["id"], "name": stack["name"], "stack": []} for stack in config["stacks"]
         }}
         with mock.patch.object(self.module, "materialize_lora_registry", return_value=(registry, "11111111-1111-4111-8111-111111111111")):
-            provider, = self.module.BVLoraRegistryNode().collect("{}")
+            provider, lora_count, registry_summary = self.module.BVLoraRegistryNode().collect(json.dumps(config))
         self.assertEqual(provider["provider_id"], "11111111-1111-4111-8111-111111111111")
         self.assertEqual(provider["resources"], registry["stacks"])
-        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, (self.module.RUNTIME_PROVIDER,))
-        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("resource_provider",))
+        self.assertEqual(lora_count, 2)
+        self.assertEqual(registry_summary, "Portrait: 2/3 active\nStyle: 0/2 active · stack disabled\nEmpty: 0/0 active")
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, (self.module.RUNTIME_PROVIDER, "INT", "STRING"))
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("resource_provider", "lora_count", "registry_summary"))
+
+    def test_empty_lora_registry_reports_no_active_loras(self):
+        config = {
+            "schema": "bv.lora_registry_config", "version": 1,
+            "registry_id": "11111111-1111-4111-8111-111111111111",
+            "stacks": [],
+        }
+        registry = {"schema": "bv.lora_stack_registry", "version": 1, "stacks": {}}
+        with mock.patch.object(self.module, "materialize_lora_registry", return_value=(registry, config["registry_id"])):
+            provider, lora_count, registry_summary = self.module.BVLoraRegistryNode().collect(json.dumps(config))
+        self.assertEqual(provider["resources"], {})
+        self.assertEqual(lora_count, 0)
+        self.assertEqual(registry_summary, "No LoRAs configured")
 
     def test_helper_pipeline_selects_extracts_and_renders(self):
         document = fixture()
@@ -887,11 +916,48 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_image_sender_targets_document_and_preserves_image_passthrough(self):
         sender = self.module.BVRegionalImageSendNode()
-        sender.save_images = lambda images, *_args: {"ui": {"images": [{"filename": "preview.png"}]}}
+        sender.save_images = lambda images, *_args: {"ui": {"images": [
+            {"filename": "preview-a.png", "type": "temp", "subfolder": ""},
+            {"filename": "preview-b.png", "type": "temp", "subfolder": "batch"},
+        ]}}
         images = object()
-        output = sender.send(images, " doc-a ")
+        output = sender.send(images, " doc-a ", unique_id="root:17")
         self.assertEqual(output["ui"]["bv_regional_background"], [{"document_id": "doc-a"}])
+        publication = output["ui"]["bv_regional_canvas_images"][0]
+        self.assertEqual(publication["schema"], "bv.regional.canvas-images")
+        self.assertEqual(publication["source"], {"node_id": "root:17", "kind": "regional-image-send"})
+        self.assertEqual(
+            publication["images"],
+            [
+                {"index": 0, "filename": "preview-a.png", "type": "temp", "subfolder": ""},
+                {"index": 1, "filename": "preview-b.png", "type": "temp", "subfolder": "batch"},
+            ],
+        )
         self.assertIs(output["result"][0], images)
+
+    def test_prompt_canvas_image_is_appended_and_does_not_change_runtime_outputs(self):
+        inputs = self.module.BVRegionalPromptNode.INPUT_TYPES()
+        optional_names = list(inputs["optional"])
+        self.assertIs(self.module.BVRegionalPromptNode.OUTPUT_NODE, True)
+        self.assertEqual(optional_names[-1], "canvas_image")
+        self.assertEqual(inputs["hidden"]["unique_id"], "UNIQUE_ID")
+        self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES, (self.module.REGIONAL, self.module.BINDINGS))
+        self.assertEqual(self.module.BVRegionalPromptNode.RETURN_NAMES, ("regional", "lora_bindings"))
+        node = self.module.BVRegionalPromptNode()
+        document = fixture()
+        with mock.patch.object(self.module, "_preview_regional_canvas_images") as preview_images:
+            baseline = node.build(json.dumps(document))
+        preview_images.assert_not_called()
+        self.assertIsInstance(baseline, tuple)
+        self.assertEqual(len(baseline), 2)
+        preview = {"ui": {"images": [{"filename": "canvas.png", "subfolder": "", "type": "temp"}]}}
+        with mock.patch.object(self.module, "_preview_regional_canvas_images", return_value=preview):
+            projected = node.build(json.dumps(document), canvas_image=object(), unique_id="8:12")
+        self.assertEqual(projected["result"], baseline)
+        publication = projected["ui"]["bv_regional_canvas_images"][0]
+        self.assertEqual(publication["document_id"], document["document_id"])
+        self.assertEqual(publication["source"], {"node_id": "8:12", "kind": "regional-prompt-canvas"})
+        self.assertNotIn("images", projected["ui"])
 
     def test_image_sender_rejects_an_empty_target(self):
         with self.assertRaisesRegex(ValueError, "document_id is required"):

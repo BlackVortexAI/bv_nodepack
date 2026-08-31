@@ -1,7 +1,6 @@
 import type{ReactNode}from"react";
 import{createRoot,type Root}from"react-dom/client";
-import{applyClassicNodePresentation}from"./classicNodePresentation";
-import{removeNodes2NodePresentation}from"./nodes2NodePresentation";
+import{applyClassicNodePresentation,removeNodePresentation}from"./classicNodePresentation";
 
 // Lifecycle exception registered centrally as `react-node-dom-widget-host` in
 // nodePresentation.ts; feature modules delegate all DOM-widget ownership here.
@@ -35,15 +34,20 @@ const state=(node:any):Map<string,MountedWidget>=>node.__bvReactNodeWidgets??=(n
 const lifecycle=(node:any):HostLifecycle=>node.__bvReactNodeWidgetLifecycle??={generation:0,removed:false};
 const actions=(node:any):Map<string,any>=>node.__bvNativeNodeActions??=(new Map<string,any>());
 const heightCap=(spec:ReactNodeWidgetSpec)=>spec.maxHeight===undefined?Number.POSITIVE_INFINITY:Math.min(spec.maxHeight,Math.max(0,Math.floor(platform.viewportHeight()*.6)));
+const markNativeActionSocketless=(widget:any)=>{
+    if(!widget)return;
+    widget.spec={...(widget.spec??{}),socketless:true};
+    widget.options={...(widget.options??{}),socketless:true};
+};
 
 function reconcileNativeActions(node:any,spec:ReactNodeWidgetSpec){
     if(typeof node.addWidget!=="function")return;
     const mounted=actions(node);
     for(const action of spec.nativeActions??[]){
         const label=typeof action.label==="function"?action.label(node):action.label,existing=mounted.get(action.id)??node.widgets?.find((widget:any)=>widget.name===action.name);
-        if(existing){existing.label=label;existing.callback=()=>action.invoke(node);existing.serialize=false;mounted.set(action.id,existing);continue}
+        if(existing){existing.label=label;existing.callback=()=>action.invoke(node);existing.serialize=false;markNativeActionSocketless(existing);mounted.set(action.id,existing);continue}
         const widget=node.addWidget("button",action.name,null,()=>action.invoke(node),{serialize:false});
-        if(widget){widget.label=label;widget.serialize=false;mounted.set(action.id,widget)}
+        if(widget){widget.label=label;widget.serialize=false;markNativeActionSocketless(widget);mounted.set(action.id,widget)}
     }
 }
 
@@ -90,5 +94,5 @@ export function installReactNodeWidgetHost(nodeType:any,nodeTypeName:string,spec
     const schedulePrepare=(node:any,revive=false)=>{const marker=lifecycle(node);if(revive)marker.removed=false;if(marker.removed)return;const generation=++marker.generation;platform.schedule(()=>{if(!marker.removed&&marker.generation===generation)prepare(node)})};
     nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);schedulePrepare(this,true);return result};
     nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);schedulePrepare(this);return result};
-    nodeType.prototype.onRemoved=function(){const marker=lifecycle(this);marker.removed=true;marker.generation++;removeReactNodeWidgets(this);removeNodes2NodePresentation(this);return removed?.apply(this,arguments)};
+    nodeType.prototype.onRemoved=function(){const marker=lifecycle(this);marker.removed=true;marker.generation++;removeReactNodeWidgets(this);removeNodePresentation(this);return removed?.apply(this,arguments)};
 }

@@ -30,10 +30,12 @@ import { DETAILER_V3_INVENTORY_CHANGED_EVENT, detailerV3Catalog } from "./detail
 import { LutEasyGlobalPicker, LutEasyRegionPicker, emptyLutEasyConfig, readLutEasyConfig, type LutEasyConfig } from "./lutEasyMode";
 import { lutV3Catalog } from "./lutV3Catalog";
 import { applyRegionalPrimitiveDraft, persistRegionalEditorDraft, regionalEditorDraft, type RegionalEditorDraft } from "./milestoneE";
+import { LAST_SENT_IMAGE_SELECTION, regionalCanvasImageUrl, regionalCanvasImagesForDocument, regionalCanvasSelectionForDocument, regionalCanvasSelectionsForScope, rememberRegionalCanvasSelection, resolveRegionalCanvasImage, type RegionalCanvasImageCatalog } from "./regionalCanvasImages";
+import RegionalCanvasImageSelect from "./RegionalCanvasImageSelect";
 
 type NodeRef = { id: number | string; title?: string; properties?:Record<string,unknown>; widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>; graph?: { change?:()=>void;setDirtyCanvas?: (a: boolean, b: boolean) => void } };
 const keyFor=(node:NodeRef|null|undefined)=>scopedNodeKey((getApp() as any).rootGraph??(getApp() as any).graph,node);
-type Props = { open: boolean; activationToken?:number; activityScope:object; nodes: NodeRef[]; initialNode: NodeRef | null; backgrounds: Record<string, string>; loraStacks: NamedLoraStack[]; onClose: () => void };
+type Props = { open: boolean; activationToken?:number; activityScope:object; nodes: NodeRef[]; initialNode: NodeRef | null; canvasCatalog:RegionalCanvasImageCatalog; canvasApiUrl:(path:string)=>string; loraStacks: NamedLoraStack[]; onClose: () => void };
 type Gesture =
     | { mode: "draw-box" | "draw-brush"; start: Point; commit: "add" | "subtract" }
     | { mode: "draw-polygon"; start: Point; startScreen: { x: number; y: number }; commit: "add" | "subtract" }
@@ -66,7 +68,7 @@ function remapImportedRegions(regions: Region[]): Region[] {
     });
 }
 
-export default function RegionalEditor({ open, activationToken=0, activityScope, nodes, initialNode, backgrounds, loraStacks, onClose }: Props) {
+export default function RegionalEditor({ open, activationToken=0, activityScope, nodes, initialNode, canvasCatalog, canvasApiUrl, loraStacks, onClose }: Props) {
     const [node, setNode] = useState<NodeRef | null>(initialNode), [documentValue, setDocumentValue] = useState<RegionalDocument | null>(null);
     const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null), [selectedLayerId, setSelectedLayerId] = useState<string | null>(null), [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
     const [selectedGeometryId, setSelectedGeometryId] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
     const [history, setHistory] = useState<RegionalEditorSnapshot<RegionalDocument>[]>([]), [future, setFuture] = useState<RegionalEditorSnapshot<RegionalDocument>[]>([]);
     const [draft, setDraft] = useState<Geometry[] | null>(null), [cursor, setCursor] = useState<Point | null>(null), [error, setError] = useState("");
     const [viewState, setViewState] = useState<EditorViewState>(() => defaultEditorState());
+    const canvasSelections=useRef(new WeakMap<object,Map<string,string>>()),[canvasSelection,setCanvasSelection]=useState(LAST_SENT_IMAGE_SELECTION);
     const [dockResetSignal, setDockResetSignal] = useState(0);
     const [keptNodeIds, setKeptNodeIds] = useState<string[]>([]);
     const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
@@ -121,10 +124,10 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
             const stored = loadEditorState(next.document_id), regionId = next.regions.some(region => region.id === stored.selectedRegionId) ? stored.selectedRegionId : next.regions[0]?.id ?? null;
             const transfer=transferredWindow.current;transferredWindow.current=null;if(transfer){stored.mode=transfer.mode;stored.windows[transfer.mode]=transfer.geometry;}
             const region = next.regions.find(item => item.id === regionId), layerId = region && geometryLayers(region).some(layer => layer.id === stored.selectedLayerId) ? stored.selectedLayerId : null;
-            setViewState(stored); setDocumentValue(next); setPrimitiveDraft(regionalEditorDraft(node)); setLoraBindings(nextBindings); setLoraV3Config(readNodeLoraV3Config(node)); setDetailerEasyConfig(readDetailerEasyConfig(node,next.regions)); setLutEasyConfig(readLutEasyConfig(node)); setSelectedRegionId(regionId); setSelectedLayerId(layerId); setSelectedLayerIds(layerId ? [layerId] : []); setSelectionAnchorId(layerId); setTool(stored.tool); setBrush(stored.brush); setDisplayOpacity(stored.displayOpacity); setBackgroundOpacity(stored.backgroundOpacity); setIsolate(stored.isolate && !!layerId); setHistory([]); setFuture([]); setError("");
+            setViewState(stored); setDocumentValue(next); setCanvasSelection(regionalCanvasSelectionForDocument(regionalCanvasSelectionsForScope(canvasSelections.current,activityScope),next.document_id)); setPrimitiveDraft(regionalEditorDraft(node)); setLoraBindings(nextBindings); setLoraV3Config(readNodeLoraV3Config(node)); setDetailerEasyConfig(readDetailerEasyConfig(node,next.regions)); setLutEasyConfig(readLutEasyConfig(node)); setSelectedRegionId(regionId); setSelectedLayerId(layerId); setSelectedLayerIds(layerId ? [layerId] : []); setSelectionAnchorId(layerId); setTool(stored.tool); setBrush(stored.brush); setDisplayOpacity(stored.displayOpacity); setBackgroundOpacity(stored.backgroundOpacity); setIsolate(stored.isolate && !!layerId); setHistory([]); setFuture([]); setError("");
         }
         catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    }, [node, open]);
+    }, [activityScope, node, open]);
 
     useEffect(() => {
         if (!documentValue) return;
@@ -348,6 +351,9 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
     const loraWarnings = loraV3Config.entries.length&&(!node||!loraV3Resolved(node,loraV3Config))?["V3 LoRA collector link is unresolved"]:legacyLoraWarnings;
     const loraSummary = loraV3Config.entries.length?`${loraV3Config.entries.length} V3 LoRA assignment${loraV3Config.entries.length===1?"":"s"}`:documentValue ? bindingSummary(loraBindings, loraStacks, Object.fromEntries(documentValue.regions.map(region => [region.id, region.name]))) : "";
     const loraV3IsResolved=node?loraV3Resolved(node,loraV3Config):false;
+    const canvasImages=documentValue?regionalCanvasImagesForDocument(canvasCatalog,activityScope,documentValue.document_id):[];
+    const resolvedCanvasImage=documentValue?resolveRegionalCanvasImage(canvasCatalog,activityScope,documentValue.document_id,canvasSelection):null;
+    const selectCanvasImage=(selection:string)=>{if(documentValue)rememberRegionalCanvasSelection(regionalCanvasSelectionsForScope(canvasSelections.current,activityScope),documentValue.document_id,selection);setCanvasSelection(selection)};
     const v3ScopeProps=regionalLoraScopeViewProps(node,loraV3Config,setLoraV3Config);
     const draftIssue=(field:string)=>primitiveDraft?.issues.find(issue=>issue.field===field)?.message;
     const globalLutSettings=<LutEasyGlobalPicker node={node} config={lutEasyConfig} collectors={node?lutV3Catalog(node):[]} detectorCollectors={node?detailerV3Catalog(node):[]} onConfig={setLutEasyConfig}/>;
@@ -373,7 +379,7 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
                 { id:"regions", layoutId:"bv.regional.regions", title:"Regions", weight:22, minWidth:220, content:
                 <RegionLayerTree regions={documentValue.regions} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} selectedLayerIds={selectedLayerIds} selectedGeometryId={selectedGeometryId} onSelectRegion={id => { setSelectedRegionId(id); replaceLayerSelection(null); setIsolate(false); }} onSelectLayer={selectLayer} onSelectGeometry={(regionId, layerId, geometryId) => { setSelectedRegionId(regionId); setSelectedLayerId(layerId); setSelectedLayerIds([layerId]); setSelectionAnchorId(layerId); setSelectedGeometryId(geometryId); setIsolate(false); }} onToggleGeometry={toggleGeometry} onDeleteGeometry={deleteGeometry} onAddRegion={() => mutate(value => { const region = newRegion(value.regions.length); value.regions.unshift(region); syncPriorities(value.regions); setSelectedRegionId(region.id); replaceLayerSelection(null); })} onRenameRegion={(id, name) => mutate(value => { value.regions.find(region => region.id === id)!.name = name; })} onRenameLayer={(id, name) => updateLayer(id, operations => operations.forEach(item => { item.authoring = { ...geometryAuthoring(item), name }; }))} onToggleRegion={(id, field) => mutate(value => { const region = value.regions.find(item => item.id === id)!; if (field === "enabled") region.enabled = !region.enabled; else if (field === "visible") region.authoring.visible = !region.authoring.visible; else region.authoring.locked = !region.authoring.locked; })} onToggleLayer={toggleLayer} onMoveRegion={moveRegion} onMoveLayer={moveLayerOrder} onTreeMove={moveTreeItem} onDeleteRegion={deleteRegion} onDeleteLayer={deleteLayer} onDuplicateLayer={duplicateLayer} canSplitDisconnectedAreas={canSplitDisconnectedAreas} onSplitDisconnectedAreas={splitDisconnected} canMergeLayers={canMergeLayers} onMergeLayers={mergeLayers}/>
                 }, { id:"canvas", layoutId:"bv.regional.canvas", title:"Canvas", weight:54, minWidth:320, content:
-                <Artboard key={documentValue.document_id} document={documentValue} background={backgrounds[documentValue.document_id]} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} draft={draft} selectionBounds={selectionBounds} cursor={cursor} tool={tool} brush={brush} canSubtract={!!selectedLayer && !selectedLayer.authoring.locked} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} initialView={viewState.artboard} onView={updateArtboardView} onTool={next => { setTool(next); cancelGesture(); }} onBrush={setBrush} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onPointerLeave={() => { if (!gesture.current) setCursor(null); }} onDoubleClick={doubleClick}/>
+                <Artboard key={documentValue.document_id} document={documentValue} background={regionalCanvasImageUrl(resolvedCanvasImage,canvasApiUrl)} footerControls={<RegionalCanvasImageSelect images={canvasImages} selection={canvasSelection} onSelection={selectCanvasImage} apiURL={canvasApiUrl}/>} selectedRegionId={selectedRegionId} selectedLayerId={selectedLayerId} draft={draft} selectionBounds={selectionBounds} cursor={cursor} tool={tool} brush={brush} canSubtract={!!selectedLayer && !selectedLayer.authoring.locked} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} initialView={viewState.artboard} onView={updateArtboardView} onTool={next => { setTool(next); cancelGesture(); }} onBrush={setBrush} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={cancelGesture} onPointerLeave={() => { if (!gesture.current) setCursor(null); }} onDoubleClick={doubleClick}/>
                 }, { id:"global", layoutId:"bv.regional.global", title:"Global", weight:12, minWidth:240, content:optionsPanel("document")
                 }, { id:"selection", layoutId:"bv.regional.selection", title:"Selection", weight:12, minWidth:240, content:optionsPanel("selection")
                 }, { id:"region", layoutId:"bv.regional.region", title:"Region", weight:12, minWidth:240, content:optionsPanel("region") }

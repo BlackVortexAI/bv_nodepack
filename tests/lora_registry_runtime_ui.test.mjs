@@ -70,6 +70,9 @@ test("LoRA surfaces compose shared timed status, multi facets, loading and delay
   assert.match(forms,/disabled=\{option\.disabled\}/);
   assert.match(forms,/onScrubEnd\?\.\(\);if\(!gesture\.moved\)/);
   assert.match(forms,/useEffect\(\(\)=>\(\)=>\{const gesture=drag\.current/);
+  assert.match(forms,/onPointerCancel=\{cancel\}/);
+  assert.match(forms,/onLostPointerCapture=\{\(\)=>\{if\(drag\.current\)cancel\(\)\}\}/);
+  assert.match(nodeView,/createScrubSnapshotSession/);assert.match(view,/createScrubSnapshotSession/);
   assert.doesNotMatch(library,/title="LoRA library"/);
 });
 

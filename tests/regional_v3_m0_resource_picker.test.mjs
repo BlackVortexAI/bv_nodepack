@@ -259,13 +259,97 @@ test("debug rendering gives native M0 links a dashed animated projection",()=>{
   const collector={id:1,outputs:[output]},consumer={id:2,__bvM0ResourceConsumer:true,inputs:[input],properties:{bvM0DebugVisible:true}},seen={};
   const ctx={lineDashOffset:0,save(){seen.saved=true},restore(){seen.restored=true},setLineDash(value){seen.dash=value}};
   const nodes=new Map([[1,collector],[2,consumer]]);
-  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},renderLink(...args){seen.flow=args[5]},drawNode(){}};
+  const canvas={graph:{_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},__bvExportTimeSeconds:0,renderLink(...args){(seen.offsets??=[]).push(args[0].lineDashOffset);seen.flow=args[5]},drawNode(){}};
   installM0CanvasVisibility(canvas);
   canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0},false,null,null,0,0);
+  canvas.__bvExportTimeSeconds=0.045;
+  canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0},false,null,null,0,0);
   assert.deepEqual(seen.dash,[7,5]);
+  assert.equal(seen.offsets.length,2);assert.equal(Math.abs(seen.offsets[0]),0);assert.equal(seen.offsets[1],-1);
   assert.equal(typeof seen.flow,"number");
   assert.equal(seen.saved,true);assert.equal(seen.restored,true);
   assert.equal(input.link,7);
+});
+
+test("rendering a visible debug provider link advances real background link frames without interaction",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
+  const previousFrame=globalThis.requestAnimationFrame,previousDocument=globalThis.document,frames=[];
+  globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length};
+  globalThis.document={documentElement:{classList:{toggle(){}}}};
+  const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER"},output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER"};
+  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input]},nodes=new Map([[1,collector],[2,consumer]]);
+  const graph={_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)},setDirtyCanvas(){}};
+  const seenOffsets=[];
+  const canvas={graph,dirty:[],__bvExportTimeSeconds:0,setDirty(foreground,background){this.dirty.push([foreground,background]);if(background){this.__bvExportTimeSeconds+=0.045;this.renderLink(ctx,[0,0],[1,1],link)}},setDirtyCanvas(){throw new Error("setDirtyCanvas fallback must not run when setDirty exists")},renderLink(context){seenOffsets.push(context.lineDashOffset)},drawNode(){}};
+  const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(){}};
+  const link={origin_id:1,origin_slot:0,target_id:2,target_slot:0};
+  try{
+    setLegacyDebugVisible(true,graph);
+    installM0CanvasVisibility(canvas);
+    assert.equal(frames.length,0,"the persisted debug state starts before a canvas is available");
+    canvas.renderLink(ctx,[0,0],[1,1],link);
+    assert.equal(frames.length,1,"the first visible provider render must start the animation loop");
+    for(let index=0;index<4;index++){frames.shift()();assert.equal(frames.length,1)}
+    assert.deepEqual(canvas.dirty,Array.from({length:4},()=>[false,true]));
+    assert.deepEqual(seenOffsets,[0,-1,-2,-3,-4]);
+    setLegacyDebugVisible(false,graph);frames.shift()();
+    assert.equal(frames.length,0);assert.equal(canvas.__bvM0DebugAnimation,false);
+    setLegacyDebugVisible(true,graph);canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+    assert.equal(frames.length,1,"a fully stopped canvas must restart exactly one loop");
+  }finally{
+    setLegacyDebugVisible(false,graph);
+    frames.shift()?.();
+    globalThis.requestAnimationFrame=previousFrame;globalThis.document=previousDocument;
+  }
+});
+
+test("debug animation stops after the last provider edge is removed and restarts once on reconnect",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
+  const previousFrame=globalThis.requestAnimationFrame,previousDocument=globalThis.document,frames=[];
+  globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length};
+  globalThis.document={documentElement:{classList:{toggle(){}}}};
+  const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER"},output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER"};
+  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input]},nodes=new Map([[1,collector],[2,consumer]]);
+  const graph={_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}};
+  const dirty=[];
+  const canvas={graph,setDirty(foreground,background){dirty.push([foreground,background])},renderLink(){},drawNode(){}};
+  const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(){}};
+  const link={origin_id:1,origin_slot:0,target_id:2,target_slot:0};
+  try{
+    setLegacyDebugVisible(true,graph);installM0CanvasVisibility(canvas);canvas.renderLink(ctx,[0,0],[1,1],link);
+    assert.equal(frames.length,1);
+    frames.shift()();assert.deepEqual(dirty,[[false,true]]);assert.equal(frames.length,1);
+    input.link=null;output.links=[];
+    frames.shift()();
+    assert.deepEqual(dirty,[[false,true]],"removing the last edge must not invalidate another background frame");
+    assert.equal(frames.length,0);assert.equal(canvas.__bvM0DebugAnimation,false);
+    input.link=8;output.links=[8];canvas.renderLink(ctx,[0,0],[1,1],{...link,id:8});
+    assert.equal(frames.length,1,"reconnecting must restart exactly one loop");
+    canvas.renderLink(ctx,[0,0],[1,1],{...link,id:8});
+    assert.equal(frames.length,1,"rendering the same reconnected edge must not duplicate the loop");
+  }finally{
+    setLegacyDebugVisible(false,graph);frames.shift()?.();
+    globalThis.requestAnimationFrame=previousFrame;globalThis.document=previousDocument;
+  }
+});
+
+test("debug animation uses the background fallback and stops when its graph changes",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
+  const previousFrame=globalThis.requestAnimationFrame,previousDocument=globalThis.document,frames=[];
+  globalThis.requestAnimationFrame=callback=>{frames.push(callback);return frames.length};
+  globalThis.document={documentElement:{classList:{toggle(){}}}};
+  const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER"},output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER"};
+  const collector={id:1,outputs:[output]},consumer={id:2,inputs:[input]},nodes=new Map([[1,collector],[2,consumer]]);
+  const graph={_nodes:[collector,consumer],getNodeById(id){return nodes.get(id)}},dirty=[];
+  const canvas={graph,setDirtyCanvas(foreground,background){dirty.push([foreground,background])},renderLink(){},drawNode(){}};
+  const ctx={lineDashOffset:0,save(){},restore(){},setLineDash(){}};
+  try{
+    setLegacyDebugVisible(true,graph);installM0CanvasVisibility(canvas);
+    canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+    frames.shift()();assert.deepEqual(dirty,[[false,true]]);assert.equal(frames.length,1);
+    canvas.graph={_nodes:[],getNodeById(){}};frames.shift()();
+    assert.equal(frames.length,0);assert.equal(canvas.__bvM0DebugAnimation,false);
+  }finally{setLegacyDebugVisible(false,graph);globalThis.requestAnimationFrame=previousFrame;globalThis.document=previousDocument}
 });
 
 test("workflow debug reveals native V3 provider links with the debug projection",async()=>{

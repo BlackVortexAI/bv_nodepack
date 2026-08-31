@@ -1,15 +1,12 @@
 """THROW AWAY - DO NOT MERGE OR RELEASE.
 
 Branch-only ComfyUI nodes for the titlebar provider-port capability canary.
-They are registered only when BV_TITLEBAR_PORT_CANARY is exactly ``1``.
+The module itself is the opt-in boundary: production branches must not contain
+this throw-away file.
 """
 
 from __future__ import annotations
 
-import os
-
-
-ENV_NAME = "BV_TITLEBAR_PORT_CANARY"
 CATEGORY = "BV Node Pack/Canary (THROW AWAY)"
 PROVIDER_TYPE = "BV_RUNTIME_RESOURCE_PROVIDER"
 SENDER_NAME = "BV Titlebar Port Canary Sender (THROW AWAY)"
@@ -105,7 +102,5 @@ _CANARY_DISPLAY_NAME_MAPPINGS = {
     SENDER_NAME: SENDER_NAME,
     RECEIVER_NAME: RECEIVER_NAME,
 }
-_ENABLED = os.environ.get(ENV_NAME) == "1"
-
-NODE_CLASS_MAPPINGS = dict(_CANARY_CLASS_MAPPINGS) if _ENABLED else {}
-NODE_DISPLAY_NAME_MAPPINGS = dict(_CANARY_DISPLAY_NAME_MAPPINGS) if _ENABLED else {}
+NODE_CLASS_MAPPINGS = dict(_CANARY_CLASS_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS = dict(_CANARY_DISPLAY_NAME_MAPPINGS)

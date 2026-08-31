@@ -40,20 +40,38 @@ function contractSlots(node, contract) {
     return contract.direction === "input" ? node?.inputs : node?.outputs;
 }
 
+function isWidgetBackedInput(slot) {
+    return Boolean(slot?.widget && typeof slot.widget === "object");
+}
+
+function contractPortEntries(node, contract) {
+    const slots = contractSlots(node, contract);
+    if (!Array.isArray(slots)) return null;
+    return slots
+        .map((slot, index) => ({ slot, index }))
+        .filter(({ slot }) => contract.direction !== "input" || !isWidgetBackedInput(slot));
+}
+
 export function validateCanaryContract(node, nodeName) {
     const contract = CONTRACTS.get(nodeName);
     if (!contract) return { ok: false, status: "IGNORED", reason: "not a canary node" };
-    const slots = contractSlots(node, contract);
-    if (!Array.isArray(slots) || slots.length !== contract.count) {
-        return { ok: false, status: "BLOCKED", reason: `${contract.direction}s must contain exactly ${contract.count} slots` };
+    const entries = contractPortEntries(node, contract);
+    if (!entries || entries.length !== contract.count) {
+        return { ok: false, status: "BLOCKED", reason: `${contract.direction}s must contain exactly ${contract.count} connectable slots` };
     }
-    const provider = slots[contract.providerIndex];
+    const providerEntry = entries[contract.providerIndex];
+    const provider = providerEntry?.slot;
+    if (providerEntry?.index !== contract.providerIndex) {
+        return { ok: false, status: "BLOCKED", reason: `provider graph index mismatch at ${contract.direction}[${providerEntry?.index}]` };
+    }
     if (provider?.name !== contract.providerName || provider?.type !== CANARY_PROVIDER_TYPE) {
         return { ok: false, status: "BLOCKED", reason: `provider contract mismatch at ${contract.direction}[${contract.providerIndex}]` };
     }
+    const slots = entries.map(({ slot }) => slot);
+    const slotIndexes = entries.map(({ index }) => index);
     const matches = slots.filter(slot => slot?.name === contract.providerName && slot?.type === CANARY_PROVIDER_TYPE);
     if (matches.length !== 1) return { ok: false, status: "BLOCKED", reason: "provider must occur exactly once" };
-    return { ok: true, status: "READY", contract, slots, provider };
+    return { ok: true, status: "READY", contract, slots, slotIndexes, provider, providerArrayIndex: providerEntry.index };
 }
 
 function graphLink(graph, linkId) {
@@ -152,13 +170,13 @@ function expectedAnchor(node, validated, localPosition) {
 
 function currentAnchor(node, validated) {
     if (typeof node?.getSlotPosition !== "function") return null;
-    const point = node.getSlotPosition(validated.contract.providerIndex, validated.contract.direction === "input");
+    const point = node.getSlotPosition(validated.providerArrayIndex, validated.contract.direction === "input");
     return point ? [Number(point[0]), Number(point[1])] : null;
 }
 
 function legacyCurrentAnchor(node, validated) {
     if (typeof node?.getConnectionPos !== "function") return null;
-    const point = node.getConnectionPos(validated.contract.direction === "input", validated.contract.providerIndex);
+    const point = node.getConnectionPos(validated.contract.direction === "input", validated.providerArrayIndex);
     return point ? [Number(point[0]), Number(point[1])] : null;
 }
 
@@ -237,7 +255,7 @@ function serializeProbe(node, validated) {
     try {
         const serialized = node?.serialize?.();
         const slots = validated.contract.direction === "input" ? serialized?.inputs : serialized?.outputs;
-        const provider = slots?.[validated.contract.providerIndex];
+        const provider = slots?.[validated.providerArrayIndex];
         return {
             available: Boolean(serialized),
             providerHasOwnPos: Boolean(provider && Object.hasOwn(provider, "pos")),
@@ -250,7 +268,8 @@ function serializeProbe(node, validated) {
 
 function measuredSlots(node, validated) {
     if (typeof node?.getSlotPosition !== "function") return [];
-    return validated.slots.map((slot, index) => {
+    return validated.slots.map((slot, ordinal) => {
+        const index = validated.slotIndexes[ordinal];
         const point = node.getSlotPosition(index, validated.contract.direction === "input");
         return { index, name: slot?.name, x: Number(point?.[0]), y: Number(point?.[1]) };
     });
@@ -258,7 +277,8 @@ function measuredSlots(node, validated) {
 
 function legacyMeasuredSlots(node, validated) {
     if (typeof node?.getConnectionPos !== "function") return [];
-    return validated.slots.map((slot, index) => {
+    return validated.slots.map((slot, ordinal) => {
+        const index = validated.slotIndexes[ordinal];
         const point = node.getConnectionPos(validated.contract.direction === "input", index);
         return { index, name: slot?.name, x: Number(point?.[0]), y: Number(point?.[1]) };
     });

@@ -1,12 +1,22 @@
 import assert from"node:assert/strict";
 import test from"node:test";
-import{fitHoverPreviewSize,HOVER_PREVIEW_MAX_SIZE,numberScrubValue,placeHoverPreview,reorderByStableId}from"../ui/src/ui/components/compactInteractions.ts";
+import{fitHoverPreviewSize,HOVER_PREVIEW_MAX_SIZE,numberScrubDelta,numberScrubValue,placeHoverPreview,reorderByStableId}from"../ui/src/ui/components/compactInteractions.ts";
 
 test("number scrub math is horizontal, finite and clamped",()=>{
   assert.equal(numberScrubValue(1,20,.01,-5,5),1.2);
   assert.equal(numberScrubValue(4.95,20,.01,-5,5),5);
   assert.equal(numberScrubValue(-4.95,-20,.01,-5,5),-5);
   assert.equal(numberScrubValue(1,Number.NaN,.01,-5,5),1);
+});
+
+test("number scrub drag quantizes relative deltas without changing pixel sensitivity",()=>{
+  assert.equal(numberScrubDelta(5,.01,.05),.05);
+  assert.equal(numberScrubDelta(50,.01,.05),.5);
+  assert.equal(numberScrubDelta(100,.01,.05),1);
+  assert.equal(numberScrubDelta(-5,.01,.05),-.05);
+  assert.equal(numberScrubDelta(4,.01,.05),.05);
+  assert.equal(numberScrubValue(.13,5,.01,-5,5,.05),.18);
+  assert.equal(numberScrubValue(4.98,5,.01,-5,5,.05),5);
 });
 
 test("stable-id reorder fails closed when gesture state is stale",()=>{

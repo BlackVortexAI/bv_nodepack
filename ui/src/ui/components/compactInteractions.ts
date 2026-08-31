@@ -5,9 +5,24 @@ export const HOVER_PREVIEW_MAX_SIZE:Readonly<{width:number;height:number}>=Objec
 const finite=(value:number,fallback:number)=>Number.isFinite(value)?value:fallback;
 const rounded=(value:number)=>Math.round(value*10000)/10000;
 
-export function numberScrubValue(origin:number,deltaX:number,sensitivity=.01,min=-5,max=5){
+export function numberScrubDelta(deltaX:number,sensitivity=.01,step=0){
+    const raw=finite(deltaX,0)*finite(sensitivity,.01),quantum=Math.abs(finite(step,0));
+    return rounded(quantum>0?Math.round(raw/quantum)*quantum:raw);
+}
+
+export function numberScrubValue(origin:number,deltaX:number,sensitivity=.01,min=-5,max=5,step=0){
     const start=finite(origin,0),delta=finite(deltaX,0),rate=finite(sensitivity,.01),low=Math.min(min,max),high=Math.max(min,max);
-    return rounded(Math.max(low,Math.min(high,start+delta*rate)));
+    return rounded(Math.max(low,Math.min(high,start+numberScrubDelta(delta,rate,step))));
+}
+
+export function createScrubSnapshotSession<T>(clone:(value:T)=>T=(value)=>structuredClone(value)){
+    let snapshot:T|null=null;
+    return{
+        start(value:T){snapshot=clone(value)},
+        end(){snapshot=null},
+        cancel(restore:(value:T)=>void){if(snapshot!==null)restore(snapshot);snapshot=null},
+        active(){return snapshot!==null},
+    };
 }
 
 export function reorderByStableId<T extends StableIdItem>(items:T[],sourceId:string,targetId:string,placement:ReorderPlacement="before"):T[]{

@@ -20,19 +20,15 @@ def load_canary(value):
 
 
 class TitlebarProviderPortRuntimeCanaryTests(unittest.TestCase):
-    def test_registration_requires_exact_one(self):
-        for value in (None, "", "0", "true", "TRUE", " 1", "1 "):
+    def test_branch_module_registers_without_hidden_environment_gate(self):
+        for value in (None, "", "0", "true", "TRUE", " 1", "1 ", "1"):
             with self.subTest(value=value):
                 module = load_canary(value)
-                self.assertEqual(module.NODE_CLASS_MAPPINGS, {})
-                self.assertEqual(module.NODE_DISPLAY_NAME_MAPPINGS, {})
-
-        module = load_canary("1")
-        self.assertEqual(
-            set(module.NODE_CLASS_MAPPINGS),
-            {module.SENDER_NAME, module.RECEIVER_NAME},
-        )
-        self.assertEqual(set(module.NODE_DISPLAY_NAME_MAPPINGS), set(module.NODE_CLASS_MAPPINGS))
+                self.assertEqual(
+                    set(module.NODE_CLASS_MAPPINGS),
+                    {module.SENDER_NAME, module.RECEIVER_NAME},
+                )
+                self.assertEqual(set(module.NODE_DISPLAY_NAME_MAPPINGS), set(module.NODE_CLASS_MAPPINGS))
 
     def test_sender_and_receiver_keep_provider_at_distinct_middle_indices(self):
         module = load_canary("1")

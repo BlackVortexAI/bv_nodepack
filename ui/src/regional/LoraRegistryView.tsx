@@ -1,5 +1,5 @@
 import{useEffect,useMemo,useRef,useState}from"react";
-import{Accordion,Button,BvFooterActions,BvManagedWindow,Callout,CompactStrengthField,EmptyState,FieldGrid,HoverPreview,NumberScrubber,SortableList,TextField,ToggleField,UiDensity,useBvHistory,useBvHistoryShortcuts}from"../ui";
+import{Accordion,Button,BvFooterActions,BvManagedWindow,Callout,CompactStrengthField,createScrubSnapshotSession,EmptyState,FieldGrid,HoverPreview,NumberScrubber,SortableList,TextField,ToggleField,UiDensity,useBvHistory,useBvHistoryShortcuts}from"../ui";
 import{LoraCatalogLibraryWindow}from"./LoraCatalogLibraryWindow";
 import{loraCatalogClient}from"./loraCatalogClient";
 import{LoraRegistryNodeView}from"./LoraRegistryNodeView";
@@ -17,7 +17,7 @@ function useLocalCatalog(api:any){
 }
 
 function LoraStackWorkbench({config,catalog,onConfig,expanded,onExpanded,onOpenLibrary}:{config:LoraRegistryConfig;catalog:LoraCatalog;onConfig:(value:LoraRegistryConfig)=>void;expanded:string[];onExpanded:(ids:string[])=>void;onOpenLibrary:(stackId:string)=>void}){
-    const current=useRef(config),scrubSnapshot=useRef<LoraRegistryConfig|null>(null);current.current=config;const store=(next:LoraRegistryConfig)=>{current.current=next;onConfig(next)},commit=(mutate:(draft:LoraRegistryConfig)=>void)=>{const draft=structuredClone(current.current);mutate(draft);store(draft)},stackById=(draft:LoraRegistryConfig,id:string)=>draft.stacks.find(stack=>stack.id===id),scrubStart=()=>{scrubSnapshot.current=structuredClone(current.current)},scrubEnd=()=>{scrubSnapshot.current=null},scrubCancel=()=>{if(scrubSnapshot.current)store(scrubSnapshot.current);scrubSnapshot.current=null};
+    const current=useRef(config),scrub=useRef(createScrubSnapshotSession<LoraRegistryConfig>()).current;current.current=config;const store=(next:LoraRegistryConfig)=>{current.current=next;onConfig(next)},commit=(mutate:(draft:LoraRegistryConfig)=>void)=>{const draft=structuredClone(current.current);mutate(draft);store(draft)},stackById=(draft:LoraRegistryConfig,id:string)=>draft.stacks.find(stack=>stack.id===id),scrubStart=()=>scrub.start(current.current),scrubEnd=()=>scrub.end(),scrubCancel=()=>scrub.cancel(store);
     const duplicate=(stack:LoraRegistryStack)=>{const copy={...structuredClone(stack),id:crypto.randomUUID(),name:uniqueCopyName(config,stack.name),entries:stack.entries.map(entry=>({...entry,id:crypto.randomUUID()}))};commit(draft=>{const index=draft.stacks.findIndex(value=>value.id===stack.id);draft.stacks.splice(index+1,0,copy)});onExpanded([...new Set([...expanded,copy.id])])};
     const removeStack=(id:string)=>{commit(draft=>{draft.stacks=draft.stacks.filter(stack=>stack.id!==id)});onExpanded(expanded.filter(value=>value!==id))};
     if(!config.stacks.length)return <EmptyState title="No LoRA stacks configured" description="Add a named stack. Empty and fully disabled stacks remain valid comparison states."/>;

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createScrubSnapshotSession, numberScrubValue } from "../ui/src/ui/components/compactInteractions.ts";
 import {
   activeLoraCount,
   applyEntryStrengthDelta,
@@ -62,6 +63,12 @@ test("entry and stack strength deltas preserve mixed values including disabled e
   assert.deepEqual([changed.stacks[0].entries[1].model_strength,changed.stacks[0].entries[1].clip_strength],[-4.85,.2]);
   assert.equal(changed.stacks[0].entries[1].enabled,false);
   assert.deepEqual([first.model_strength,first.clip_strength],[.8,.55]);
+});
+
+test("LoRA scrubbing applies stable 0.05 increments and cancel restores the complete snapshot",()=>{
+  const initial=emptyLoraRegistryConfig(),stack=newLoraRegistryStack("Scrub"),entry=newLoraRegistryEntry("one.safetensors");stack.entries=[entry];initial.stacks=[stack];
+  const totals=[5,10,15].map(dx=>numberScrubValue(0,dx,.01,-10,10,.05));assert.deepEqual(totals,[.05,.1,.15]);assert.ok(totals.map((value,index)=>value-(totals[index-1]??0)).every(increment=>Math.abs(increment-.05)<1e-12));
+  let current=initial;const session=createScrubSnapshotSession();session.start(current);current=applyEntryStrengthDelta(current,stack.id,entry.id,.05);current=applyStackStrengthDelta(current,stack.id,.1);assert.notDeepEqual(current,initial);session.cancel(value=>{current=value});assert.deepEqual(current,initial);assert.equal(session.active(),false);
 });
 
 test("entry and stack strength deltas preserve relative differences at clamp boundaries",()=>{

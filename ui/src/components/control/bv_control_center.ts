@@ -14,7 +14,6 @@ const BASE_MODE = "bvControlBaseMode";
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
 const CONTROL_CENTER_MIN_WIDTH = 320;
 const CONTROL_CENTER_WIDTH_BUFFER = 48;
-const CONTROL_CENTER_WIDGET_START_Y = 34;
 const CONTROL_STATUS_WIDGET = "bv_control_conflict_status";
 const previouslyControlled = new Set<any>();
 
@@ -182,7 +181,7 @@ function syncNode(node: any, config: BVControlConfig) {
     const computedSize = node.computeSize?.() ?? currentSize;
     const minimumWidth = Math.max(CONTROL_CENTER_MIN_WIDTH, (computedSize[0] ?? 0) + CONTROL_CENTER_WIDTH_BUFFER);
     node.__bvPresentationManaged=true;
-    const presentation={minWidth:minimumWidth,compactWidgetOnly:true,widgetStartY:CONTROL_CENTER_WIDGET_START_Y} as const;
+    const presentation={minWidth:minimumWidth,compactWidgetOnly:true} as const;
     applyClassicNodePresentation(node,NODE_CLASS,presentation);
     if(!node.__bvControlFinalLayoutQueued&&typeof requestAnimationFrame!=="undefined"){
         node.__bvControlFinalLayoutQueued=true;

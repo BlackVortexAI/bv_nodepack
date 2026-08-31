@@ -115,10 +115,11 @@ test("central React node widget host caps intrinsic height against both pixels a
   const spec={id:"registry-cap",name:"registry_widget",minHeight:72,maxHeight:420,overflow:"auto",nativeActions:[{id:"open",name:"open_lora_registry",label:"Open LoRA Registry",invoke:node=>events.push(["open",node.id])}],render:()=>"view"};
   installReactNodeWidgetHost(NodeType,"BV LoRA Registry",spec);
   const node=new NodeType();node.id=9;node.widgets=[];
-  node.addWidget=(type,name,_value,callback,next)=>{const widget={type,name,callback,serialize:true,...next};node.widgets.push(widget);events.push(["action",type,name]);return widget};
+  node.addWidget=(type,name,_value,callback,next)=>{const widget={type,name,callback,serialize:true,spec:{existing:"kept"},...next};node.widgets.push(widget);events.push(["action",type,name]);return widget};
   node.addDOMWidget=(_name,_type,_host,next)=>{options=next;events.push("dom");return{serialize:true}};
   node.onNodeCreated();node.onConfigure();
   assert.equal(events.filter(item=>Array.isArray(item)&&item[0]==="action").length,1);
+  assert.deepEqual(node.widgets[0].spec,{existing:"kept",socketless:true});
   assert.equal(node.widgets[0].serialize,false);node.widgets[0].callback();assert.deepEqual(events.at(-1),["open",9]);
   resize(900);assert.equal(options.getMinHeight(),420);
   viewportHeight=500;assert.equal(options.getMinHeight(),300);

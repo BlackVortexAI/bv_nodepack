@@ -47,6 +47,8 @@ function receiverNode(graph,{provider=undefined,unifiedIgnorePos=false,legacyIgn
     provider??{name:"resource_provider",type:PROVIDER,link:42},
     {name:"delta",type:"BV_CANARY_DELTA",link:null},
     {name:"epsilon",type:"BV_CANARY_EPSILON",link:null},
+    {name:"presentation_mode",type:"COMBO",widget:{name:"presentation_mode"},link:null},
+    {name:"canary_note",type:"STRING",widget:{name:"canary_note"},link:null},
   ];
   return fakeNode({id:202,graph,inputs,outputs:[{name:"canary_result",type:"STRING",links:[]}],direction:"input",unifiedIgnorePos,legacyIgnorePos});
 }
@@ -71,6 +73,30 @@ test("exact contracts place sender provider at output 2 and receiver provider at
   assert.deepEqual(validateCanaryContract(sender,CANARY_SENDER).contract,{direction:"output",count:6,providerIndex:2,providerName:"resource_provider"});
   assert.deepEqual(validateCanaryContract(receiver,CANARY_RECEIVER).contract,{direction:"input",count:6,providerIndex:3,providerName:"resource_provider"});
   assert.equal(validateCanaryContract(sender,"BV LUT Registry").status,"IGNORED");
+});
+
+test("receiver contract counts connectable ports and retains widget-backed input entries",()=>{
+  const{graph}=graphFixture(),receiver=receiverNode(graph),before=refs(receiver),validated=validateCanaryContract(receiver,CANARY_RECEIVER);
+  assert.equal(receiver.inputs.length,8);
+  assert.equal(validated.ok,true);
+  assert.deepEqual(validated.slots.map(slot=>slot.name),["alpha","beta","gamma","resource_provider","delta","epsilon"]);
+  assert.deepEqual(validated.slotIndexes,[0,1,2,3,4,5]);
+  assert.equal(validated.providerArrayIndex,3);
+  assert.equal(captureCanaryBaseline(receiver,CANARY_RECEIVER).ok,true);
+  assert.equal(applyCanaryMode(receiver,CANARY_RECEIVER,"A - Title midline").ok,true);
+  assertRefs(receiver,before);
+  assert.deepEqual(receiver.inputs.slice(6).map(slot=>slot.widget?.name),["presentation_mode","canary_note"]);
+  assert.deepEqual(inspectCanaryNode(receiver,CANARY_RECEIVER).measuredSlots.map(slot=>slot.index),[0,1,2,3,4,5]);
+});
+
+test("receiver contract fails closed when widgets shift graph indexes or an extra port appears",()=>{
+  const{graph}=graphFixture(),shifted=receiverNode(graph),extra=receiverNode(graph);
+  shifted.inputs.splice(2,0,{name:"early_widget",type:"STRING",widget:{name:"early_widget"},link:null});
+  extra.inputs.splice(6,0,{name:"zeta",type:"BV_CANARY_ZETA",link:null});
+  assert.match(validateCanaryContract(shifted,CANARY_RECEIVER).reason,/graph index mismatch/);
+  assert.match(validateCanaryContract(extra,CANARY_RECEIVER).reason,/exactly 6 connectable slots/);
+  assert.equal(shifted.inputs.some(slot=>Object.hasOwn(slot,"pos")),false);
+  assert.equal(extra.inputs.some(slot=>Object.hasOwn(slot,"pos")),false);
 });
 
 test("linked middle slots survive repeated Native A B C cycles while body ordinals compact",()=>{

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from nodes import PreviewImage, SaveImage
@@ -44,7 +45,7 @@ from ..util.regional.lora_v3 import (
     transform_lora_capability,
     transform_lora_sequence,
 )
-from ..util.lora_registry import materialize_lora_registry
+from ..util.lora_registry import lora_registry_diagnostics, materialize_lora_registry
 from ..util.regional.detailer_v3 import transform_detailer_capability
 from ..util.regional.lut_v3 import MAX_LUT_RESOURCE_PROVIDERS, transform_lut_capability
 from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
@@ -69,6 +70,47 @@ CATEGORY_INTEGRATIONS = f"{CATEGORY_ROOT}/integrations"
 CATEGORY_INTEGRATION_IMPACT = f"{CATEGORY_INTEGRATIONS}/Impact Pack"
 CATEGORY_MODELS = f"{CATEGORY_ROOT}/models"
 CATEGORY_MODEL_GENERIC = f"{CATEGORY_MODELS}/Generic"
+
+REGIONAL_CANVAS_IMAGES_SCHEMA = "bv.regional.canvas-images"
+REGIONAL_CANVAS_IMAGES_VERSION = 1
+
+
+def _regional_canvas_publication(document_id, source_node_id, source_kind, image_descriptors):
+    images = []
+    for index, descriptor in enumerate(image_descriptors or []):
+        if not isinstance(descriptor, dict):
+            continue
+        filename = str(descriptor.get("filename") or "").strip()
+        image_type = str(descriptor.get("type") or "").strip()
+        if not filename or not image_type:
+            continue
+        images.append(
+            {
+                "index": index,
+                "filename": filename,
+                "subfolder": str(descriptor.get("subfolder") or ""),
+                "type": image_type,
+            }
+        )
+    source = {"node_id": str(source_node_id or "").strip(), "kind": str(source_kind).strip()}
+    batch_seed = json.dumps(
+        {"document_id": str(document_id), "source": source, "images": images},
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return {
+        "schema": REGIONAL_CANVAS_IMAGES_SCHEMA,
+        "version": REGIONAL_CANVAS_IMAGES_VERSION,
+        "document_id": str(document_id),
+        "source": source,
+        "batch_id": hashlib.sha256(batch_seed).hexdigest()[:20],
+        "images": images,
+    }
+
+
+def _preview_regional_canvas_images(images):
+    return PreviewImage().save_images(images, "bv_regional_canvas", None, None)
 CATEGORY_MODEL_SDXL = f"{CATEGORY_MODELS}/SDXL"
 CATEGORY_MODEL_ZIMAGE = f"{CATEGORY_MODELS}/Z-Image"
 CATEGORY_MODEL_FLUX2_KLEIN = f"{CATEGORY_MODELS}/FLUX.2 Klein 9B"
@@ -154,7 +196,9 @@ class BVRegionalPromptNode:
                     f"lut_resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True})
                     for index in range(1, MAX_LUT_RESOURCE_PROVIDERS + 1)
                 },
+                "canvas_image": ("IMAGE", {}),
             },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
     # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Second output is V2 wiring.
@@ -162,8 +206,11 @@ class BVRegionalPromptNode:
     RETURN_NAMES = ("regional", "lora_bindings")
     FUNCTION = "build"
     CATEGORY = CATEGORY_CORE
+    # The optional canvas image publishes UI data even when the Regional outputs
+    # are intentionally not wired into an execution branch.
+    OUTPUT_NODE = True
 
-    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, **providers):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, canvas_image=None, unique_id=None, **providers):
         document = parse_document(regional_json)
         payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
         regional = document
@@ -184,7 +231,21 @@ class BVRegionalPromptNode:
             regional = transform_lut_capability(
                 regional, lut_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             ).to_dict()
-        return regional, reconcile_bindings(lora_bindings_json, document)
+        result = (regional, reconcile_bindings(lora_bindings_json, document))
+        if canvas_image is None:
+            return result
+        preview = _preview_regional_canvas_images(canvas_image)
+        descriptors = preview.get("ui", {}).get("images", [])
+        return {
+            "ui": {
+                "bv_regional_canvas_images": [
+                    _regional_canvas_publication(
+                        document["document_id"], unique_id, "regional-prompt-canvas", descriptors
+                    )
+                ]
+            },
+            "result": result,
+        }
 
 
 class BVNamedLoraStackNode:
@@ -223,15 +284,16 @@ class BVLoraRegistryNode:
     def INPUT_TYPES(cls):
         return {"required": {"config_json": ("STRING", {"default": "", "multiline": True})}}
 
-    RETURN_TYPES = (RUNTIME_PROVIDER,)
-    RETURN_NAMES = ("resource_provider",)
+    RETURN_TYPES = (RUNTIME_PROVIDER, "INT", "STRING")
+    RETURN_NAMES = ("resource_provider", "lora_count", "registry_summary")
     FUNCTION = "collect"
     CATEGORY = CATEGORY_LORA
     DESCRIPTION = "Builds several named, independently switchable LoRA stacks from ComfyUI's local LoRA catalog."
 
     def collect(self, config_json=""):
         registry, registry_id = materialize_lora_registry(config_json)
-        return (build_lora_provider(registry_id, registry["stacks"]),)
+        lora_count, registry_summary = lora_registry_diagnostics(config_json)
+        return build_lora_provider(registry_id, registry["stacks"]), lora_count, registry_summary
 
 
 class BVLoraStackCollectorNode:
@@ -979,7 +1041,11 @@ class _BVRegionalImageTargetMixin:
         return target
 
     @staticmethod
-    def _targeted_output(output, images, target):
+    def _targeted_output(output, images, target, source_node_id, source_kind):
+        descriptors = output.get("ui", {}).get("images", [])
+        publication = _regional_canvas_publication(target, source_node_id, source_kind, descriptors)
+        output["ui"]["bv_regional_canvas_images"] = [publication]
+        # BV-LEGACY(marked=2026-08-31, remove-after=2026-10-31): Older frontends consume only the target marker.
         output["ui"]["bv_regional_background"] = [{"document_id": target}]
         output["result"] = (images,)
         return output
@@ -993,7 +1059,7 @@ class BVRegionalImageSendNode(_BVRegionalImageTargetMixin, PreviewImage):
                 "images": ("IMAGE", {}),
                 "document_id": ("STRING", {"default": "", "multiline": False}),
             },
-            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO", "unique_id": "UNIQUE_ID"},
         }
 
     RETURN_TYPES = ("IMAGE",)
@@ -1003,10 +1069,10 @@ class BVRegionalImageSendNode(_BVRegionalImageTargetMixin, PreviewImage):
     CATEGORY = CATEGORY_OUTPUT
     DESCRIPTION = "Previews an image, sends it to a selected BV Regional Editor, and passes the image through."
 
-    def send(self, images, document_id, prompt=None, extra_pnginfo=None):
+    def send(self, images, document_id, prompt=None, extra_pnginfo=None, unique_id=None):
         target = self._validate_target(document_id)
         output = self.save_images(images, "bv_regional_background", prompt, extra_pnginfo)
-        return self._targeted_output(output, images, target)
+        return self._targeted_output(output, images, target, unique_id, "regional-image-send")
 
 
 class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
@@ -1083,7 +1149,7 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
             if context_target != target:
                 raise ValueError(f"document_id does not match connected RegionalContext: {target!r} != {context_target!r}")
             output = self._save_regional_images(images, filename_prefix, prompt, extra_pnginfo, unique_id, context)
-        return self._targeted_output(output, images, target)
+        return self._targeted_output(output, images, target, unique_id, "regional-image-save")
 
 
 NODE_CLASS_MAPPINGS = {

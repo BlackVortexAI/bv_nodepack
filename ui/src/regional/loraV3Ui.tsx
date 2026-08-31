@@ -6,8 +6,7 @@ import { bindLoraV3Graph, compactLoraConsumerNode, ensureLoraCollectorOutput, en
 import { installM0CanvasVisibility } from "./m0VisualProjection";
 import { requestRegionalWindow } from "./windowRequests";
 import { migrateRegionalNode, queueRegionalMigrationReport } from "./milestoneE";
-import { applyClassicNodePresentation } from "./classicNodePresentation";
-import { removeNodes2NodePresentation } from "./nodes2NodePresentation";
+import { applyClassicNodePresentation, removeNodePresentation } from "./classicNodePresentation";
 import { notifyLoraV3InventoryChanged } from "./loraV3Inventory";
 
 export const OPEN_LORA_V3_EDITOR_EVENT="bv-open-regional-lora-editor";
@@ -71,5 +70,5 @@ export {compactLoraConsumerNode};
 export function installLoraV3Ui(nodeType:any,nodeData:any,graphOwner:(node:any)=>any=(node:any)=>node?.graph){
     const collector=nodeData.name==="BV LoRA Stack Collector",transformer=nodeData.name==="BV Regional LoRA",consumer=nodeData.name==="BV Regional Prompt";if(!collector&&!transformer&&!consumer)return false;
     const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange,removed=nodeType.prototype.onRemoved,upgrade=function(this:any){bindLoraV3Graph(this,graphOwner(this));if(collector)installCollector(this);if(transformer)installTransformer(this);if(consumer)installLoraV3ConsumerSlot(this);if(transformer||collector)notifyLoraV3InventoryChanged(this);};
-    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>{if(transformer||consumer)queueRegionalMigrationReport(migrateRegionalNode(this));upgrade.call(this)});return result;};nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(transformer)removeNodes2NodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
+    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>{if(transformer||consumer)queueRegionalMigrationReport(migrateRegionalNode(this));upgrade.call(this)});return result;};nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(transformer||collector)removeNodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
 }

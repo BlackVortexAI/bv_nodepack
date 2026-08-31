@@ -8,7 +8,7 @@ export const LEGACY_DEBUG_VISIBILITY_EVENT="bv-regional-legacy-debug-visibility"
 // Remove this module, its command/setting hooks, and canvas projection branches with the ports.
 
 type Slot={name?:string;type?:string;link?:unknown;links?:unknown[]|null;hidden?:boolean;__bvLegacyPort?:boolean;__bvLegacySticky?:boolean;__bvLegacyWasConnected?:boolean;__bvM0PortHidden?:boolean;__bvM0VisualHidden?:boolean};
-type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void;__bvApplyPresentation?:()=>void;__bvPresentationHasLegacy?:boolean;__bvRefreshPortProjection?:()=>void};
+type Node={id?:string|number;inputs?:Slot[];outputs?:Slot[];setDirtyCanvas?:(a:boolean,b?:boolean)=>void;__bvApplyPresentation?:()=>void;__bvPresentationHasLegacy?:boolean;__bvRefreshPortProjection?:()=>void;__bvRefreshProviderAnchors?:()=>void};
 export type LegacyPortDescriptor={direction:"input"|"output";name:string;type:string;guidance:string};
 let showAll=false;
 let debugVisible=false;
@@ -56,7 +56,7 @@ export function installLegacyPorts(node:Node,descriptors:LegacyPortDescriptor[])
 
 export function refreshLegacyPorts(node:Node,dragType?:string|null){
     if(node.__bvApplyPresentation){
-        if(node.__bvPresentationHasLegacy!==false)node.__bvApplyPresentation();
+        if(node.__bvPresentationHasLegacy!==false)node.__bvApplyPresentation();else node.__bvRefreshProviderAnchors?.();
         return;
     }
     for(const [direction,slots] of [["input",node.inputs],["output",node.outputs]] as const)for(const slot of slots??[]){
@@ -67,6 +67,7 @@ export function refreshLegacyPorts(node:Node,dragType?:string|null){
     }
     node.setDirtyCanvas?.(true,true);
     node.__bvRefreshPortProjection?.();
+    node.__bvRefreshProviderAnchors?.();
 }
 
 export function refreshLegacyDragPorts(canvas:any){

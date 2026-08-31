@@ -120,6 +120,20 @@ def serialize_lora_registry_config(value: Any) -> str:
     return json.dumps(parse_lora_registry_config(value), ensure_ascii=False, separators=(",", ":"))
 
 
+def lora_registry_diagnostics(value: Any) -> tuple[int, str]:
+    config = parse_lora_registry_config(value)
+    if not config["stacks"]:
+        return 0, "No LoRAs configured"
+    active_total = 0
+    summary: list[str] = []
+    for stack in config["stacks"]:
+        active = sum(1 for entry in stack["entries"] if stack["enabled"] and entry["enabled"])
+        active_total += active
+        disabled = " · stack disabled" if not stack["enabled"] else ""
+        summary.append(f'{stack["name"]}: {active}/{len(stack["entries"])} active{disabled}')
+    return active_total, "\n".join(summary)
+
+
 def resolve_lora_path(logical_name: Any, folder_paths_module=None) -> tuple[str, Path]:
     logical = _logical_name(logical_name)
     if folder_paths_module is None:

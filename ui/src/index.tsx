@@ -34,6 +34,7 @@ import { openLutDownloadDialog } from "./regional/lutDownloadDialog";
 import { openLutPlanDialog } from "./regional/lutPlanDialog";
 import { openLutRegistryDialog } from "./regional/lutRegistryDialog";
 import { installLutNodePresentation } from "./regional/lutNodePresentation";
+import { installNodePresentationLifecycle } from "./regional/nodePresentationLifecycle";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui } from "./regional/loraV3Ui";
@@ -44,28 +45,35 @@ import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationRepo
 import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { bvWindowActivity, BvGlobalToastStack, collectScopedNodes, createOpenLastBvEditorAction, createScopedBvWindowOpen, dismissBvToast, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible, type BvWindowCandidate, type BvWindowType } from "./ui";
-import { configureProjectedPortLayout, setProjectedSlotLabel, suppressInitialProjectedProviderDefinitions } from "./regional/portProjection";
-import { applyClassicNodePresentation, applyClassicSubgraphLayout } from "./regional/classicNodePresentation";
+import { reconcileDeferredPublicInputs, setProjectedSlotLabel, suppressInitialProjectedProviderDefinitions } from "./regional/portProjection";
+import { applyClassicNodePresentation, applyClassicSubgraphLayout, removeNodePresentation } from "./regional/classicNodePresentation";
 import { installNodePreviewProjection } from "./regional/nodePreviewProjection";
-import { configureNodes2NodePresentation, removeNodes2NodePresentation } from "./regional/nodes2NodePresentation";
+import { configurePresentationSizeLifecycle } from "./regional/presentationSize";
 import { installExecutionResultPreview } from "./regional/executionResultPreview";
 import { hasNodePresentationPolicy } from "./regional/nodePresentation";
 import { installLoraRegistryUi } from "./regional/loraRegistryUi";
 import { ExportDialog } from "./export/ExportDialog";
 import { installExporter } from "./export/install";
 import { openExportDialog } from "./export/events";
+import { emptyRegionalCanvasImageCatalog, ingestRegionalCanvasImagePublication, pruneRegionalCanvasImageCatalog } from "./regional/regionalCanvasImages";
+import { currentRegionalCanvasPublication, regionalCanvasExecutionOutputs, regionalCanvasSourceIsCurrent, subscribeRegionalCanvasExecutions } from "./regional/regionalCanvasExecution";
 (globalThis as any).__bvNodePresentationBridge=Object.assign((globalThis as any).__bvNodePresentationBridge??{}, {
     applyClassic(node:any,nodeType:string){
         node.__bvPresentationManaged=true;
         return applyClassicNodePresentation(node,nodeType);
     },
     applyClassicSubgraph(node:any){return applyClassicSubgraphLayout(node)},
-    remove(node:any){removeNodes2NodePresentation(node)},
+    remove(node:any){removeNodePresentation(node)},
 });
 const comfyApp = getApp();
 const comfyApi = getApi();
-configureProjectedPortLayout({isUserResizing:node=>(comfyApp as any).canvas?.resizing_node===node});
-configureNodes2NodePresentation({isUserResizing:node=>(comfyApp as any).canvas?.resizing_node===node});
+const presentationResizeCanvases=(node:any)=>{
+    const appCanvas=(comfyApp as any).canvas,host=globalThis as any;
+    return[...(node?.graph?.list_of_graphcanvas??[]),appCanvas,appCanvas?.constructor?.active_canvas,host.LGraphCanvas?.active_canvas,host.LiteGraph?.LGraphCanvas?.active_canvas];
+};
+configurePresentationSizeLifecycle({
+    isUserResizing:node=>presentationResizeCanvases(node).some(canvas=>canvas?.resizing_node===node),
+});
 bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_SETTING_ID, value));
 bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
 bindCompletionPlacementPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_PLACEMENT_SETTING_ID, value));
@@ -461,7 +469,7 @@ function BVRoot() {
     const [regionalNode, setRegionalNode] = useState<RegionalNode | null>(null);
     const regionalNodeRef=useRef<RegionalNode|null>(null);
     const [nodes, setNodes] = useState<RegionalNode[]>([]);
-    const [backgrounds, setBackgrounds] = useState<Record<string, string>>({});
+    const [canvasCatalog,setCanvasCatalog]=useState(emptyRegionalCanvasImageCatalog);
     const [loraStacks, setLoraStacks] = useState<NamedLoraStack[]>([]);
     const [loraV3Node,setLoraV3Node]=useState<any|null>(null);
     const quickEditOpenRef=useRef(false);
@@ -512,18 +520,15 @@ function BVRoot() {
         return subscribeRegionalWindow("quick",open);
     }, []);
 
-    useEffect(() => {
-        const executed = (event: CustomEvent<any>) => {
-            const output = event.detail?.output;
-            const target = output?.bv_regional_background?.[0]?.document_id;
-            const image = output?.images?.[output.images.length - 1];
-            if (!target || !image) return;
-            const query = new URLSearchParams({ filename: image.filename, type: image.type, subfolder: image.subfolder || "" });
-            setBackgrounds(current => ({ ...current, [target]: comfyApi.apiURL(`/view?${query}`) }));
-        };
-        comfyApi.addEventListener("executed", executed);
-        return () => comfyApi.removeEventListener("executed", executed);
-    }, []);
+    useEffect(()=>subscribeRegionalCanvasExecutions(comfyApi,()=>activeWorkflowScope(comfyApp),(event,scope)=>{
+        if(scope!==activeWorkflowScope(comfyApp))return;
+        const ingest=(output:any,nodeId:unknown)=>{for(const raw of output?.bv_regional_canvas_images??[]){const publication=currentRegionalCanvasPublication(activeGraph(),raw,nodeId);if(publication)setCanvasCatalog(current=>ingestRegionalCanvasImagePublication(current,scope,publication,nodeId))}};
+        for(const{nodeId,output}of regionalCanvasExecutionOutputs(event,(comfyApp as any).nodeOutputs))ingest(output,nodeId);
+    }),[]);
+    useEffect(()=>{
+        const refresh=()=>{const scope=activeWorkflowScope(comfyApp),root=activeGraph();setCanvasCatalog(current=>pruneRegionalCanvasImageCatalog(current,scope,(sourceId,kind,documentId)=>regionalCanvasSourceIsCurrent(root,sourceId,kind,documentId)))};
+        comfyApi.addEventListener("graphChanged",refresh);return()=>comfyApi.removeEventListener("graphChanged",refresh);
+    },[]);
 
     useEffect(() => {
         const open = (requested: RegionalNode|null) => {
@@ -554,7 +559,7 @@ function BVRoot() {
         <SmartPipeEditorWindow/>
         <BVPortal open={portalOpen} hasControlNodes={hasControlNodes} onClose={() => setPortalOpen(false)} />
         <LoraV3EditorWindow open={Boolean(loraV3Node)} node={loraV3Node} onClose={()=>setLoraV3Node(null)}/>
-        <RegionalEditor open={regionalOpen} activationToken={regionalActivation} activityScope={activeActivityScope()} nodes={nodes} initialNode={regionalNode} backgrounds={backgrounds} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
+        <RegionalEditor open={regionalOpen} activationToken={regionalActivation} activityScope={activeActivityScope()} nodes={nodes} initialNode={regionalNode} canvasCatalog={canvasCatalog} canvasApiUrl={path=>comfyApi.apiURL(path)} loraStacks={loraStacks} onClose={() => setRegionalOpen(false)} />
         <QuickPromptEditor open={quickEditOpen} activationToken={quickEditActivation} activityScope={activeActivityScope()} nodes={nodes} initialNode={regionalNode} loraStacks={loraStacks} onClose={() => setQuickEditOpen(false)} onOpenEditor={node => { activityFor().remember("regional",scopedNodeKey(node)); setRegionalNode(node); setQuickEditOpen(false); setRegionalOpen(true); setRegionalActivation(value=>value+1); }} />
     </>);
 }
@@ -736,11 +741,12 @@ comfyApp.registerExtension({
         onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        installNodePresentationLifecycle(nodeType,nodeData);
         if(nodeData.name==="BV Inspect Any"){
             installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
             return;
         }
-        if(nodeData.name==="BV Regional Prompt")suppressInitialProjectedProviderDefinitions(nodeData);
+        if(nodeData.name==="BV Regional Prompt")suppressInitialProjectedProviderDefinitions(nodeData,["canvas_image"]);
         if (installM0ResourceSpike(nodeType, nodeData)) return;
         if(nodeData.name==="BV LoRA Registry"){installLoraRegistryUi(nodeType,nodeData,comfyApi,detailerGraphOwner);return}
         const legacyDescriptors=legacyPortDescriptors(nodeData.name);
@@ -751,7 +757,7 @@ comfyApp.registerExtension({
             nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>prepare(this));return result};
             nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>refreshLegacyPorts(this));return result};
             nodeType.prototype.onDeselected=function(){const result=deselected?.apply(this,arguments);clearLegacyPortSticky(this);return result};
-            nodeType.prototype.onRemoved=function(){removeNodes2NodePresentation(this);return removed?.apply(this,arguments)};
+            nodeType.prototype.onRemoved=function(){removeNodePresentation(this);return removed?.apply(this,arguments)};
         }
         const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData, detailerGraphOwner);
         if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
@@ -934,6 +940,7 @@ comfyApp.registerExtension({
             installLoraV3ConsumerSlot(this);
             prepareDetailerPromptV3(this,detailerGraphOwner(this));
             prepareLutV3(this,detailerGraphOwner(this));
+            reconcileDeferredPublicInputs(this,nodeData);
             if (jsonWidget) {
                 if (!jsonWidget.__bvRegionalDocumentHooked) {
                     jsonWidget.__bvRegionalDocumentHooked = true;
@@ -969,6 +976,7 @@ comfyApp.registerExtension({
             installLoraV3ConsumerSlot(this);
             prepareDetailerPromptV3(this,detailerGraphOwner(this));
             prepareLutV3(this,detailerGraphOwner(this));
+            reconcileDeferredPublicInputs(this,nodeData);
             this.__bvRegionalPromptUiReady=true;
             applyClassicNodePresentation(this,"BV Regional Prompt");
             schedulePromptConsumers(this);
@@ -979,7 +987,7 @@ comfyApp.registerExtension({
         const originalRemoved = nodeType.prototype.onRemoved;
         nodeType.prototype.onRemoved = function () {
             const ownerGraph=regionalWorkflowRoot(this,activeGraph());
-            removeNodes2NodePresentation(this);
+            removeNodePresentation(this);
             const result = originalRemoved?.apply(this, arguments);
             scheduleRegionalConsumersRefresh(ownerGraph);
             return result;

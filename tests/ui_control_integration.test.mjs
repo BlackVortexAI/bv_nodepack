@@ -538,7 +538,10 @@ test("LUT Registry opens the shared download manager and adopts downloaded LUTs"
     assert.match(lutRegistryView, /<Button onClick=\{\(\)=>openLutDownloadDialog\(\)\}>Download LUTs<\/Button>/);
 });
 
-test("projected-port resizing is owned only by ComfyUI's active resize node",()=>{
+test("projected-port resizing follows the owning graph canvas instead of a stale app canvas",()=>{
     assert.doesNotMatch(uiEntry,/bvPointerGestureActive/);
-    assert.match(uiEntry,/isUserResizing:node=>\(comfyApp as any\)\.canvas\?\.resizing_node===node/);
+    assert.match(uiEntry,/node\?\.graph\?\.list_of_graphcanvas/);
+    assert.match(uiEntry,/appCanvas\?\.constructor\?\.active_canvas/);
+    assert.match(uiEntry,/host\.LiteGraph\?\.LGraphCanvas\?\.active_canvas/);
+    assert.match(uiEntry,/canvas\?\.resizing_node===node/);
 });

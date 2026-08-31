@@ -3,11 +3,28 @@ import { canvasLegacyDragType, legacyDebugVisible, refreshLegacyDragPorts } from
 const M0_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER_M0";
 const V3_PROVIDER_TYPE="BV_RUNTIME_RESOURCE_PROVIDER";
 const providerType=(value:unknown)=>value===M0_PROVIDER_TYPE||value===V3_PROVIDER_TYPE;
-type M0Slot = { name?:string; label?:string; localized_name?:string; type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
+type M0Slot = { name?:string; label?:string; localized_name?:string; type?:string; hidden?:boolean; __bvM0VisualHidden?: boolean; __bvM0PortHidden?:boolean; __bvM0ResourceSlot?: boolean; link?: unknown; links?:unknown[]|null; draw?:(...args:any[])=>unknown; drawCollapsed?:(...args:any[])=>unknown };
 type M0Node = { id?: string|number; inputs?: M0Slot[]; outputs?: M0Slot[]; properties?:Record<string,unknown>; __bvM0ResourceConsumer?:boolean; __bvM0FanInAnchorSlot?:number; __bvM0FanInPoint?:Readonly<[number,number]>; __bvM0ElementMarkRevision?:number; getConnectionPos?:(input:boolean,slot:number)=>Readonly<[number,number]> };
+type DebugAnimationState={running:boolean;graph:any};
+const debugAnimations=new WeakMap<object,DebugAnimationState>();
 
 function workflowHasM0Debug(graph:any){
     return legacyDebugVisible()||(graph?._nodes??[]).some((node:M0Node)=>node.__bvM0ResourceConsumer===true&&Boolean(node.properties?.bvM0DebugVisible));
+}
+
+function workflowHasConnectedResourceLink(graph:any){
+    const nodes=(graph?._nodes??[]) as M0Node[];
+    const providerInputLinks=new Set<unknown>();
+    for(const node of nodes){
+        for(const slot of node.inputs??[]){
+            if((slot.__bvM0ResourceSlot||providerType(slot.type))&&slot.link!=null)providerInputLinks.add(slot.link);
+        }
+    }
+    if(providerInputLinks.size===0)return false;
+    return nodes.some(node=>(node.outputs??[]).some(slot=>
+        (slot.__bvM0ResourceSlot||providerType(slot.type))&&
+        (slot.links??[]).some(link=>providerInputLinks.has(link))
+    ));
 }
 
 function hiddenLink(canvas:any,link:any) {
@@ -28,13 +45,21 @@ function resourceLink(canvas:any,link:any) {
 }
 
 export function requestM0DebugAnimation(canvas:any){
-    if(!canvas||canvas.__bvM0DebugAnimation)return;
+    if(!canvas||typeof requestAnimationFrame!=="function")return;
+    const existing=debugAnimations.get(canvas);
+    if(existing?.running)return;
+    const state:DebugAnimationState=existing??{running:false,graph:undefined};
+    state.running=true;state.graph=canvas.graph;debugAnimations.set(canvas,state);
     canvas.__bvM0DebugAnimation=true;
     const frame=()=>{
+        const surface=canvas.canvas;
+        const detached=surface&&"isConnected"in surface&&surface.isConnected===false;
+        if(canvas.graph!==state.graph||detached){state.running=false;canvas.__bvM0DebugAnimation=false;return;}
         const active=workflowHasM0Debug(canvas.graph);
-        document.documentElement.classList.toggle("bv-m0-debug-active",active);
-        if(!active){canvas.__bvM0DebugAnimation=false;return;}
-        canvas.setDirty?.(false,true);canvas.setDirtyCanvas?.(false,true);
+        if(typeof document!=="undefined")document.documentElement.classList.toggle("bv-m0-debug-active",active);
+        if(!active||!workflowHasConnectedResourceLink(canvas.graph)){state.running=false;canvas.__bvM0DebugAnimation=false;return;}
+        if(typeof canvas.setDirty==="function")canvas.setDirty(false,true);
+        else canvas.setDirtyCanvas?.(false,true);
         requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
@@ -63,6 +88,7 @@ export function installM0CanvasVisibility(canvas: any) {
     canvas.renderLink = function (...args:any[]) {
         if (hiddenLink(this,args[3])) return;
         if(!resourceLink(this,args[3]))return renderLink.apply(this,args);
+        requestM0DebugAnimation(this);
         const target=this.graph?.getNodeById?.(args[3]?.target_id) as M0Node|undefined;
         const providerSlots=target?.inputs?.map((slot,index)=>({slot,index})).filter(({slot})=>slot.__bvM0ResourceSlot)??[];
         const anchor=target?.__bvM0FanInAnchorSlot??(providerSlots.length>1?providerSlots[0].index:undefined);
@@ -76,7 +102,8 @@ export function installM0CanvasVisibility(canvas: any) {
             const exportTime=Number(this.__bvExportTimeSeconds);
             const timeSeconds=Number.isFinite(exportTime)?exportTime:(typeof performance==="undefined"?0:performance.now()/1000);
             ctx.setLineDash([7,5]);
-            ctx.lineDashOffset=-((timeSeconds*1000)/45%12);
+            const offset=-((timeSeconds*1000)/45%12);
+            ctx.lineDashOffset=Object.is(offset,-0)?0:offset;
             args[5]=timeSeconds;
             return renderLink.apply(this,args);
         }finally{ctx.restore();}

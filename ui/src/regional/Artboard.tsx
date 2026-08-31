@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/components";
 import { Bounds, Handle } from "./geometry";
 import { Geometry, geometryAuthoring, geometryLayerId, geometryMaskGroups, Point, RegionalDocument, Region } from "./model";
@@ -9,6 +9,7 @@ import type { ArtboardView } from "./editorState";
 type Props = {
     document: RegionalDocument;
     background?: string;
+    footerControls?:ReactNode;
     selectedRegionId: string | null;
     selectedLayerId: string | null;
     draft: Geometry[] | null;
@@ -146,6 +147,6 @@ export default function Artboard(props: Props) {
         </svg>}
         {!props.binaryMaskPreview && props.cursor && props.tool.startsWith("brush") && <div className={`brush-cursor ${props.brush.shape}`} style={{ left: `${props.cursor.x * 100}%`, top: `${props.cursor.y * 100}%`, width: `${cursorWidth}%`, aspectRatio: "1" }}><i style={{ width: `${props.brush.hardness * 100}%`, height: `${props.brush.hardness * 100}%` }}/></div>}
         </div></div>
-        <div className="zoom-controls" onWheel={event => event.stopPropagation()}><Button intent="ghost" title="Zoom out" onClick={() => { setZoom(value => Math.max(.02, value / 1.25)); setFitMode(false); }}>−</Button><Button intent="ghost" title="100%" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFitMode(false); }}>{Math.round(zoom * 100)} %</Button><Button intent="ghost" title="Zoom in" onClick={() => { setZoom(value => Math.min(8, value * 1.25)); setFitMode(false); }}>+</Button><Button intent="ghost" title="Fit to view" onClick={fit}>Fit</Button></div>
+        <div className="artboard-bottom-controls" onWheel={event=>event.stopPropagation()}>{props.footerControls}<div className="zoom-controls"><Button intent="ghost" title="Zoom out" onClick={() => { setZoom(value => Math.max(.02, value / 1.25)); setFitMode(false); }}>−</Button><Button intent="ghost" title="100%" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setFitMode(false); }}>{Math.round(zoom * 100)} %</Button><Button intent="ghost" title="Zoom in" onClick={() => { setZoom(value => Math.min(8, value * 1.25)); setFitMode(false); }}>+</Button><Button intent="ghost" title="Fit to view" onClick={fit}>Fit</Button></div></div>
     </div></section>;
 }
