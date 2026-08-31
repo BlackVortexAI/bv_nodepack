@@ -11,9 +11,9 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.2.2 is prepared but not yet released.** This source
-> centralizes native node presentation, adds Regional Canvas image sources and
-> aligns LoRA Registry interaction and outputs.
+> **BV Node Pack 1.2.2 includes centralized native node presentation,
+> Regional Canvas image sources and aligned LoRA Registry interaction and
+> outputs.**
 > The accompanying
 > [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
 > under construction, so missing screenshots or incomplete pages do not indicate
@@ -128,7 +128,7 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
-### 1.2.2 — prepared 2026-08-31, not released
+### 1.2.2 — 2026-08-31
 
 - Centralize native node, port and widget presentation across Classic and Nodes
   2.0, including titlebar routing for hidden infrastructure connections.
