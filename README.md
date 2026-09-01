@@ -11,7 +11,7 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.2.2 includes centralized native node presentation,
+> **BV Node Pack 1.2.3 includes centralized native node presentation,
 > Regional Canvas image sources and aligned LoRA Registry interaction and
 > outputs.**
 > The accompanying
@@ -128,6 +128,11 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.2.3 — 2026-09-01
+
+- Harden the Comfy Registry package by excluding development tests and UI source
+  files while retaining the committed runtime bundle. Runtime behavior is unchanged.
+
 ### 1.2.2 — 2026-08-31
 
 - Centralize native node, port and widget presentation across Classic and Nodes
@@ -167,19 +172,6 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
 The built-in looks were manually tested and the Experimental catalog was confirmed
 to load on 2026-08-29. This does not claim verification of every external LUT
 download.
-
-### 1.1.0 — 2026-08-28
-
-- Add Regional LUT authoring and execution workflows, including registry, plan,
-  loop, catalog, download and prototype tooling.
-- Unify Classic, Nodes 2.0 and Node Library presentation for technical,
-  provider and legacy ports, including connection-aware Legacy Debug visibility.
-- Stabilize node sizing and widget projection across mode changes, Subgraphs and
-  hot reloads without overwriting user-resized dimensions.
-- Refresh Regional graph-dependent selectors and sender targets when relevant
-  nodes, editors or regions are created, replaced or removed.
-- Normalize Control Center, Seed, prompt-debug and text-preview presentation and
-  add regression coverage for the shared UI rules.
 
 ---
 
