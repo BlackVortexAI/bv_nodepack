@@ -1,6 +1,9 @@
 import { installM0CanvasVisibility } from "../regional/m0VisualProjection";
 import { assertCanvasSize, normalizeExportOptions, rectFromItems, type ExportOptions, type ExportRect, type ExportResult } from "./model";
 import { embedWorkflow } from "./pngMetadata";
+import { awaitGraphCaptureImages, graphDomExportRects, planGraphDomLayers, rasterizeGraphDomLayers, settleGraphDomSurfaces } from "./graphDomSurfaces";
+
+export { awaitGraphCaptureImages, clientRectToExportRect, nodeDomGraphRect, planGraphDomLayers, widgetGraphRect } from "./graphDomSurfaces";
 
 type GraphSubject={graph:any;rootGraph:any;uiCanvas:any;nodes:any[];graphItems:any[];groups:any[];selectedNodes:Set<any>;selectedGroups:Set<any>;isSubgraph:boolean;subgraphName?:string};
 
@@ -21,10 +24,10 @@ export function resolveGraphSubject(app:any):GraphSubject{
     return {graph,rootGraph,uiCanvas,nodes,graphItems,groups,selectedNodes:new Set(nodes.filter(node=>selection.has(node))),selectedGroups:new Set(groups.filter(group=>selection.has(group))),isSubgraph,subgraphName:graph.name??graph.title};
 }
 
-export function graphExportBounds(subject:GraphSubject,scope:"graph"|"selection",padding:number):ExportRect{
+export function graphExportBounds(subject:GraphSubject,scope:"graph"|"selection",padding:number,additionalRects:ExportRect[]=[]):ExportRect{
     const nodes=scope==="selection"?[...subject.selectedNodes]:subject.graphItems,groups=scope==="selection"?[...subject.selectedGroups]:subject.groups;
     if(scope==="selection"&&!nodes.length&&!groups.length)throw new Error("Selection export requires at least one selected node or group.");
-    const rects=[...nodes,...groups].map(itemRect).filter((item):item is ExportRect=>!!item),bounds=rectFromItems(rects,padding);
+    const rects=[...nodes,...groups].map(itemRect).filter((item):item is ExportRect=>!!item),bounds=rectFromItems([...rects,...additionalRects],padding);
     if(!bounds)throw new Error("The export source has no visible nodes or groups.");
     return bounds;
 }
@@ -46,12 +49,7 @@ const configure=(canvas:any,bounds:ExportRect,width:number,height:number,scale:n
 
 const canvasBlob=(canvas:HTMLCanvasElement)=>new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("Browser failed to encode the PNG.")),"image/png"));
 
-const visiblePreviewImages=(nodes:any[])=>nodes.flatMap(node=>Array.isArray(node?.imgs)?node.imgs:[]).filter((image:any)=>image instanceof HTMLImageElement&&Boolean(image.currentSrc||image.src));
-export async function awaitPreviewImages(nodes:any[]){
-    const failures:string[]=[];
-    await Promise.all(visiblePreviewImages(nodes).map(async(image:HTMLImageElement)=>{try{if(!image.complete)await new Promise<void>((resolve,reject)=>{const timeout=window.setTimeout(()=>reject(new Error("image load timed out")),8000),done=(callback:()=>void)=>{window.clearTimeout(timeout);callback()};image.addEventListener("load",()=>done(resolve),{once:true});image.addEventListener("error",()=>done(()=>reject(new Error("load failed"))),{once:true});});await image.decode?.();}catch{failures.push(image.currentSrc||image.src);}}));
-    if(failures.length)throw new Error(`${failures.length} visible node preview image${failures.length===1?"":"s"} could not be decoded.`);
-}
+export const awaitPreviewImages=(nodes:any[])=>awaitGraphCaptureImages(nodes,[]);
 
 const drawBvGrid=(ctx:CanvasRenderingContext2D,width:number,height:number,scale:number)=>{
     ctx.fillStyle="#0f1217";ctx.fillRect(0,0,width,height);ctx.strokeStyle="rgba(35,48,68,.333)";ctx.lineWidth=scale;
@@ -60,20 +58,27 @@ const drawBvGrid=(ctx:CanvasRenderingContext2D,width:number,height:number,scale:
     for(let y=half;y<=height;y+=step){ctx.moveTo(0,y);ctx.lineTo(width,y)}ctx.stroke();
 };
 
-const installSelectionFilter=(canvas:any,subject:GraphSubject,scope:string)=>{
-    if(scope!=="selection")return()=>{};
-    const nodes=subject.selectedNodes,groups=subject.selectedGroups,renderLink=canvas.renderLink,drawNode=canvas.drawNode,drawGroups=canvas.drawGroups;
-    canvas.drawNode=function(node:any,...args:any[]){if(nodes.has(node))return drawNode.call(this,node,...args)};
-    canvas.renderLink=function(...args:any[]){const link=args[3],origin=this.graph?.getNodeById?.(link?.origin_id),target=this.graph?.getNodeById?.(link?.target_id);if(nodes.has(origin)&&nodes.has(target))return renderLink.apply(this,args)};
-    if(typeof drawGroups==="function")canvas.drawGroups=function(...args:any[]){const graph=this.graph,original=graph?._groups;if(graph&&Array.isArray(original))graph._groups=original.filter((group:any)=>groups.has(group));try{return drawGroups.apply(this,args)}finally{if(graph)graph._groups=original}};
+const installCanvasVisibilityFilter=(canvas:any,subject:GraphSubject,scope:string,suppressedNodes:Set<any>)=>{
+    const nodes=scope==="selection"?subject.selectedNodes:new Set(subject.graphItems),groups=subject.selectedGroups,renderLink=canvas.renderLink,drawNode=canvas.drawNode,drawGroups=canvas.drawGroups;
+    canvas.drawNode=function(node:any,...args:any[]){if(nodes.has(node)&&!suppressedNodes.has(node))return drawNode.call(this,node,...args)};
+    if(scope==="selection")canvas.renderLink=function(...args:any[]){const link=args[3],origin=this.graph?.getNodeById?.(link?.origin_id),target=this.graph?.getNodeById?.(link?.target_id);if(nodes.has(origin)&&nodes.has(target))return renderLink.apply(this,args)};
+    if(scope==="selection"&&typeof drawGroups==="function")canvas.drawGroups=function(...args:any[]){const graph=this.graph,original=graph?._groups;if(graph&&Array.isArray(original))graph._groups=original.filter((group:any)=>groups.has(group));try{return drawGroups.apply(this,args)}finally{if(graph)graph._groups=original}};
     return()=>{canvas.drawNode=drawNode;canvas.renderLink=renderLink;if(drawGroups)canvas.drawGroups=drawGroups};
 };
 
-const suppressTransientState=(canvas:any)=>{
+export function withNeutralPositionableSelection<T>(items:any[],draw:()=>T):T{
+    const snapshots=items.map(item=>({item,owns:Object.prototype.hasOwnProperty.call(item,"selected"),descriptor:Object.getOwnPropertyDescriptor(item,"selected")}));
+    try{for(const {item} of snapshots)item.selected=false;return draw()}
+    finally{for(const {item,owns,descriptor} of snapshots){if(owns&&descriptor)Object.defineProperty(item,"selected",descriptor);else delete item.selected}}
+}
+
+export const withSuppressedCanvasTransientState=<T>(canvas:any,draw:()=>T):T=>{
     const selectedItems=canvas.selectedItems,selectedNodes=canvas.selected_nodes,highlight=canvas.highlighted_links,over=canvas.node_over;
-    try{canvas.selectedItems=new Set();canvas.selected_nodes={};canvas.highlighted_links={};canvas.node_over=null;}catch{}
-    return()=>{try{canvas.selectedItems=selectedItems;canvas.selected_nodes=selectedNodes;canvas.highlighted_links=highlight;canvas.node_over=over;}catch{}};
+    try{canvas.selectedItems=new Set();canvas.selected_nodes={};canvas.highlighted_links={};canvas.node_over=null;return draw()}
+    finally{canvas.selectedItems=selectedItems;canvas.selected_nodes=selectedNodes;canvas.highlighted_links=highlight;canvas.node_over=over}
 };
+
+export const settleDeferredCanvasImages=()=>Promise.resolve();
 
 export const createOffscreenGraphCanvas=(CanvasCtor:any,canvas:HTMLCanvasElement,graph:any,initialGraph:any=graph)=>{
     const offscreen=new CanvasCtor(canvas,initialGraph);
@@ -98,24 +103,29 @@ export const disposeOffscreenGraphCanvas=(offscreen:any)=>{
 };
 
 export async function captureGraph(app:any,raw:ExportOptions={}):Promise<ExportResult>{
-    const options=normalizeExportOptions(raw),scope=options.source==="selection"?"selection":"graph",subject=resolveGraphSubject(app),bounds=graphExportBounds(subject,scope,options.padding),width=Math.ceil(bounds.width*options.scale),height=Math.ceil(bounds.height*options.scale);
-    assertCanvasSize(width,height);await awaitPreviewImages(scope==="selection"?[...subject.selectedNodes]:subject.nodes);
+    const options=normalizeExportOptions(raw),scope=options.source==="selection"?"selection":"graph",subject=resolveGraphSubject(app);
+    await settleGraphDomSurfaces();
+    const captureNodes=scope==="selection"?[...subject.selectedNodes]:subject.graphItems,domPlan=planGraphDomLayers(captureNodes),bounds=graphExportBounds(subject,scope,options.padding,graphDomExportRects(domPlan.layers,subject.uiCanvas)),width=Math.ceil(bounds.width*options.scale),height=Math.ceil(bounds.height*options.scale);
+    assertCanvasSize(width,height);
+    await awaitGraphCaptureImages(captureNodes,domPlan.layers);
     const foreground=document.createElement("canvas");foreground.width=width;foreground.height=height;
     const CanvasCtor=subject.uiCanvas.constructor??(window as any).LGraphCanvas??(window as any).LiteGraph?.LGraphCanvas;
     if(!CanvasCtor)throw new Error("ComfyUI LiteGraph canvas constructor is unavailable.");
-    const offscreen=createOffscreenGraphCanvas(CanvasCtor,foreground,subject.graph,subject.rootGraph);let restoreFilter=()=>{},restoreTransient=()=>{};
+    const offscreen=createOffscreenGraphCanvas(CanvasCtor,foreground,subject.graph,subject.rootGraph);let restoreFilter=()=>{};
     try{
         offscreen.canvas=foreground;offscreen.ctx=foreground.getContext("2d");copyRenderSettings(subject.uiCanvas,offscreen);
         offscreen.resize?.(width,height);foreground.width=width;foreground.height=height;offscreen.canvas=foreground;offscreen.ctx=foreground.getContext("2d");
         if(!offscreen.bgcanvas)offscreen.bgcanvas=document.createElement("canvas");offscreen.bgcanvas.width=width;offscreen.bgcanvas.height=height;offscreen.bgctx=offscreen.bgcanvas.getContext("2d");
         configure(offscreen,bounds,width,height,options.scale);assignRenderSettings(offscreen,{high_quality:true,low_quality:false,render_shadows:true,render_canvas_border:false,render_canvas_info:false,show_info:false,__bvExportTimeSeconds:.55});
         if(options.background==="comfyui")assignRenderSettings(offscreen,{render_background:true,clear_background:true,always_render_background:true});else assignRenderSettings(offscreen,{render_background:true,clear_background:true,always_render_background:true,show_grid:false,background_image:null,bgcolor:"rgba(0,0,0,0)",background_color:"rgba(0,0,0,0)",clear_background_color:"rgba(0,0,0,0)"});
-        installM0CanvasVisibility(offscreen);restoreFilter=installSelectionFilter(offscreen,subject,scope);restoreTransient=suppressTransientState(offscreen);
-        offscreen.draw(true,true);await new Promise(resolve=>requestAnimationFrame(resolve));configure(offscreen,bounds,width,height,options.scale);offscreen.draw(true,true);
+        installM0CanvasVisibility(offscreen);restoreFilter=installCanvasVisibilityFilter(offscreen,subject,scope,domPlan.suppressCanvasNodes);
+        const drawItems=[...subject.graphItems,...subject.groups],draw=()=>withNeutralPositionableSelection(drawItems,()=>withSuppressedCanvasTransientState(offscreen,()=>offscreen.draw(true,true)));
+        draw();await new Promise(resolve=>requestAnimationFrame(resolve));configure(offscreen,bounds,width,height,options.scale);draw();await settleDeferredCanvasImages();
         const output=document.createElement("canvas");output.width=width;output.height=height;const ctx=output.getContext("2d");if(!ctx)throw new Error("PNG composition context is unavailable.");
         if(options.background==="bv-grid")drawBvGrid(ctx,width,height,options.scale);ctx.drawImage(offscreen.bgcanvas,0,0);ctx.drawImage(foreground,0,0);
+        for(const layer of await rasterizeGraphDomLayers(domPlan.layers,subject.uiCanvas,bounds,options.scale))ctx.drawImage(layer.canvas,layer.rect.left,layer.rect.top);
         let blob=await canvasBlob(output);if(options.embedWorkflow)blob=await embedWorkflow(blob,JSON.stringify(subject.rootGraph.serialize()));
         const workflowName=String(app?.workflowManager?.activeWorkflow?.filename??app?.workflowManager?.activeWorkflow?.name??"workflow");
         const {suggestedFilename}=await import("./model");return {blob,filename:options.filename??suggestedFilename(workflowName,scope,subject.isSubgraph?subject.subgraphName:undefined),width,height};
-    }finally{restoreTransient();restoreFilter();disposeOffscreenGraphCanvas(offscreen)}
+    }finally{restoreFilter();disposeOffscreenGraphCanvas(offscreen)}
 }

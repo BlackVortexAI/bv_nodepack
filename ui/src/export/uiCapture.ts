@@ -2,18 +2,9 @@ import { domToBlob } from "modern-screenshot";
 import { assertCanvasSize, normalizeExportOptions, safeFilename, suggestedFilename, type ExportOptions, type ExportResult } from "./model";
 import { embedWorkflow } from "./pngMetadata";
 import { getUiCaptureSource } from "./captureRegistry";
+import { copyLiveDomState } from "./domRaster";
 
 const visible=(node:HTMLElement)=>{const rect=node.getBoundingClientRect(),style=getComputedStyle(node);return rect.width>0&&rect.height>0&&style.display!=="none"&&style.visibility!=="hidden"};
-const copyLiveState=(source:Element,clone:Element)=>{
-    const originals=[source,...source.querySelectorAll("*")],copies=[clone,...clone.querySelectorAll("*")];
-    originals.forEach((item,index)=>{const target=copies[index] as any;if(!target)return;
-        if(item instanceof HTMLInputElement){target.value=item.value;target.checked=item.checked}
-        else if(item instanceof HTMLTextAreaElement)target.value=item.value;
-        else if(item instanceof HTMLSelectElement)target.value=item.value;
-        else if(item instanceof HTMLCanvasElement&&target instanceof HTMLCanvasElement){target.width=item.width;target.height=item.height;target.getContext("2d")?.drawImage(item,0,0)}
-        if(item instanceof HTMLElement&&target instanceof HTMLElement){target.scrollTop=item.scrollTop;target.scrollLeft=item.scrollLeft}
-    });
-};
 const backgroundStyle=(background:string)=>background==="bv-grid"?{
     backgroundColor:"#0f1217",backgroundImage:"linear-gradient(rgba(35,48,68,.333) 1px, transparent 1px),linear-gradient(90deg,rgba(35,48,68,.333) 1px,transparent 1px)",backgroundSize:"28px 28px"
 }:background==="comfyui"?{background:getComputedStyle(document.body).background}: {background:"transparent"};
@@ -32,7 +23,7 @@ export async function captureUi(app:any,id:string,raw:ExportOptions={}):Promise<
     Object.assign(host.style,{position:"fixed",left:"-100000px",top:"0",width:`${bounds.width}px`,height:`${bounds.height}px`,overflow:"hidden",pointerEvents:"none",...backgroundStyle(options.background)});
     document.body.append(host);
     try{
-        for(const original of bounds.related){const rect=original.getBoundingClientRect(),clone=original.cloneNode(true) as HTMLElement;Object.assign(clone.style,{position:"absolute",left:`${rect.left-bounds.left}px`,top:`${rect.top-bounds.top}px`,width:`${rect.width}px`,height:`${rect.height}px`,margin:"0",transform:"none"});copyLiveState(original,clone);host.append(clone)}
+        for(const original of bounds.related){const rect=original.getBoundingClientRect(),clone=original.cloneNode(true) as HTMLElement;Object.assign(clone.style,{position:"absolute",left:`${rect.left-bounds.left}px`,top:`${rect.top-bounds.top}px`,width:`${rect.width}px`,height:`${rect.height}px`,margin:"0",transform:"none"});copyLiveDomState(original,clone);host.append(clone)}
         await Promise.all([...host.querySelectorAll("img")].map(async image=>{try{if(!image.complete)await new Promise<void>((resolve,reject)=>{image.onload=()=>resolve();image.onerror=()=>reject(new Error("image load failed"))});await image.decode?.()}catch{throw new Error(`A visible image in ${bounds.source.title} could not be decoded.`)}}));
         let blob=await domToBlob(host,{scale:options.scale,backgroundColor:null,maximumCanvasSize:16384,timeout:30000,filter:node=>!(node instanceof Element)||!node.matches(".bv-context-menu,[data-bv-export-ui],.bv-toast-stack,.bv-completion-popup")});
         if(!blob)throw new Error("The browser failed to rasterize the BV UI.");
