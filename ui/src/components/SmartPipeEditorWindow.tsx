@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, bvWindowActivity, BvFooterActions, BvManagedWindow, BvMinimizedWindow, BvWindowNavigator, Callout, CheckboxField, DraftJsonActions, EmptyState, getWindowSwitchMode, mergeBvDraft, SelectField, SortableItem, SortableList, TextField, UnsavedChangesDialog, useBvHistory, useBvHistoryShortcuts, type BvWindowGeometry, type BvWindowMode } from "../ui";
 import { getApi, getApp } from "../appHelper";
 import { activeWorkflowScope } from "../regional/workflowLifecycle";
+import { nextMergeSourceKey } from "../../../js/bv_smart_pipe_merge_model.js";
 import { collectScopedNodes, scopedNodeKey, setWindowMenuVisible, useWindowMenuVisibility, windowMenuVisible } from "../ui/windowRegistry";
 
 type Kind="pipe"|"merge";
@@ -61,6 +62,6 @@ function MergeDraft({draft,update}:{draft:any;update:(mutate:(value:any)=>void)=
     const sources=draft.sources??[],[selected,setSelected]=useState("");
     const items:SortableItem[]=sources.map((source:any)=>({id:source.key,title:source.label||source.key,description:source.mode==="wired"?"Wired":"Wireless"}));
     const candidate=draft.candidates?.find((item:any)=>item.address===selected);
-    const add=()=>{if(!candidate)return;update(value=>value.sources.push({key:`pipe_${String((value.sources.length+1)).padStart(3,"0")}`,mode:"wireless",address:candidate.address,label:candidate.label}));setSelected("")};
-    return <div className="bv-ui-stack"><div className="bv-ui-inline-footer bv-smart-pipe-merge-source"><SelectField label="Wireless source" value={selected} options={(draft.candidates??[]).map((item:any)=>({value:item.address,label:item.label}))} onValue={setSelected}/><Button disabled={!candidate} onClick={add}>Add</Button></div>{items.length?<SortableList items={items} onReorder={ordered=>update(value=>{const byKey=new Map(value.sources.map((source:any)=>[source.key,source]));value.sources=ordered.map(item=>byKey.get(item.id)).filter(Boolean)})} onRemove={id=>update(value=>{value.sources=value.sources.filter((source:any)=>source.key!==id)})}/>:<EmptyState title="No merge sources" description="Connect a pipe or add a wireless source."/>}</div>;
+    const add=()=>{if(!candidate||!nextMergeSourceKey(sources))return;update(value=>{const key=nextMergeSourceKey(value.sources);if(key)value.sources.push({key,mode:"wireless",address:candidate.address,label:candidate.label})});setSelected("")};
+    return <div className="bv-ui-stack"><div className="bv-ui-inline-footer bv-smart-pipe-merge-source"><SelectField label="Wireless source" value={selected} options={(draft.candidates??[]).map((item:any)=>({value:item.address,label:item.label}))} onValue={setSelected}/><Button disabled={!candidate||!nextMergeSourceKey(sources)} onClick={add}>Add</Button></div>{items.length?<SortableList items={items} onReorder={ordered=>update(value=>{const byKey=new Map(value.sources.map((source:any)=>[source.key,source]));value.sources=ordered.map(item=>byKey.get(item.id)).filter(Boolean)})} onRemove={id=>update(value=>{value.sources=value.sources.filter((source:any)=>source.key!==id)})}/>:<EmptyState title="No merge sources" description="Connect a pipe or add a wireless source."/>}</div>;
 }

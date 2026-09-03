@@ -22,6 +22,12 @@ export type PresentationException=Readonly<{
 
 export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
     {
+        id:"throwaway-dg-selector-lifecycle",
+        implementation:["ui/src/regional/dgCanaryPrototype.ts#installReceiverSelector"],
+        reason:"The opt-in experiment combines a backend state widget with a nonserialized native selector whose objects may be replaced during configure. Its per-node watcher is retired on removal; current widget references are resolved on each refresh.",
+        centralizationPath:"Before product adoption, move graph-scoped selection and watcher ownership into a shared provider-selection lifecycle. Geometry already uses portProjection; received-value previews use executionResultPreview. See docs/design/node-presentation.md.",
+    },
+    {
         id:"react-node-dom-widget-host",
         implementation:["ui/src/regional/reactNodeWidgetHost.tsx"],
         reason:"ComfyUI owns the DOM-widget lifecycle and exposes it through addDOMWidget, whose mount, configure, measurement and removal timing differs from normal BV managed windows.",
@@ -52,10 +58,22 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         centralizationPath:"Keep the lifecycle adapter separate, but route shared visibility and sizing decisions through this module and the presentation bridge.",
     },
     {
+        id:"subgraph-boundary-provider-slots",
+        implementation:["ui/src/regional/m0VisualProjection.ts#installM0CanvasVisibility"],
+        reason:"ComfyUI renders SubgraphInput/SubgraphOutput through virtual I/O nodes whose provider interfaces live in node.slots rather than normal node.inputs/node.outputs.",
+        centralizationPath:"The central canvas projection suppresses labels and drawing for one draw, and collapses only technical boundary layout measurements on both I/O sides; graph-owned names, slots and link topology remain unchanged. See docs/design/node-presentation.md.",
+    },
+    {
         id:"dynamic-pipe-slot-structure",
         implementation:["js/bv_pipe_shared.js","js/bv_smart_pipe.js","js/bv_smart_pipe_merge.js"],
         reason:"Pipe nodes add, remove and relabel structural graph slots from their runtime schema; this is domain behavior, not merely visual projection.",
         centralizationPath:"Structural slot ownership remains local; every visual hide, compact or resize operation must use the central presentation bridge.",
+    },
+    {
+        id:"smart-pipe-native-relocation-lifecycle",
+        implementation:["js/bv_smart_pipe.js#installRelocationHooks","js/bv_smart_pipe.js#repairHostOutputBacklinks","js/bv_smart_pipe.js#restoreSerializedPipeSlots"],
+        reason:"Native Convert/Unpack requires synchronous route relocation before afterChange and scoped compatibility repairs for compact slots, definition links and confirmed host backlinks.",
+        centralizationPath:"Replace the version-bound graph-instance adapters with an official atomic relocation event when available; retain route, Undo, shared-instance and payload tests. No visual projection ownership moves here. See docs/design/node-presentation.md.",
     },
     {
         id:"seed-action-projection",
@@ -110,6 +128,9 @@ const REGIONAL_LORA_CONSUMER_POLICY:NodePresentationPolicy={
 
 const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     ...Object.fromEntries(REGIONAL_LORA_CONSUMER_NODE_TYPES.map(nodeType=>[nodeType,REGIONAL_LORA_CONSUMER_POLICY])),
+    // PROTOTYPE — THROW AWAY. Enrollment only; provider roles are inferred from slot types.
+    "BV Titlebar Port Canary Sender (THROW AWAY)":{},
+    "BV Titlebar Port Canary Receiver (THROW AWAY)":{},
     "BV Control Center":{
         widgets:[
             {role:"internalState",names:["bv_control_config_json"]},

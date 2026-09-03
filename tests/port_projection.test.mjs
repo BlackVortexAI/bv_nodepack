@@ -4,6 +4,36 @@ import{compactProjectedPortLayout,configureProjectedPortLayout,installProjectedP
 import{setLegacyDebugVisible}from"../ui/src/regional/legacyPorts.ts";
 
 const provider=(name,link=null)=>({name,type:"BV_RUNTIME_RESOURCE_PROVIDER",link});
+test("projected native port follows collapse and expand without a resize event",()=>{
+ const slot=provider("resource_provider"),normal={name:"alpha",type:"STRING"},node={size:[400,180],flags:{collapsed:false},_collapsed_width:120,outputs:[slot,normal]};
+ markProjectedProvider(slot);refreshProjectedProviderAnchors(node,true);
+ assert.deepEqual(slot.pos,[400,-15]);node.flags.collapsed=true;
+ assert.deepEqual(slot.pos,[120,-15]);node._collapsed_width=150;
+ assert.deepEqual(slot.pos,[150,-15]);node.flags.collapsed=false;
+ assert.deepEqual(slot.pos,[400,-15]);assert.equal(Object.hasOwn(normal,"pos"),false);
+ removeProjectedProviderAnchors(node);assert.equal(Object.hasOwn(slot,"pos"),false);
+});
+test("DG display name survives serialization without changing internal identity",()=>{
+  for(const side of ["inputs","outputs"]){const slot=provider("__bv_dg_"+"route_".repeat(40)),name=slot.name;markProjectedProvider(slot);setProjectedSlotLabel(slot,"DG");
+    const restored=JSON.parse(JSON.stringify({[side]:[slot]}))[side][0];assert.equal(restored.name,name);assert.equal(restored.label||restored.localized_name||restored.name,"DG");assert.equal(restored.hidden,true);
+  }
+});
+test("hidden DG names do not set minimum width on either side while public constraints survive",()=>{
+  for(const side of ["inputs","outputs"]){
+    const dg=provider("__bv_dg_route_"+"identity_".repeat(30));markProjectedProvider(dg);
+    const normal={name:"alpha",type:"STRING",links:[71]},node={size:[900,100],properties:{},inputs:[],outputs:[],titleWidth:180,widgetWidth:200,
+      computeSize(){return[Math.max(220,this.titleWidth,this.widgetWidth,...[...this.inputs,...this.outputs].map(slot=>40+String(slot.label||slot.name).length*8)),100]},setSize(size){this.size=size}};
+    node[side]=[normal,dg];installProjectedPortLayout(node);
+    assert.equal(node.computeSize()[0],220);
+    compactProjectedPortLayout(node);assert.equal(node.size[0],900,"retain chosen width");
+    node.setSize([240,100]);compactProjectedPortLayout(node);assert.equal(node.size[0],240,"allow manual shrink");
+    normal.name="public_label_".repeat(30);assert.equal(node.computeSize()[0],40+normal.name.length*8);
+    normal.name="alpha";node.titleWidth=400;assert.equal(node.computeSize()[0],400);
+    node.widgetWidth=500;assert.equal(node.computeSize()[0],500);
+    assert.equal(node[side][0],normal);assert.equal(node[side][1],dg);assert.deepEqual(normal.links,[71]);
+    assert.equal(dg.name,"__bv_dg_route_"+"identity_".repeat(30));
+  }
+});
 function fixture(){const observed=[],node={size:[320,520],properties:{},inputs:Array.from({length:20},(_,index)=>provider(`resource_provider_${index+1}`)),outputs:[{name:"regional",type:"BV_REGIONAL"},{name:"legacy",type:"LEGACY",hidden:true,__bvLegacyPort:true}],widgets:[{}],computeSize(){observed.push({inputs:this.inputs.length,outputs:this.outputs.length});return[300,80+Math.max(this.inputs.length,this.outputs.length)*20]},setSize(size){this.size=size;this.onResize?.(size)}};return{node,observed}}
 
 test("projected layout computes normal spacing without hidden providers or hidden legacy ports",()=>{const{node,observed}=fixture();node.inputs.forEach(markProjectedProvider);compactProjectedPortLayout(node);assert.deepEqual(observed.at(-1),{inputs:0,outputs:1});assert.deepEqual(node.size,[320,100]);assert.equal(node.inputs.length,20)});

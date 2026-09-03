@@ -8,6 +8,11 @@ import { requestRegionalWindow } from "./windowRequests";
 import { migrateRegionalNode, queueRegionalMigrationReport } from "./milestoneE";
 import { applyClassicNodePresentation, removeNodePresentation } from "./classicNodePresentation";
 import { notifyLoraV3InventoryChanged } from "./loraV3Inventory";
+import { activateDgReceiver, deactivateDgReceiver, invalidateDgReceiverWork, dgSenderChoices, dgSenderIdentity, queueDgUpgrade, scheduleDgUpgrade } from "./dgRouting";
+import { activateNewRegistryDgConsumer, restoreRegistryDgActivation, isLoraRegistry, isRegistryDgPilot } from "./loraRegistryDgAdapter";
+import { applyProjectedSlotLabel } from "./portProjection";
+import { sourceRegionalDocument } from "./regionalSourceDocument";
+import { resetRegistryScheduledWork } from "./registryDgLifecycle";
 
 export const OPEN_LORA_V3_EDITOR_EVENT="bv-open-regional-lora-editor";
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
@@ -18,7 +23,12 @@ const ensureId=(item:any)=>{if(item&&!String(item.value??"").trim())item.value=c
 const ensureCanvasVisibility=()=>{let attempts=0;const apply=()=>{const canvas=getApp().canvas;if(canvas)installM0CanvasVisibility(canvas);else if(attempts++<40)setTimeout(apply,50)};apply();};
 
 export type LoraV3CollectorChoice=ResourcePickerCollector&{node:any};
-export function loraV3Catalog(node:any):LoraV3CollectorChoice[]{return localLoraCollectors(node).map((collector:any)=>({id:loraProviderIdentity(collector),nodeId:String(collector.id),label:String(collector.title||nodeClass(collector)),resources:loraProviderResources(collector),node:collector})).filter((item:any)=>item.id);}
+export function loraV3Catalog(node:any):LoraV3CollectorChoice[]{
+    const pilot=isRegistryDgPilot(node),choices=pilot?dgSenderChoices(node):[];
+    const result=localLoraCollectors(node).map((collector:any)=>({id:loraProviderIdentity(collector),nodeId:String(collector.id),label:pilot&&isLoraRegistry(collector)?choices.find(choice=>choice.id===dgSenderIdentity(collector))?.label??String(collector.title):String(collector.title||nodeClass(collector)),resources:loraProviderResources(collector),node:collector})).filter((item:any)=>item.id);
+    // Domain identity collisions are unresolved, never a first-match choice.
+    return pilot?result.filter(item=>result.filter(other=>other.id===item.id).length===1):result;
+}
 export function loraV3CollectorIds(config:LoraV3Config){const ids:string[]=[];for(const entry of [...config.entries,...(config.steps??[]).flatMap(step=>step.entries)])if(entry.source.kind==="external"&&entry.source.collector_id&&!ids.includes(entry.source.collector_id))ids.push(entry.source.collector_id);return ids;}
 export function readNodeLoraV3Config(node:any,name=nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json"){
     try{
@@ -30,8 +40,7 @@ export function readNodeLoraV3Config(node:any,name=nodeClass(node)==="BV Regiona
 }
 export function writeNodeLoraV3Config(node:any,config:LoraV3Config,name=nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json"){const item=widget(node,name);if(!item)return;item.value=serializeLoraV3Config(config);item.callback?.(item.value);node.setDirtyCanvas?.(true,true);}
 export function loraV3TargetOptions(node:any):LoraV3TargetOption[]{
-    const graph=loraV3GraphOf(node),queue=[node],seen=new Set<any>();let document:any=null;
-    while(queue.length&&!document){const target=queue.shift();if(!target||seen.has(target))continue;seen.add(target);if(nodeClass(target)==="BV Regional Prompt"){try{const parsed=JSON.parse(String(widget(target,"regional_json")?.value??"{}"));document=parsed.version===3?parsed.core:parsed;}catch{}break;}for(const input of target.inputs??[]){if(input.type!=="BV_REGIONAL")continue;const link=graphLink(graph,input.link),source=link&&graph?.getNodeById?.(link.origin_id);if((loraV3GraphOf(source)??bindLoraV3Graph(source,graph))===graph)queue.push(source);}}
+    const document=sourceRegionalDocument(node);
     if(!document?.document_id)return [{value:"global",label:"Global",target:{scope:"global"}}];
     return [{value:"global",label:"Global",target:{scope:"global"}},...(document.regions??[]).map((region:any)=>({value:`region:${document.document_id}:${region.id}`,label:String(region.name||region.id),target:{scope:"region" as const,document_id:String(document.document_id),region_id:String(region.id)}}))];
 }
@@ -60,9 +69,10 @@ function reconcileConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
 }
 function scheduleConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
     node.__bvLoraPendingConfig=config??node.__bvLoraPendingConfig;if(node.__bvLoraReconcileScheduled)return;
-    node.__bvLoraReconcileScheduled=true;setTimeout(()=>{const pending=node.__bvLoraPendingConfig;delete node.__bvLoraPendingConfig;node.__bvLoraReconcileScheduled=false;reconcileConfiguredLoraWriterTree(node,pending);notifyLoraV3InventoryChanged(node);},0);
+    node.__bvLoraReconcileScheduled=true;const run=()=>{const pending=node.__bvLoraPendingConfig;delete node.__bvLoraPendingConfig;node.__bvLoraReconcileScheduled=false;reconcileConfiguredLoraWriterTree(node,pending);notifyLoraV3InventoryChanged(node)};
+    scheduleDgUpgrade(node,run);
 }
-export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();scheduleConfiguredLoraWriterTree(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;input.label="";input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
+export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();scheduleConfiguredLoraWriterTree(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;applyProjectedSlotLabel(input);input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
 function installTransformer(node:any){node.__bvPresentationManaged=true;installLoraV3ConsumerSlot(node);if(!node.widgets?.find((item:any)=>item.name==="open_lora_editor")){const button=node.addWidget?.("button","open_lora_editor",null,()=>requestRegionalWindow("lora",node),{serialize:false});if(button){button.label="Open LoRA Editor";button.serialize=false;}}applyClassicNodePresentation(node,"BV Regional LoRA");}
 
 export {compactLoraConsumerNode};
@@ -70,5 +80,12 @@ export {compactLoraConsumerNode};
 export function installLoraV3Ui(nodeType:any,nodeData:any,graphOwner:(node:any)=>any=(node:any)=>node?.graph){
     const collector=nodeData.name==="BV LoRA Stack Collector",transformer=nodeData.name==="BV Regional LoRA",consumer=nodeData.name==="BV Regional Prompt";if(!collector&&!transformer&&!consumer)return false;
     const created=nodeType.prototype.onNodeCreated,configured=nodeType.prototype.onConfigure,changed=nodeType.prototype.onConnectionsChange,removed=nodeType.prototype.onRemoved,upgrade=function(this:any){bindLoraV3Graph(this,graphOwner(this));if(collector)installCollector(this);if(transformer)installTransformer(this);if(consumer)installLoraV3ConsumerSlot(this);if(transformer||collector)notifyLoraV3InventoryChanged(this);};
-    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onConfigure=function(){const result=configured?.apply(this,arguments);queueMicrotask(()=>{if(transformer||consumer)queueRegionalMigrationReport(migrateRegionalNode(this));upgrade.call(this)});return result;};nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queueMicrotask(()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(transformer||collector)removeNodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
+    const queued=(node:any,action:()=>void)=>transformer||consumer?queueDgUpgrade(node,action):queueMicrotask(action);
+    const added=nodeType.prototype.onAdded;nodeType.prototype.onAdded=function(){if(isRegistryDgPilot(this))activateDgReceiver(this);const result=added?.apply(this,arguments);if(isRegistryDgPilot(this))queued(this,()=>upgrade.call(this));return result};
+    nodeType.prototype.onNodeCreated=function(){const result=created?.apply(this,arguments);if(transformer||consumer)activateNewRegistryDgConsumer(this);queued(this,()=>upgrade.call(this));return result;};
+    nodeType.prototype.onConfigure=function(data:any){
+        if(transformer||consumer){resetRegistryScheduledWork(this);delete this.__bvLoraPendingConfig;this.__bvLoraReconcileScheduled=false;restoreRegistryDgActivation(this,data);}
+        const result=configured?.apply(this,arguments);queued(this,()=>{if(transformer||consumer)queueRegionalMigrationReport(migrateRegionalNode(this));upgrade.call(this)});return result;
+    };
+    nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queued(this,()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(transformer||consumer){deactivateDgReceiver(this);delete this.__bvLoraPendingConfig;this.__bvLoraReconcileScheduled=false;}if(transformer||collector)removeNodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
 }

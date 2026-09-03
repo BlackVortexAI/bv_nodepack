@@ -7,8 +7,9 @@ import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
 import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
 import { sanitizeM0MultiSelections, sanitizeM0SingleSelection } from "../ui/src/regional/m0Selections.ts";
 import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
-import { installM0CanvasVisibility, markM0NodeElement } from "../ui/src/regional/m0VisualProjection.ts";
+import { installM0CanvasVisibility, markM0NodeElement, projectedProviderLink } from "../ui/src/regional/m0VisualProjection.ts";
 import { resolveM0LocalLinkedCollector } from "../ui/src/regional/m0LocalGraph.ts";
+import { setLegacyDebugVisible } from "../ui/src/regional/legacyPorts.ts";
 
 const collectors=[{id:"collector-1",label:"Collector One",resources:[{id:"resource-1",label:"Alpha"}]}];
 
@@ -184,17 +185,130 @@ test("the spike uses ordinary graph links without prompt hooks or name fallback"
   assert.match(source,/\[0,50,150,300\]\.forEach/);
 });
 
-test("a converted subgraph host cannot keep root resource links in debug presentation",()=>{
+test("a converted subgraph host projects its real root segment only in global debug mode",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
   const output={links:[7],type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",__bvM0ResourceSlot:true};
   const input={link:7,type:"BV_RUNTIME_RESOURCE_PROVIDER_M0",__bvM0ResourceSlot:true};
   const collector={id:1,__bvM0ResourceProvider:true,outputs:[output]};
-  const subgraphHost={id:2,properties:{bvM0DebugVisible:true},inputs:[input]};
-  const nodes=new Map([[1,collector],[2,subgraphHost]]),seen={link:false};
-  const canvas={graph:{_nodes:[collector,subgraphHost],getNodeById(id){return nodes.get(id)}},renderLink(){seen.link=true},drawNode(){}};
+  const subgraphHost={id:2,inputs:[input]};
+  const nodes=new Map([[1,collector],[2,subgraphHost]]),seen={links:0,dash:null};
+  const graph={_nodes:[collector,subgraphHost],links:new Map([[7,{id:7,origin_id:1,origin_slot:0,target_id:2,target_slot:0}]]),getNodeById(id){return nodes.get(id)}};
+  const canvas={graph,renderLink(){seen.links++},drawNode(){}};
   installM0CanvasVisibility(canvas);
-  const ctx={save(){},restore(){},setLineDash(){},lineDashOffset:0};
+  const ctx={save(){},restore(){},setLineDash(value){seen.dash=value},lineDashOffset:0};
+  setLegacyDebugVisible(false,graph);
   canvas.renderLink(ctx,null,null,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
-  assert.equal(seen.link,false);
+  assert.equal(seen.links,0);
+  setLegacyDebugVisible(true,graph);
+  canvas.renderLink(ctx,null,null,{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
+  assert.equal(seen.links,1);assert.deepEqual(seen.dash,[7,5]);
+  setLegacyDebugVisible(false,graph);
+});
+
+test("subgraph special input and output links classify by canonical slot index",()=>{
+  const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"},ordinary={type:"IMAGE"};
+  const consumer={id:4,inputs:[{type:provider.type}],outputs:[]};
+  const collector={id:5,inputs:[],outputs:[{type:provider.type}]};
+  const nodes=new Map([[4,consumer],[5,collector]]);
+  const graph={inputNode:{id:-10,slots:[provider,ordinary]},outputNode:{id:-20,slots:[provider]},inputs:[provider,ordinary],outputs:[provider],getNodeById(id){return nodes.get(id)}};
+  assert.equal(projectedProviderLink(graph,{origin_id:-10,origin_slot:0,target_id:4,target_slot:0}),true);
+  assert.equal(projectedProviderLink(graph,{origin_id:-10,origin_slot:1,target_id:4,target_slot:0}),false);
+  assert.equal(projectedProviderLink(graph,{origin_id:5,origin_slot:0,target_id:-20,target_slot:0}),true);
+});
+
+test("subgraph special I/O debug projection preserves graph truth",async()=>{
+  const {setLegacyDebugVisible}=await import("../ui/src/regional/legacyPorts.ts");
+  const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER_M0"};
+  const input={type:provider.type,link:11},output={type:provider.type,links:[12]};
+  const consumer={id:4,inputs:[input],outputs:[]},collector={id:5,inputs:[],outputs:[output]};
+  const nodes=new Map([[4,consumer],[5,collector]]),links=new Map([[11,{id:11,origin_id:-10,origin_slot:0,target_id:4,target_slot:0}],[12,{id:12,origin_id:5,origin_slot:0,target_id:-20,target_slot:0}]]);
+  const graph={_nodes:[consumer,collector],links,inputNode:{id:-10,slots:[provider]},outputNode:{id:-20,slots:[provider]},inputs:[provider],outputs:[provider],getNodeById(id){return nodes.get(id)}};
+  const seen=[],canvas={graph,renderLink(_ctx,_a,_b,link){seen.push(link.id)},drawNode(){}};
+  const ctx={save(){},restore(){},setLineDash(){},lineDashOffset:0};
+  installM0CanvasVisibility(canvas);setLegacyDebugVisible(false,graph);
+  for(const link of links.values())canvas.renderLink(ctx,null,null,link);
+  assert.deepEqual(seen,[]);
+  setLegacyDebugVisible(true,graph);
+  for(const link of links.values())canvas.renderLink(ctx,null,null,link);
+  assert.deepEqual(seen,[11,12]);
+  assert.equal(input.link,11);assert.deepEqual(output.links,[12]);assert.deepEqual([...links.keys()],[11,12]);
+  setLegacyDebugVisible(false,graph);
+});
+
+test("debug provider segments use titlebar and inner subgraph-boundary anchors",()=>{
+  setLegacyDebugVisible(true);
+  try{
+    const ctx={save(){},restore(){},setLineDash(){},lineDashOffset:0};
+    const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER"};
+    const sender={id:1,pos:[80,260],size:[280,80],outputs:[provider]};
+    const ordinaryInputs=Array.from({length:10},(_,index)=>({name:`input_${index}`,type:"IMAGE",link:index+10}));
+    const hostInputs=[provider,...ordinaryInputs],hostOutputs=[provider];
+    const host={id:5,pos:[500,260],size:[240,80],inputs:hostInputs,outputs:hostOutputs};
+    const receiver={id:4,pos:[900,260],size:[280,80],inputs:[provider]};
+    const rootNodes=new Map([[1,sender],[5,host],[4,receiver]]),rootSeen=[];
+    const rootCanvas={graph:{getNodeById(id){return rootNodes.get(id)}},drawNode(){},drawFrontCanvas(){},renderLink(_ctx,from,to){rootSeen.push([from,to])}};
+    installM0CanvasVisibility(rootCanvas);
+    rootCanvas.renderLink(ctx,[999,999],[888,888],{origin_id:1,origin_slot:0,target_id:5,target_slot:0},false,0);
+    rootCanvas.renderLink(ctx,[999,999],[888,888],{origin_id:5,origin_slot:0,target_id:4,target_slot:0},false,0);
+    assert.deepEqual(rootSeen,[[[360,245],[500,245]],[[740,245],[900,245]]]);
+    assert.equal(host.inputs,hostInputs);assert.equal(host.outputs,hostOutputs);assert.deepEqual(host.inputs.slice(1),ordinaryInputs);
+    ordinaryInputs.forEach((slot,index)=>{assert.equal(host.inputs[index+1],slot);assert.equal(slot.link,index+10)});
+
+    const innerReceiver={id:3,pos:[260,80],size:[280,80],inputs:[provider]};
+    const innerSender={id:2,pos:[420,300],size:[280,80],outputs:[provider]};
+    const inputNode={id:-10,size:[48,68],slots:[provider]};
+    const outputNode={id:-20,size:[48,68],slots:[provider]};
+    const innerNodes=new Map([[3,innerReceiver],[2,innerSender]]),innerSeen=[];
+    const innerCanvas={graph:{inputNode,outputNode,inputs:[provider],outputs:[provider],getNodeById(id){return innerNodes.get(id)}},drawNode(){},drawFrontCanvas(){},renderLink(_ctx,from,to){innerSeen.push([from,to])}};
+    installM0CanvasVisibility(innerCanvas);
+    innerCanvas.renderLink(ctx,[116,148],[888,888],{origin_id:-10,origin_slot:0,target_id:3,target_slot:0},false,0);
+    innerCanvas.renderLink(ctx,[999,999],[832,368],{origin_id:2,origin_slot:0,target_id:-20,target_slot:0},false,0);
+    assert.deepEqual(innerSeen,[[[116,128],[260,65]],[[700,285],[832,348]]]);
+  }finally{setLegacyDebugVisible(false)}
+});
+
+test("subgraph DG anchors are exactly one port above the first ordinary boundary port",()=>{
+  setLegacyDebugVisible(true);
+  try{
+    const ctx={save(){},restore(){},setLineDash(){}};
+    const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER",__bvDgAnchor:true,__bvM0PortHidden:true},ordinary={type:"IMAGE"},receiver={id:3,pos:[300,100],size:[200,80],inputs:[provider]};
+    const inputNode={id:-10,slots:[{name:"samples",type:"IMAGE",pos:[140,200]},{name:"technical",type:"*",pos:[140,220]}]};
+    const nodes=new Map([[-99,inputNode],[3,receiver]]),seen=[];
+    const canvas={graph:{inputNode,inputs:[ordinary,provider],getNodeById(id){return nodes.get(id)}},drawNode(){},drawFrontCanvas(){},renderLink(_ctx,from,to){seen.push([from,to])}};
+    installM0CanvasVisibility(canvas);canvas.renderLink(ctx,[140,220],[300,120],{origin_id:-99,origin_slot:1,target_id:3,target_slot:0},false,0);
+    assert.deepEqual(seen[0][0],[140,180]);
+  }finally{setLegacyDebugVisible(false)}
+});
+
+test("output DG anchor stays above ordinary port one on a native special output node",()=>{
+  setLegacyDebugVisible(true);
+  try{
+    const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER"},ordinary={name:"IMAGE",type:"IMAGE",pos:[800,200]},technical={...provider,pos:[800,220],measurement:{minHeight:20,maxHeight:20,desiredHeight:20}},add={name:"new",pos:[800,240]};
+    const slots=[ordinary,technical],outputNode={id:-20,get slots(){return slots},get allSlots(){return [...slots,add]},arrange(){add.pos[1]=ordinary.pos[1]+20+technical.measurement.desiredHeight}};
+    const sender={id:1,pos:[100,100],size:[200,80],outputs:[provider]},seen={};
+    const canvas={graph:{outputNode,outputs:[ordinary,provider],getNodeById(id){return id===1?sender:outputNode}},drawNode(){},drawFrontCanvas(){seen.slots=outputNode.allSlots.map(slot=>slot.name)},renderLink(_ctx,from,to){seen.to=to}};
+    installM0CanvasVisibility(canvas);canvas.drawFrontCanvas();canvas.renderLink({save(){},restore(){},setLineDash(){}},[300,85],[800,220],{origin_id:1,origin_slot:0,target_id:-20,target_slot:1});
+    assert.deepEqual(seen.to,[800,180]);assert.deepEqual(seen.slots,["IMAGE","new"]);
+    assert.equal(add.pos[1],220);assert.equal(technical.measurement.desiredHeight,0);assert.equal(outputNode.slots,slots);
+  }finally{setLegacyDebugVisible(false)}
+});
+
+test("subgraph host input projection keeps ordinary port one while DG stays on the titlebar",()=>{
+  setLegacyDebugVisible(true);
+  try{
+    const ctx={save(){},restore(){},setLineDash(){}};
+    const provider={type:"BV_RUNTIME_RESOURCE_PROVIDER"},ordinary={name:"samples",type:"IMAGE",link:42};
+    const child={inputs:[provider,ordinary],outputs:[]};
+    const hostInputs=[{type:provider.type,link:11},ordinary],host={id:5,pos:[500,260],size:[240,80],inputs:hostInputs,outputs:[],subgraph:child};
+    const sender={id:1,pos:[80,260],size:[280,80],outputs:[provider]},nodes=new Map([[1,sender],[5,host]]),seen={};
+    const canvas={graph:{getNodeById(id){return nodes.get(id)}},drawFrontCanvas(){},drawNode(node){seen.visibleInputs=node.inputs.map(slot=>slot.name??"")},renderLink(_ctx,from,to){seen.link=[from,to]}};
+    installM0CanvasVisibility(canvas);
+    canvas.drawNode(host,ctx);
+    canvas.renderLink(ctx,[360,245],[500,280],{origin_id:1,origin_slot:0,target_id:5,target_slot:0},false,0);
+    assert.deepEqual(seen.visibleInputs,["samples"]);
+    assert.deepEqual(seen.link,[[360,245],[500,245]]);
+    assert.equal(host.inputs,hostInputs);assert.equal(host.inputs[1],ordinary);assert.equal(ordinary.link,42);
+  }finally{setLegacyDebugVisible(false)}
 });
 
 test("the canvas projection hides links without replacing canonical Nodes 2.0 graph arrays",()=>{
@@ -252,6 +366,56 @@ test("classic canvas suppresses provider presentation without replacing canonica
   assert.equal(Object.hasOwn(output,"draw"),false);assert.equal(Object.hasOwn(input,"draw"),false);
   assert.equal(output.draw,slotPrototype.draw);assert.equal(input.drawCollapsed,slotPrototype.drawCollapsed);
   assert.deepEqual(collector.outputs,[output,ordinary]);assert.deepEqual(consumer.inputs,[input]);
+});
+
+test("virtual subgraph I/O provider slots are portless for one draw and restore exactly",()=>{
+  const draws=[];
+  const prototype={draw(){draws.push("slot")},drawCollapsed(){draws.push("collapsed")}};
+  const provider=Object.assign(Object.create(prototype),{name:"resource_provider",label:"Provider",localized_name:"Provider",type:"BV_RUNTIME_RESOURCE_PROVIDER",linkIds:[11]});
+  const ordinary={name:"image",type:"IMAGE",draw(){draws.push("ordinary")}};
+  const slots=[provider,ordinary],virtualNode={id:-10,get slots(){return slots},get allSlots(){return [...slots,{name:"new"}]}};
+  const seen={};
+  const canvas={graph:{inputNode:virtualNode},renderLink(){},drawFrontCanvas(){seen.frontSlots=virtualNode.allSlots.map(slot=>slot.name)},drawNode(node){seen.same=node.slots===slots;seen.visibleSlots=node.slots.map(slot=>slot.name);seen.visibleAll=node.allSlots.map(slot=>slot.name);seen.provider=[provider.name,provider.label,provider.localized_name,provider.hidden];for(const slot of node.slots)slot.draw?.()}};
+  installM0CanvasVisibility(canvas);
+  canvas.drawFrontCanvas();
+  assert.deepEqual(seen.frontSlots,["image","new"]);assert.equal(virtualNode.slots,slots);
+  canvas.drawNode(virtualNode,{});
+  assert.equal(seen.same,false);assert.deepEqual(seen.visibleSlots,["image"]);assert.deepEqual(seen.visibleAll,["image","new"]);assert.deepEqual(draws,["ordinary"]);
+  assert.deepEqual(seen.provider,["","","",true]);
+  assert.equal(virtualNode.slots,slots);assert.deepEqual(virtualNode.allSlots.map(slot=>slot.name),["resource_provider","image","new"]);assert.equal(provider.name,"resource_provider");assert.equal(provider.label,"Provider");assert.equal(provider.hidden,undefined);
+  assert.equal(Object.hasOwn(provider,"draw"),false);assert.equal(provider.draw,prototype.draw);assert.deepEqual(provider.linkIds,[11]);
+});
+
+test("multiple DG-only boundary channels share one anchor above Add during nested and throwing draws",()=>{
+  for(const output of [false,true]){
+    const providers=[0,1,2].map(index=>({name:"dg"+index,type:"BV_RUNTIME_RESOURCE_PROVIDER",pos:[100,200+index*20]})),add={name:"new",pos:[100,260]};
+    const virtual={id:output?-20:-10,emptySlot:add,get slots(){return providers},get allSlots(){return [...providers,add]}},node={id:1,inputs:providers,outputs:providers,pos:[400,300],size:[200,80]};
+    const graph={inputs:output?[]:providers,outputs:output?providers:[],inputNode:output?undefined:virtual,outputNode:output?virtual:undefined,getNodeById(id){return id===1?node:virtual}};
+    const ctx={save(){},restore(){},setLineDash(){}},seen=[];let nested=false,throws=false;
+    const link=index=>output?{origin_id:1,origin_slot:index,target_id:-20,target_slot:index}:{origin_id:-10,origin_slot:index,target_id:1,target_slot:index};
+    const canvas={graph,drawNode(){},renderLink(_ctx,a,b){seen.push(output?b:a)},drawFrontCanvas(){
+      for(let i=0;i<3;i++)this.renderLink(ctx,[100,200+i*20],[100,200+i*20],link(i));
+      if(!nested){nested=true;this.drawFrontCanvas();nested=false}if(throws)throw new Error("draw failure");
+    }};
+    setLegacyDebugVisible(true,graph);installM0CanvasVisibility(canvas);
+    try{canvas.drawFrontCanvas();assert.ok(seen.length>=6);assert.ok(seen.every(pos=>pos[0]===100&&pos[1]===240));
+      throws=true;assert.throws(()=>canvas.drawFrontCanvas(),/draw failure/);assert.equal(virtual.slots,providers);
+      add.pos=[150,360];seen.length=0;canvas.renderLink(ctx,[0,0],[0,0],link(2));assert.deepEqual(seen,[[150,340]],"no draw-local snapshot may leak into the next frame");
+    }finally{setLegacyDebugVisible(false)}
+  }
+});
+
+test("virtual input filtering follows graph definitions when Comfy boundary slots are unmarked",()=>{
+  const measurement={minHeight:20,maxHeight:20,desiredHeight:20},sample={name:"samples",type:"IMAGE",pos:[100,200]},technical={name:"technical",type:"*",pos:[100,220],measurement},add={name:"new",pos:[100,240]};
+  const slots=[sample,technical],arrangements=[],virtualNode={id:-10,emptySlot:add,size:[50,60],get slots(){return slots},get allSlots(){return [...slots,add]},arrange(){arrangements.push([measurement.minHeight,measurement.maxHeight,measurement.desiredHeight])}};
+  const seen={};
+  const canvas={graph:{inputNode:virtualNode,inputs:[{name:"samples",type:"IMAGE"},{name:"__bv_dg",type:"BV_RUNTIME_RESOURCE_PROVIDER",__bvM0PortHidden:true}]},renderLink(){},drawFrontCanvas(){seen.front=virtualNode.allSlots.map(slot=>slot.name)},drawNode(node){seen.node=node.slots.map(slot=>slot.name);seen.all=node.allSlots.map(slot=>slot.name)}};
+  installM0CanvasVisibility(canvas);canvas.drawFrontCanvas();canvas.drawNode(virtualNode,{});
+  assert.deepEqual(seen,{front:["samples","new"],node:["samples"],all:["samples","new"]});
+  assert.deepEqual(arrangements,[[0,0,0],[0,0,0]]);
+  assert.equal(virtualNode.slots,slots);assert.deepEqual(virtualNode.allSlots,[sample,technical,add]);
+  assert.deepEqual([sample.pos,technical.pos,add.pos],[[100,200],[100,220],[100,240]]);
+  assert.deepEqual(measurement,{minHeight:0,maxHeight:0,desiredHeight:0});
 });
 
 test("debug rendering gives native M0 links a dashed animated projection",()=>{
@@ -365,6 +529,32 @@ test("workflow debug reveals native V3 provider links with the debug projection"
   setLegacyDebugVisible(true,graph);canvas.renderLink(ctx,[0,0],[1,1],{origin_id:1,origin_slot:0,target_id:2,target_slot:0});
   assert.equal(seen.link,true);assert.deepEqual(seen.dash,[7,5]);
   setLegacyDebugVisible(false,graph);
+});
+
+test("DG host fan-in follows every move even when the first provider has no rendered edge",()=>{
+  setLegacyDebugVisible(true);
+  try{
+    const provider=()=>({type:"BV_RUNTIME_RESOURCE_PROVIDER",__bvM0ResourceSlot:true});
+    const ordinary={name:"samples",type:"IMAGE",link:20};
+    const host={id:2,pos:[400,200],size:[240,80],inputs:[provider(),provider(),ordinary],outputs:[provider()],subgraph:{}};
+    const sender={id:1,pos:[0,100],size:[200,80],outputs:[provider()]},receiver={id:3,pos:[900,100],size:[200,80],inputs:[provider()]};
+    const nodes=new Map([[1,sender],[2,host],[3,receiver]]),seen=[];
+    const canvas={graph:{getNodeById(id){return nodes.get(id)}},drawNode(){},renderLink(_ctx,a,b){seen.push([a,b])}};
+    const ctx={save(){},restore(){},setLineDash(){}};installM0CanvasVisibility(canvas);
+    const incoming={origin_id:1,origin_slot:0,target_id:2,target_slot:1},outgoing={origin_id:2,origin_slot:0,target_id:3,target_slot:0};
+    for(const [x,y,width] of [[400,200,240],[620,350,240],[280,150,320]]){
+      host.pos[0]=x;host.pos[1]=y;host.size[0]=width;
+      // Each drag frame renders the connected second provider only. No edge ever refreshes slot 0.
+      canvas.renderLink(ctx,[200,85],[400,185],incoming);
+      canvas.renderLink(ctx,[640,185],[900,85],outgoing);
+      assert.deepEqual(seen.at(-2)[1],[x,y-15]);assert.deepEqual(seen.at(-1)[0],[x+width,y-15]);
+      canvas.renderLink(ctx,[200,85],[999,999],{...incoming,target_slot:0});
+      assert.deepEqual(seen.at(-1)[1],[x,y-15],"anchor-first and anchor-last share the current point");
+      canvas.renderLink(ctx,[10,20],[30,40],{...incoming,target_slot:2});
+      assert.deepEqual(seen.at(-1),[[10,20],[30,40]],"ordinary link geometry is not projected");
+      assert.equal(host.inputs[2],ordinary);assert.equal(ordinary.link,20);
+    }
+  }finally{setLegacyDebugVisible(false)}
 });
 
 test("multi debug projects every native edge onto one visual fan-in anchor",()=>{

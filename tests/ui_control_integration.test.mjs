@@ -455,7 +455,7 @@ test("Smart Pipe editor synchronizes native predecessor state and validates requ
 test("Smart Pipe Merge keeps its wireless source picker usable across window widths",()=>{
     assert.match(smartPipeEditor,/bv-ui-inline-footer bv-smart-pipe-merge-source/);
     assert.match(styles,/\.bv-smart-pipe-merge-source>\.bv-control-field\s*\{[^}]*flex:1 1 260px[^}]*min-width:min\(260px,100%\)/s);
-    assert.match(smartPipeEditor,/disabled=\{!candidate\}/);
+    assert.match(smartPipeEditor,/disabled=\{!candidate\|\|!nextMergeSourceKey\(sources\)\}/);
     assert.match(smartPipeEditor,/setSelected\(""\)/);
 });
 

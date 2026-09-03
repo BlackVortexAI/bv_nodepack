@@ -1,7 +1,7 @@
 import{legacyDebugVisible}from"./legacyPorts.js";
 import{resolveNodePresentation}from"./nodePresentation.js";
 import{installNodes2NodePresentation,removeNodes2NodePresentation}from"./nodes2NodePresentation.js";
-import{cancelScheduledProjectedPortLayout,installProjectedProviderAnchors,removeProjectedProviderAnchors}from"./portProjection.js";
+import{applyProjectedSlotLabel,cancelScheduledProjectedPortLayout,installProjectedProviderAnchors,removeProjectedProviderAnchors}from"./portProjection.js";
 import{installPresentationSizeLifecycle,presentationSize,removePresentationSizeLifecycle,setAutomaticPresentationSize}from"./presentationSize.js";
 
 type ClassicPresentationOptions=Readonly<{legacyDebug?:boolean;minWidth?:number;compactWidgetOnly?:boolean}>;
@@ -83,7 +83,7 @@ export function applyClassicNodePresentation(node:any,nodeType:string,options:Cl
         slot.hidden=projected.role==="legacy"?false:!projected.visible;
         slot.__bvM0PortHidden=!projected.visible;
         slot.__bvM0VisualHidden=!projected.visible;
-        if(projected.role==="provider"){slot.label="";slot.localized_name="";}
+        if(projected.role==="provider")applyProjectedSlotLabel(slot);
     }
     installProjectedProviderAnchors(node,legacyDebug);
     for(const projected of plan.widgets){

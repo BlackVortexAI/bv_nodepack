@@ -1,8 +1,10 @@
 import { applyClassicNodePresentation } from "./classicNodePresentation";
-import { lutV3Catalog, prepareLutRegistryV3, prepareLutV3 } from "./lutV3Catalog";
+import { commitLutSourceConfig, lutV3Catalog, prepareLutRegistryV3, prepareLutV3 } from "./lutV3Catalog";
 import { parseLutPlanConfig } from "./lutPlanConfig";
 import { parseLutRegistryConfig, serializeLutRegistryConfig } from "./lutRegistryConfig";
 import { canonicalLutPath, lutLibrary, mergeLutChoices } from "./lutLibrary";
+import { markRegionalConsumer } from "./regionalGraphSync";
+import { installRegistryDgLifecycle } from "./registryDgLifecycle";
 
 type WindowCandidate={id:string;label:string};
 type LutPresentationDependencies=Readonly<{
@@ -97,7 +99,7 @@ export function installLutNodePresentation(nodeType:any,nodeData:any,deps:LutPre
     }
     if(nodeName==="BV LUT Loop Start"){
         const prepare=(node:any)=>{node.__bvPresentationManaged=true;prepareLutV3(node,deps.graphOwner(node));applyClassicNodePresentation(node,nodeName)};
-        chain(nodeType,"onNodeCreated",prepare);chain(nodeType,"onConfigure",prepare);chain(nodeType,"onConnectionsChange",prepare);return true;
+        installRegistryDgLifecycle(nodeType,prepare);return true;
     }
     if(nodeName==="BV Regional LUT Plan"){
         const prepare=(node:any)=>{
@@ -110,17 +112,20 @@ export function installLutNodePresentation(nodeType:any,nodeData:any,deps:LutPre
             if(!action){
                 action=node.addWidget("button","configure_lut_plan",null,()=>{
                     const document=deps.sourceDocument(node);if(!document)return;
-                    deps.openPlan({nodeId:deps.scopedNodeKey(node),regions:document.regions,lutCollectors:lutV3Catalog(node),detectorCollectors:deps.detectorCollectors(node),stored:hidden.value,save:(value:string)=>{hidden.value=value;hidden.callback?.(value);prepareLutV3(node,deps.graphOwner(node));prepare(node);dirty(node)},nodes:deps.workflowNodesOfType(nodeName).filter(deps.windowMenuVisible).map(item=>({id:deps.scopedNodeKey(item),label:`${item.title||nodeName} · #${item.id}`})),onNavigate:(targetId:string,replace:boolean)=>{const target=deps.workflowNodesOfType(nodeName).find(item=>deps.scopedNodeKey(item)===targetId),targetAction=target?.widgets?.find((item:any)=>item.name==="configure_lut_plan");if(targetAction)deps.switchView(`lut-plan:${deps.scopedNodeKey(node)}`,`lut-plan:${deps.scopedNodeKey(target)}`,()=>targetAction.callback?.(),replace)},currentNode:node});
+                    deps.openPlan({nodeId:deps.scopedNodeKey(node),regions:document.regions,lutCollectors:lutV3Catalog(node),detectorCollectors:deps.detectorCollectors(node),stored:hidden.value,save:(value:string)=>{commitLutSourceConfig(node,value);prepareLutV3(node,deps.graphOwner(node));prepare(node);dirty(node)},nodes:deps.workflowNodesOfType(nodeName).filter(deps.windowMenuVisible).map(item=>({id:deps.scopedNodeKey(item),label:`${item.title||nodeName} · #${item.id}`})),onNavigate:(targetId:string,replace:boolean)=>{const target=deps.workflowNodesOfType(nodeName).find(item=>deps.scopedNodeKey(item)===targetId),targetAction=target?.widgets?.find((item:any)=>item.name==="configure_lut_plan");if(targetAction)deps.switchView(`lut-plan:${deps.scopedNodeKey(node)}`,`lut-plan:${deps.scopedNodeKey(target)}`,()=>targetAction.callback?.(),replace)},currentNode:node});
                 },{serialize:false});
                 action.serialize=false;
             }
-            const document=deps.sourceDocument(node),count=document?parseLutPlanConfig(hidden.value,document.regions).jobs.length:0;
-            action.label=document?`Configure LUT Plan · ${count} Job${count===1?"":"s"}`:"Connect a BV Regional Prompt";
-            action.disabled=!document;
+            const refreshSource=()=>{
+                const document=deps.sourceDocument(node),count=document?parseLutPlanConfig(hidden.value,document.regions).jobs.length:0;
+                action.label=document?`Configure LUT Plan · ${count} Job${count===1?"":"s"}`:"Connect a BV Regional Prompt";
+                action.disabled=!document;dirty(node);
+            };
+            markRegionalConsumer(node,refreshSource);refreshSource();
             applyClassicNodePresentation(node,nodeName);
             dirty(node);
         };
-        chain(nodeType,"onNodeCreated",prepare);chain(nodeType,"onConfigure",prepare);chain(nodeType,"onConnectionsChange",prepare);return true;
+        installRegistryDgLifecycle(nodeType,prepare);return true;
     }
     return false;
 }

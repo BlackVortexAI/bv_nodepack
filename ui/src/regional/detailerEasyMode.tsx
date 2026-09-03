@@ -1,6 +1,7 @@
 import { ResourcePicker, type ResourcePickerCollector } from "../ui/components";
 import { defaultConditioning, defaultDetection, parseDetailerPlanConfig, serializeDetailerPlanConfig, type DetailerPlanConfig, type DetailerPlanRegion } from "./detailerPlanConfig";
 import { detailerV3Catalog, scheduleDetailerPromptV3Reconcile } from "./detailerV3Graph";
+import { enableRegistryFamily } from "./registryDgFamilies";
 
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 export const emptyDetailerEasyConfig=():DetailerPlanConfig=>({version:1,jobs:[]});
@@ -24,6 +25,6 @@ export function DetailerEasyRegionPicker({node,config,regionId,collectors,onConf
     if(!job)return null;
     return <ResourcePicker label="Detailer detector" emptyLabel="No detector · use composed region mask" collectors={collectors} collectorId={assignment?.source.collector_id??""} resourceId={assignment?.source.resource_id??""} onSelection={(collectorId,resourceId)=>{
         const next={...config,jobs:config.jobs.map(item=>item.id!==job.id?item:{...item,detector_assignments:collectorId&&resourceId?[{id:assignment?.id??crypto.randomUUID(),source:{collector_id:collectorId,resource_id:resourceId},options:assignment?.options??defaultDetection()}]:[]})};
-        onConfig(writeDetailerEasyConfig(node,next));
+        enableRegistryFamily(node,"detailer");onConfig(writeDetailerEasyConfig(node,next));
     }}/>;
 }

@@ -1,6 +1,7 @@
 import{legacyDebugVisible}from"./legacyPorts.js";
 import{resolveNodePresentation}from"./nodePresentation.js";
 import{refreshProjectedProviderAnchors}from"./portProjection.js";
+import{syncProjectedPortElementInteraction,removeProjectedPortElementInteraction}from"./projectedPortInteraction.js";
 import{configurePresentationSizeLifecycle,installPresentationSizeLifecycle,isPresentationUserResizing,presentationSize,setAutomaticPresentationSize}from"./presentationSize.js";
 
 type Nodes2Document=Pick<Document,"querySelector">;
@@ -8,6 +9,8 @@ type Nodes2PresentationOptions=Readonly<{legacyDebug?:boolean}>;
 type ManagedPresentation={node:any;nodeType:string;documentLike:Nodes2Document;classicRestored?:boolean};
 
 const managed=new Map<any,ManagedPresentation>();
+const interactionRows=new WeakMap<object,Set<any>>();
+const clearInteractionRows=(node:any)=>{for(const row of interactionRows.get(node)??[])removeProjectedPortElementInteraction(row,node);interactionRows.delete(node)};
 type LegacyColorBinding={variable:string;value:string;priority:string};
 type HeightBinding={value:string;priority:string;applied:string};
 type GeometryBinding={element:any;observer:any;observed:Set<any>};
@@ -169,7 +172,7 @@ const connected=(slot:any,direction:"input"|"output")=>direction==="input"?slot?
 export function projectNodes2NodePresentation(node:any,nodeType:string,documentLike?:Nodes2Document,options:Nodes2PresentationOptions={}){
     if(!documentLike)return false;
     const element=documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(node?.id)}"]`) as HTMLElement|null;
-    if(!element){disconnectGeometryObservation(node);return false;}
+    if(!element){clearInteractionRows(node);disconnectGeometryObservation(node);return false;}
     installPresentationSizeLifecycle(node);
     node.__bvNodes2PresentationActive=true;
     refreshProjectedProviderAnchors(node,false);
@@ -183,10 +186,12 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
     },context);
     const inputRows=rows(element,".lg-slot--input"),outputRows=rows(element,".lg-slot--output"),inputRowsByIndex=canonicalRowIndexes(inputRows,"input"),outputRowsByIndex=canonicalRowIndexes(outputRows,"output");
     const previousLegacyRows=legacyRowsByNode.get(node)??new Set<any>(),currentLegacyRows=new Set<any>();
+    const previousInteractionRows=interactionRows.get(node)??new Set<any>(),currentInteractionRows=new Set<any>();
     let inputIndex=0,outputIndex=0,reservedInputs=0,reservedOutputs=0,measuredInputs=0,measuredOutputs=0;
     const measuredRowHeights:number[]=[];
     for(const port of plan.ports){
         const index=port.direction==="input"?inputIndex++:outputIndex++,indexed=port.direction==="input"?inputRowsByIndex:outputRowsByIndex,ordered=port.direction==="input"?inputRows:outputRows,row=indexed.size?indexed.get(index):ordered[index];
+        if(row){syncProjectedPortElementInteraction(row,node,port.direction,index);currentInteractionRows.add(row)}
         if(port.role!=="provider"&&(port.visible||port.role==="legacy")){
             const rowHeight=Number(row?.offsetHeight??0);
             if(port.direction==="input"){reservedInputs++;if(rowHeight>0){measuredInputs++;measuredRowHeights.push(rowHeight)}}
@@ -208,6 +213,8 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
         }else setVisible(target,port.visible);
     }
     for(const row of previousLegacyRows)if(!currentLegacyRows.has(row))restoreLegacyColor(row);
+    for(const row of previousInteractionRows)if(!currentInteractionRows.has(row))removeProjectedPortElementInteraction(row,node);
+    interactionRows.set(node,currentInteractionRows);
     if(currentLegacyRows.size)legacyRowsByNode.set(node,currentLegacyRows);else legacyRowsByNode.delete(node);
     const widgetRows=rows(element,'[data-testid="node-widgets"] > [data-testid="node-widget"]');
     const remainingWidgets=[...(node.widgets??[])];
@@ -239,7 +246,7 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
 
 const projectManaged=()=>{
     for(const[node,entry]of managed){
-        if(entry.node?.graph==null){const element=entry.documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(entry.node?.id)}"]`);restoreElementHeight(element);disconnectGeometryObservation(node);managed.delete(node);settleTokens.delete(node);delete entry.node?.__bvApplyNodes2Presentation;continue}
+        if(entry.node?.graph==null){clearInteractionRows(node);const element=entry.documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(entry.node?.id)}"]`);restoreElementHeight(element);disconnectGeometryObservation(node);managed.delete(node);settleTokens.delete(node);delete entry.node?.__bvApplyNodes2Presentation;continue}
         const projected=projectNodes2NodePresentation(entry.node,entry.nodeType,entry.documentLike);
         if(projected){entry.classicRestored=false;continue}
         if(!entry.classicRestored){entry.classicRestored=true;entry.node.__bvNodes2PresentationActive=false;entry.node.__bvApplyPresentation?.()}
@@ -278,6 +285,7 @@ export function installNodes2NodePresentation(node:any,nodeType:string,documentL
 }
 
 export function removeNodes2NodePresentation(node:any){
+    clearInteractionRows(node);
     for(const row of legacyRowsByNode.get(node)??[])restoreLegacyColor(row);
     legacyRowsByNode.delete(node);
     const entry=managed.get(node),element=entry?.documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(node?.id)}"]`);restoreElementHeight(element);

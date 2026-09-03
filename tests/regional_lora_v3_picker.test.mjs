@@ -101,7 +101,7 @@ test("Regional Prompt toggle commits a bound Registry stack and its provider lin
  installLoraV3Ui(PromptType,{name:"BV Regional Prompt"},owner);
  const timers=[],originalSetTimeout=globalThis.setTimeout;globalThis.setTimeout=(callback)=>{timers.push(callback);return timers.length};
  const flush=()=>{let count=0;while(timers.length){if(++count>100)throw new Error("scheduler did not settle");timers.shift()();}};
- try{registry.onNodeCreated();prompt.onNodeCreated();await Promise.resolve();flush();}finally{globalThis.setTimeout=originalSetTimeout;}
+ try{registry.onNodeCreated();prompt.onNodeCreated();prompt.onConfigure({properties:{}});await Promise.resolve();flush();}finally{globalThis.setTimeout=originalSetTimeout;}
  assert.equal(registry.__bvConcreteGraph,subgraph);assert.equal(prompt.__bvConcreteGraph,subgraph);assert.equal(registry.graph,root);assert.equal(prompt.graph,root);
  const availableBefore=loraV3Catalog(prompt);assert.deepEqual(availableBefore.map(item=>[item.id,item.resources[0].id,item.resources[0].label]),[[registryId,stackId,"Portrait"]]);
  assert.equal(root.links.size,0);assert.equal(subgraph.links.size,0);
@@ -149,7 +149,7 @@ test("adding an advanced LoRA stack commits through the graph-linking helper",()
 test("LoRA config edits defer and coalesce native graph reconciliation",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");
  assert.match(source,/writeNodeLoraV3Config\(node,next\);scheduleConfiguredLoraWriterTree\(node,next\)/);
- assert.match(source,/__bvLoraReconcileScheduled/);assert.match(source,/setTimeout\(\(\)=>/);
+ assert.match(source,/__bvLoraReconcileScheduled/);assert.match(source,/scheduleDgUpgrade\(node,run\)/);
 });
 test("a temporarily missing collector cannot crash Regional Prompt reactivation",()=>{
  const source=readFileSync(new URL("../ui/src/regional/loraV3Ui.tsx",import.meta.url),"utf8");

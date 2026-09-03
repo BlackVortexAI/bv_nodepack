@@ -7,6 +7,7 @@ import {
   duplicateDynamicInputIndexes,
   hasMergeSource,
   normalizeMergeSources,
+  nextMergeSourceKey,
   SMART_PIPE_MERGE_DEFAULT_TITLE,
 } from "./bv_smart_pipe_merge_model.js";
 
@@ -186,11 +187,9 @@ function convertAddSource(node, index, linkInfo) {
     return true;
   }
   const state = stateFor(node);
-  let ordinal = state.nextOrdinal;
-  const used = new Set(sources.map((source) => source.key));
-  while (used.has(`pipe_${String(ordinal).padStart(3, "0")}`)) ordinal++;
-  const key = `pipe_${String(ordinal).padStart(3, "0")}`;
-  state.nextOrdinal = ordinal + 1;
+  const key = nextMergeSourceKey(sources);
+  if (!key) return false;
+  state.nextOrdinal = Number(key.slice(5)) + 1;
   input.name = key;
   input.label = `Wired ${sources.length + 1}`;
   input.bvAddPipeSource = false;

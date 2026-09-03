@@ -10,6 +10,8 @@ import {
   crossScopeDescriptors,
   detachedHostRouting,
   executionScope,
+  effectiveSmartPipeEdges,
+  effectiveDescriptorMode,
   logicalAddress,
   materializeAddressedPipeLinks,
   materializeSmartPipeMergeSources,
@@ -19,6 +21,7 @@ import {
   promptModeState,
   prunePromptBranches,
   reconcileRouteRegistryDestinations,
+  relocateRouteRegistry,
   ROOT_ROUTING_PROPERTY,
   remapPromptOutputLinks,
   ROUTE_INPUT,
@@ -35,6 +38,37 @@ const NODE_CLASS = "BV Smart Pipe";
 const MAX_SLOTS = 100;
 const ADD_SLOT_NAME = "bv_add_slot";
 const activeGraphContexts = new WeakMap();
+let rememberedGraphContext = null;
+const NAVIGATION_CONTEXT_KEY = "bv.smartPipe.navigation.v1";
+
+function rememberNavigationContext(targetGraph, context = rememberedGraphContext) {
+  if (!context?.rootId || !targetGraph?.id) return;
+  try {
+    globalThis.sessionStorage?.setItem(NAVIGATION_CONTEXT_KEY, JSON.stringify({
+      version: 1, rootId: context.rootId, graphId: targetGraph.id, hostPath: context.hostPath,
+    }));
+  } catch { /* Browser storage may be disabled; ordinary navigation still works. */ }
+}
+
+function restoreNavigationContext(targetGraph) {
+  if (rememberedGraphContext || !targetGraph?.id) return;
+  try {
+    const saved = JSON.parse(globalThis.sessionStorage?.getItem(NAVIGATION_CONTEXT_KEY) || "null");
+    if (saved?.version !== 1 || saved.rootId !== app.graph?.extra?.[ROOT_ROUTING_PROPERTY]
+      || saved.graphId !== targetGraph.id || !Array.isArray(saved.hostPath)
+      || !saved.hostPath.length || saved.hostPath.length > 128
+      || !saved.hostPath.every(id => typeof id === "string" && id.length > 0)) return;
+    let graph = app.graph;
+    for (const id of saved.hostPath) {
+      const hosts = graphNodes(graph).filter(node => node.properties?.[HOST_ROUTING_PROPERTY]?.id === id);
+      if (hosts.length !== 1) return;
+      graph = subgraphFor(hosts[0]);
+      if (!graph) return;
+    }
+    if (graph !== targetGraph) return;
+    rememberedGraphContext = { root: app.graph, rootId: saved.rootId, hostPath: saved.hostPath };
+  } catch { /* Invalid or unavailable storage cannot select an arbitrary instance. */ }
+}
 
 export function isSmartPipe(node) {
   return node?.comfyClass === NODE_CLASS || node?.type === NODE_CLASS;
@@ -130,40 +164,263 @@ export function collectExpandedPipeAddresses(rootGraph) {
   const { rootId, registry } = rootRoutingState(rootGraph);
   const addressByExecutionId = {};
   const descriptors = [];
-  const walk = (graph, numericPath = [], hostPath = [], hostNames = []) => {
+  const graphContexts = new Map();
+  const copiedHosts = new Map();
+  const walk = (graph, numericPath = [], hostPath = [], hostNames = [], ancestorModes = []) => {
+    installRelocationHooks(graph, rootGraph);
+    const contexts = graphContexts.get(graph) || [];
+    contexts.push([...hostPath]);
+    graphContexts.set(graph, contexts);
     const participatingHosts = graphNodes(graph).filter((node) => containsSmartPipe(subgraphFor(node)));
     const usedHostIds = new Set();
     const usedHostNames = new Set();
-    const seenDefinitions = new Set();
     for (const node of graphNodes(graph)) {
       const executionId = [...numericPath, node.id].join(":");
       if (isSmartPipe(node) || isSmartPipeMerge(node)) {
         const route = isSmartPipe(node) ? routingFor(node) : { nodeId: routableNodeId(node), name: node.title || "Pipe Merge" };
         const address = logicalAddress(rootId, hostPath, route.nodeId);
         addressByExecutionId[executionId] = address;
-        descriptors.push({ address, executionId, node, route, kind: isSmartPipeMerge(node) ? "merge" : "pipe", hostPath: [...hostPath], hostNames: [...hostNames] });
+        descriptors.push({ address, executionId, node, route, kind: isSmartPipeMerge(node) ? "merge" : "pipe", hostPath: [...hostPath], hostNames: [...hostNames], ancestorModes: [...ancestorModes] });
       }
       const subgraph = subgraphFor(node);
       if (!subgraph || !participatingHosts.includes(node)) continue;
-      const definitionAlreadySeen = seenDefinitions.has(subgraph);
-      seenDefinitions.add(subgraph);
       const { routing: host, replacedId } = ensureHostRouting(node, usedHostIds, usedHostNames);
-      if (!definitionAlreadySeen && subgraph.name && subgraph.name !== host.name) {
-        subgraph.name = host.name;
-        host.definitionName = host.name;
-      }
-      if (replacedId) {
+      if (replacedId) copiedHosts.set(node, replacedId);
+      const copiedFrom = copiedHosts.get(node);
+      if (copiedFrom) {
         cloneRouteRegistryPrefix(
           registry,
-          logicalAddress(rootId, hostPath, replacedId),
+          logicalAddress(rootId, hostPath, copiedFrom),
           logicalAddress(rootId, hostPath, host.id),
         );
       }
-      walk(subgraph, [...numericPath, node.id], [...hostPath, host.id], [...hostNames, host.name]);
+      walk(subgraph, [...numericPath, node.id], [...hostPath, host.id], [...hostNames, host.name], [...ancestorModes, node.mode ?? 0]);
     }
   };
   walk(rootGraph);
-  return { addressByExecutionId, descriptors, registry, rootId };
+  for (const descriptor of descriptors) {
+    if (descriptor.kind !== "pipe" || descriptor.node.inputs?.find(input => input.name === "pipe")?.link == null) continue;
+    const upstream = upstreamNode(descriptor.node);
+    descriptor.physicalPredecessorAddress = descriptors.find(candidate => candidate.node === upstream && samePath(candidate.hostPath, descriptor.hostPath))?.address ?? null;
+  }
+  return { addressByExecutionId, descriptors, registry, rootId, graphContexts };
+}
+
+const relocationHooks = new WeakMap();
+export function restoreSerializedPipeSlots(node, data) {
+  const prepared = {};
+  for (const field of ["inputs", "outputs"]) {
+    if (!Array.isArray(data?.[field])) continue;
+    const slots = node[field] || [];
+    const names = new Set();
+    prepared[field] = data[field].map(saved => {
+      const matches = slots.filter(slot => slot.name === saved.name);
+      const nativeAction = field === "inputs" && ((saved.name === "bv_add_pipe_source" && saved.type === "BV_SMART_PIPE") || (saved.name === "bv_add_slot" && saved.type === "*"));
+      if (names.has(saved.name) || matches.length > 1 || (!matches.length && (!nativeAction || typeof node.addInput !== "function"))) throw new Error(`Ambiguous or missing serialized ${field} slot: ${saved.name}`);
+      names.add(saved.name);
+      return matches[0] || { createNativeAction: saved };
+    });
+  }
+  for (const [field, slots] of Object.entries(prepared)) {
+    const resolved = slots.map(slot => {
+      if (!slot.createNativeAction) return slot;
+      const saved = slot.createNativeAction;
+      const action = node.addInput(saved.name, saved.type);
+      action.label = saved.label;
+      if (saved.name === "bv_add_slot") action.bvAddSlot = true;
+      else action.bvAddPipeSource = true;
+      return action;
+    });
+    node[field].splice(0, node[field].length, ...resolved);
+  }
+}
+
+export function repairHostOutputBacklinks(graph, host) {
+  const restorers = [];
+  if (!host || !graphNodes(graph).includes(host)) return () => {};
+  const links = [...(graph._links?.values?.() || Object.values(graph.links || {}))];
+  for (const [index, slot] of (host.outputs || []).entries()) {
+    if (slot.type !== "BV_SMART_PIPE") continue;
+    const missing = links.filter(link => {
+      if (link.origin_id !== host.id || link.origin_slot !== index || slot.links?.includes(link.id)) return false;
+      if (link.target_id === graph.outputNode?.id) return graph.outputs?.[link.target_slot]?.linkIds?.includes(link.id);
+      const target = graphNodes(graph).find(node => node.id === link.target_id);
+      return target?.inputs?.[link.target_slot]?.link === link.id;
+    }).map(link => link.id);
+    if (!missing.length) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(slot, "links");
+    const previous = slot.links;
+    const contents = Array.isArray(previous) ? [...previous] : null;
+    restorers.push(() => {
+      if (contents) previous.splice(0, previous.length, ...contents);
+      if (descriptor) Object.defineProperty(slot, "links", descriptor); else delete slot.links;
+    });
+    if (Array.isArray(previous)) previous.push(...missing);
+    else slot.links = missing;
+  }
+  return () => { for (const restore of restorers.reverse()) restore(); };
+}
+
+function installRelocationHooks(graph, rootGraph) {
+  if (!graph) return;
+  const installed = relocationHooks.get(graph);
+  if (installed) { installed.root = rootGraph; return; }
+  const state = { root: rootGraph };
+  relocationHooks.set(graph, state);
+  for (const [method, converting] of [["_convertToSubgraphImpl", true], ["_unpackSubgraphImpl", false]]) {
+    const original = graph[method];
+    if (typeof original !== "function") {
+      const publicName = converting ? "convertToSubgraph" : "unpackSubgraph";
+      const nativePublic = graph[publicName];
+      if (typeof nativePublic === "function") graph[publicName] = function (...args) {
+        if (containsSmartPipe(this)) throw new Error(`SmartPipe: unsupported native ${publicName} lifecycle; operation not started.`);
+        return nativePublic.apply(this, args);
+      };
+      continue;
+    }
+    // Version-bound native seam: execute before public finally/afterChange records Undo.
+    graph[method] = function (...args) {
+      const root = state.root;
+      const before = collectExpandedPipeAddresses(root);
+      // Native UI may invoke this method through a reactive graph facade.
+      // Resolve the graph captured when installing this hook, not facade identity.
+      const contexts = before.graphContexts.get(graph) || before.graphContexts.get(this);
+      if (!contexts?.length) throw new Error("SmartPipe: relocation graph context is unavailable; operation not started.");
+      const hostId = converting ? null : args[0]?.properties?.[HOST_ROUTING_PROPERTY]?.id;
+      const originalRegistry = structuredClone(before.registry);
+      const snapshot = structuredClone(originalRegistry);
+      const localEdges = [];
+      for (const descriptor of before.descriptors) {
+        if (descriptor.kind === "pipe" && descriptor.route.mode === "follow" && !snapshot[descriptor.address]?.predecessorAddress) {
+          const source = before.descriptors.find(candidate => candidate.route.nodeId === descriptor.route.predecessorId && samePath(candidate.hostPath, descriptor.hostPath));
+          if (source) localEdges.push([descriptor.address, source.address]);
+        }
+        if (descriptor.kind === "merge" && !snapshot[descriptor.address]) {
+          snapshot[descriptor.address] = { kind: "merge", sources: structuredClone(descriptor.node.properties.bvSmartPipeMerge.sources || []) };
+        }
+      }
+      // Unpacking into a graph with the same stable ID cannot be mapped safely.
+      if (!converting && hostId) {
+        const existingHostIds = new Set(graphNodes(this).filter(node => node !== args[0]).map(node => node.properties?.[HOST_ROUTING_PROPERTY]?.id).filter(Boolean));
+        if (graphNodes(subgraphFor(args[0])).some(node => existingHostIds.has(node.properties?.[HOST_ROUTING_PROPERTY]?.id))) {
+          throw new Error("SmartPipe: unpack would collide with an existing subgraph routing identity; operation not started.");
+        }
+        for (const context of contexts) {
+          const direct = before.descriptors.filter(d => samePath(d.hostPath, context));
+          const incoming = before.descriptors.filter(d => samePath(d.hostPath, [...context, hostId]));
+          if (incoming.some(d => direct.some(other => other.kind === d.kind && other.route.nodeId === d.route.nodeId))) {
+            throw new Error("SmartPipe: unpack would collide with an existing routing identity; operation not started.");
+          }
+        }
+      }
+      const correctedLinks = [];
+      if (converting && this.outputNode) {
+        const selected = new Set(args[0] || []);
+        if (selected.size === 1) {
+          const group = [...selected][0];
+          if (typeof group.recomputeInsideNodes === "function") {
+            group.recomputeInsideNodes();
+            for (const child of group.children || []) selected.add(child);
+          }
+        }
+        const selectedById = new Map([...selected].map(node => [node.id, node]));
+        const links = this._links?.values?.() || Object.values(this.links || {});
+        for (const link of links) {
+          if (link.type !== "*" || link.target_id !== this.outputNode.id) continue;
+          const output = selectedById.get(link.origin_id)?.outputs?.[link.origin_slot];
+          const boundary = this.outputs?.[link.target_slot];
+          if (output?.type !== "BV_SMART_PIPE" || boundary?.type !== "BV_SMART_PIPE") continue;
+          correctedLinks.push(link);
+          link.type = "BV_SMART_PIPE";
+        }
+      }
+      let result;
+      const restoreBacklinks = !converting ? repairHostOutputBacklinks(this, args[0]) : () => {};
+      const configureRestorers = [];
+      const existingNodes = new Set(before.descriptors.map(descriptor => descriptor.node));
+      const adaptedNodes = new Set();
+      const slotShapeKey = node => `${isSmartPipeMerge(node) ? "merge" : "pipe"}:${routableNodeId(node)}`;
+      // multiClone itself configures/serializes a temporary backend-shaped node.
+      // Its data is therefore not the original compact slot-index contract.
+      const originalSlotShapes = new Map(!converting ? graphNodes(subgraphFor(args[0])).filter(node => isSmartPipe(node) || isSmartPipeMerge(node)).map(node => [slotShapeKey(node), {
+        inputs: (node.inputs || []).map(slot => ({ name: slot.name, type: slot.type, label: slot.label })),
+        outputs: (node.outputs || []).map(slot => ({ name: slot.name })),
+      }]) : []);
+      const nativeAdd = this.add;
+      const addDescriptor = Object.getOwnPropertyDescriptor(this, "add");
+      const originalLinkFields = !converting ? [...(subgraphFor(args[0])?._links?.values?.() || [])].map(link => ({ link, fields: Object.fromEntries(["origin_id", "origin_slot", "target_id", "target_slot", "parentId"].map(key => [key, Object.getOwnPropertyDescriptor(link, key)])) })) : [];
+      if (!converting && typeof nativeAdd === "function") {
+        this.add = function (node, ...rest) {
+          const added = nativeAdd.call(this, node, ...rest);
+          if (!existingNodes.has(node) && !adaptedNodes.has(node) && (isSmartPipe(node) || isSmartPipeMerge(node))) {
+            adaptedNodes.add(node);
+            const configure = node.configure;
+            const descriptor = Object.getOwnPropertyDescriptor(node, "configure");
+            node.configure = function (data, ...rest) {
+              const configured = configure.call(this, data, ...rest);
+              const shape = originalSlotShapes.get(slotShapeKey(this));
+              if (!shape) throw new Error("SmartPipe unpack clone has no unique original slot shape");
+              restoreSerializedPipeSlots(this, shape);
+              return configured;
+            };
+            configureRestorers.push(() => { if (descriptor) Object.defineProperty(node, "configure", descriptor); else delete node.configure; });
+          }
+          return added;
+        };
+      }
+      try { result = original.apply(this, args); }
+      catch (error) {
+        restoreBacklinks();
+        for (const link of correctedLinks) link.type = "*";
+        throw error;
+      }
+      finally {
+        if (!converting && typeof nativeAdd === "function") {
+          if (addDescriptor) Object.defineProperty(this, "add", addDescriptor); else delete this.add;
+        }
+        for (const restore of configureRestorers.reverse()) restore();
+        for (const { link, fields } of originalLinkFields) for (const [key, descriptor] of Object.entries(fields)) {
+          if (descriptor) Object.defineProperty(link, key, descriptor); else delete link[key];
+        }
+      }
+      try {
+        if (converting) repairHostOutputBacklinks(this, result?.node);
+        const after = collectExpandedPipeAddresses(root);
+        const newHostId = converting ? result?.node?.properties?.[HOST_ROUTING_PROPERTY]?.id : null;
+        const live = new Set(after.descriptors.map(d => d.address));
+        const mapping = new Map();
+        for (const descriptor of before.descriptors) {
+          if (live.has(descriptor.address)) continue;
+          const context = contexts.find(path => path.every((part, index) => descriptor.hostPath[index] === part)
+            && (converting || descriptor.hostPath[path.length] === hostId));
+          if (!context) continue;
+          const path = converting
+            ? [...context, newHostId, ...descriptor.hostPath.slice(context.length)]
+            : [...context, ...descriptor.hostPath.slice(context.length + 1)];
+          const candidates = after.descriptors.filter(d => d.kind === descriptor.kind && d.route.nodeId === descriptor.route.nodeId && samePath(d.hostPath, path));
+          if (candidates.length !== 1) throw new Error(`Cannot uniquely relocate ${descriptor.address}`);
+          mapping.set(descriptor.address, candidates[0].address);
+        }
+        const prepared = relocateRouteRegistry(snapshot, mapping);
+        for (const [target, source] of localEdges) {
+          const newTarget = mapping.get(target) || target, newSource = mapping.get(source) || source;
+          if (newTarget.slice(0, newTarget.lastIndexOf("/")) !== newSource.slice(0, newSource.lastIndexOf("/"))) {
+            prepared[newTarget] = { ...prepared[newTarget], predecessorAddress: newSource };
+          }
+        }
+        root.extra[ROUTE_REGISTRY_PROPERTY] = prepared;
+        const cleanup = registryCleanupStates.get(root);
+        for (const address of [...mapping.keys(), ...mapping.values()]) {
+          cleanup?.missingSince?.delete(address);
+          cleanup?.backups?.delete(address);
+        }
+      } catch (error) {
+        root.extra[ROUTE_REGISTRY_PROPERTY] = originalRegistry;
+        throw new Error(`SmartPipe routing relocation failed after native topology changed. Use Undo. ${error.message}`, { cause: error });
+      }
+      return result;
+    };
+  }
 }
 
 function applyInstanceSchemaProjections(apiPrompt, routing) {
@@ -203,10 +460,38 @@ function samePath(left, right) {
 }
 
 export function activeDescriptorFor(node, routing = collectExpandedPipeAddresses(app.graph)) {
+  if (node.graph === app.canvas?.graph) rebindActiveGraphContext(node.graph);
   const hostPath = node.graph === app.graph ? [] : activeGraphContexts.get(node.graph)?.hostPath;
   if (hostPath) return routing.descriptors.find((descriptor) => descriptor.node === node && samePath(descriptor.hostPath, hostPath)) || null;
   const candidates = routing.descriptors.filter((descriptor) => descriptor.node === node);
   return candidates.length === 1 ? candidates[0] : null;
+}
+
+// Undo replaces graph objects: recover only the exact remembered host instance.
+function rebindActiveGraphContext(targetGraph) {
+  if (!targetGraph || targetGraph === app.graph) return;
+  restoreNavigationContext(targetGraph);
+  const remembered = rememberedGraphContext;
+  if (!remembered || remembered.root !== app.graph || remembered.rootId !== app.graph?.extra?.[ROOT_ROUTING_PROPERTY]) {
+    activeGraphContexts.delete(targetGraph);
+    return;
+  }
+  let graph = app.graph;
+  const hostPath = [], hostNames = [];
+  for (const id of remembered.hostPath) {
+    const hosts = graphNodes(graph).filter(node => node.properties?.[HOST_ROUTING_PROPERTY]?.id === id);
+    if (hosts.length !== 1) break;
+    const host = hosts[0];
+    graph = subgraphFor(host);
+    if (!graph) break;
+    hostPath.push(id);
+    hostNames.push(host.properties[HOST_ROUTING_PROPERTY].name);
+    if (graph === targetGraph) {
+      activeGraphContexts.set(targetGraph, { hostPath, hostNames });
+      return;
+    }
+  }
+  activeGraphContexts.delete(targetGraph);
 }
 
 function applyMergeConfigurations(apiPrompt, routing) {
@@ -220,10 +505,12 @@ function applyMergeConfigurations(apiPrompt, routing) {
 }
 
 function installSubgraphContextTracking() {
-  if (app.__bvSmartPipeContextTracking || !app.canvas?.addEventListener) return;
-  app.__bvSmartPipeContextTracking = true;
+  const target = app.canvas?.canvas ?? app.canvas;
+  rebindActiveGraphContext(app.canvas?.graph);
+  if (app.__bvSmartPipeContextTracking === target || !target?.addEventListener) return;
+  app.__bvSmartPipeContextTracking = target;
   if (app.graph) activeGraphContexts.set(app.graph, { hostPath: [], hostNames: [] });
-  app.canvas.addEventListener("subgraph-opened", (event) => {
+  target.addEventListener("subgraph-opened", (event) => {
     const detail = event.detail || event;
     const parent = detail.closingGraph === app.graph
       ? { hostPath: [], hostNames: [] }
@@ -236,11 +523,16 @@ function installSubgraphContextTracking() {
       hostPath: [...parent.hostPath, host.id],
       hostNames: [...parent.hostNames, host.name],
     });
+    rememberedGraphContext = { root: app.graph, rootId: app.graph.extra?.[ROOT_ROUTING_PROPERTY], hostPath: [...parent.hostPath, host.id] };
+    rememberNavigationContext(detail.subgraph);
     requestAnimationFrame(() => propagateGraph(detail.subgraph));
   });
-  app.canvas.addEventListener("litegraph:set-graph", (event) => {
+  target.addEventListener("litegraph:set-graph", (event) => {
     const detail = event.detail || event;
     if (detail.newGraph === app.graph) activeGraphContexts.set(app.graph, { hostPath: [], hostNames: [] });
+    rebindActiveGraphContext(detail.newGraph);
+    const current = activeGraphContexts.get(detail.newGraph);
+    if (current?.hostPath?.length) rememberNavigationContext(detail.newGraph, { rootId: app.graph?.extra?.[ROOT_ROUTING_PROPERTY], hostPath: current.hostPath });
     requestAnimationFrame(() => propagateGraph(detail.newGraph));
   });
 }
@@ -685,15 +977,15 @@ function updatePredecessorWidget(node) {
   const route = routingFor(node);
   const choices = wirelessChoices(node);
   if (wired) {
-    widget.options.values = [`Wired: ${routingFor(wired).name}`];
-    widget.value = widget.options.values[0];
+    widget.__bvOptionValues = [`Wired: ${routingFor(wired).name}`];
+    widget.value = widget.__bvOptionValues[0];
     widget.disabled = false;
     widget.__bvWired = true;
     return;
   }
   widget.__bvWired = false;
   widget.__bvChoices = choices;
-  widget.options.values = choices.map((choice) => choice.label);
+  widget.__bvOptionValues = choices.map((choice) => choice.label);
   const crossRoute = crossScopeRouteFor(node);
   widget.value = crossRoute
     ? choices.find((choice) => choice.address === crossRoute.predecessor.address)?.label || `⚠ Missing: ${crossRoute.edge.predecessorAddress}`
@@ -802,7 +1094,12 @@ function setupNode(node) {
       route.predecessorId = selected?.id || null;
     }
     requestAnimationFrame(() => propagateGraph(node.graph));
-  }, { values: ["Start new pipe"], serialize: false });
+  }, {
+    // Nodes 2.0 may retain the original options object; keep its supplier stable.
+    // Read the propagated snapshot only: opening a menu must not run discovery.
+    values: () => node.__bvPredecessorWidget?.__bvOptionValues || ["Start new pipe"],
+    serialize: false,
+  });
   if (predecessor) {
     predecessor.label = "Pipe predecessor";
     predecessor.serialize = false;
@@ -858,6 +1155,9 @@ function installPromptMaterializer() {
   app.__bvSmartPipePromptMaterializer = true;
   const original = app.graphToPrompt;
   app.graphToPrompt = async function () {
+    const projectionRoot = app.graph;
+    const revision = projectionRevision;
+    try {
     const seenGraphs = new Set();
     const refreshGraph = (graph) => {
       if (!graph || seenGraphs.has(graph)) return;
@@ -870,42 +1170,125 @@ function installPromptMaterializer() {
     };
     refreshGraph(app.graph);
     const routing = collectExpandedPipeAddresses(app.graph);
-    const modeState = promptModeState(routing.descriptors);
+    const modeState = promptModeState(routing.descriptors, routing.registry);
     const { prunedExecutionIds } = modeState;
     const localModeState = {
       routesByScopedNodeId: new Map(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe")
         .map((descriptor) => [`${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`, descriptor.route])),
-      bypassedScopedNodeIds: new Set(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe" && descriptor.node?.mode === 4)
+      bypassedScopedNodeIds: new Set(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe" && effectiveDescriptorMode(descriptor) === 4)
         .map((descriptor) => `${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`)),
-      mutedScopedNodeIds: new Set(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe" && descriptor.node?.mode === 2)
+      mutedScopedNodeIds: new Set(routing.descriptors.filter((descriptor) => effectiveDescriptorMode(descriptor) === 2)
         .map((descriptor) => `${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`)),
       prunedExecutionIds,
-      bypassPredecessorsByScopedNodeId: new Map(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe" && descriptor.node?.mode === 4)
+      bypassPredecessorsByScopedNodeId: new Map(routing.descriptors.filter((descriptor) => descriptor.kind === "pipe" && effectiveDescriptorMode(descriptor) === 4)
         .map((descriptor) => {
-          const edge = routing.registry[descriptor.address];
-          const predecessor = edge?.predecessorAddress
-            ? routing.descriptors.find((candidate) => candidate.address === edge.predecessorAddress)
-            : routing.descriptors.find((candidate) => candidate.hostPath.length === descriptor.hostPath.length
-              && candidate.hostPath.every((part, index) => part === descriptor.hostPath[index])
-              && candidate.route.nodeId === descriptor.route.predecessorId);
+          const predecessor = routing.descriptors.find(candidate => candidate.address === modeState.bypassPredecessorAddresses.get(descriptor.address));
           return predecessor ? [`${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`, {
             executionId: predecessor.executionId,
+            kind: predecessor.kind,
             route: predecessor.route,
             scope: executionScope(predecessor.executionId),
-          }] : null;
+          }] : [`${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`, null];
         }).filter(Boolean)),
     };
     const result = await original.apply(this, arguments);
+    localModeState.activeExecutionIds = new Set(Object.keys(result?.output || {}));
+    for (const descriptor of routing.descriptors) {
+      const entry = result?.output?.[descriptor.executionId];
+      if (!entry || !Object.hasOwn(descriptor, "physicalPredecessorAddress") || entry.inputs?.pipe != null) continue;
+      const physical = routing.descriptors.find(candidate => candidate.address === descriptor.physicalPredecessorAddress);
+      const input = descriptor.node.inputs?.find(slot => slot.name === "pipe");
+      const link = linkAt(descriptor.node.graph, input?.link);
+      const origin = descriptor.node.graph?.getNodeById?.(link?.origin_id);
+      if (physical && effectiveDescriptorMode(physical) === 2 || origin?.mode === 2) prunedExecutionIds.add(descriptor.executionId);
+      else throw new Error(`BV Smart Pipe "${descriptor.route.name}": Physical predecessor was removed by the native compiler; refusing wireless fallback.`);
+    }
+    const beforeNativePrune = new Set(Object.keys(result?.output || {}));
+    prunePromptBranches(result?.output, prunedExecutionIds);
+    // Keep removed physical dependants as tombstones for subsequent wireless
+    // resolution; absence alone would incorrectly mean a broken selection.
+    for (const descriptor of routing.descriptors) {
+      if (!beforeNativePrune.has(descriptor.executionId) || result?.output?.[descriptor.executionId]) continue;
+      prunedExecutionIds.add(descriptor.executionId);
+      modeState.mutedAddresses.add(descriptor.address);
+      localModeState.mutedScopedNodeIds.add(`${executionScope(descriptor.executionId)}\u0000${descriptor.route.nodeId}`);
+    }
     applyInstanceSchemaProjections(result?.output, routing);
     applyMergeConfigurations(result?.output, routing);
     remapSmartPipeOutputLinks(result?.output, routing);
+    const wiredInputs = new Map(routing.descriptors.map(descriptor => [descriptor.executionId, new Set([
+      ...Object.entries(result?.output?.[descriptor.executionId]?.inputs || {}).filter(([, value]) => Array.isArray(value)).map(([name]) => name),
+      ...(descriptor.node.inputs || []).filter(slot => slot.link != null).map(slot => slot.name),
+    ])]));
     materializeAddressedPipeLinks(result?.output, routing.addressByExecutionId, routing.registry, modeState);
     materializeSmartPipeMergeSources(result?.output, routing.addressByExecutionId, routing.registry, modeState);
     materializeWirelessPipeLinks(result?.output, localModeState);
     prunePromptBranches(result?.output, prunedExecutionIds);
     validateMaterializedPipeGraph(result?.output);
+    try { if (app.graph === projectionRoot && projectionRevision === revision) {
+      const bindings = new Map(routing.descriptors.map((descriptor) => {
+        let graph = projectionRoot;
+        const hosts = [];
+        for (const [index, id] of descriptor.executionId.split(":").slice(0, -1).entries()) {
+          const node = graphNodes(graph).find((item) => String(item.id) === id);
+          graph = subgraphFor(node);
+          hosts.push({ id: descriptor.hostPath[index], node, graph });
+        }
+        return [descriptor.address, { node: descriptor.node, hosts }];
+      }));
+      globalThis.__bvNodePresentationBridge?.publishInstanceDgProjection?.(
+        app.canvas, projectionRoot, effectiveSmartPipeEdges(result?.output, routing.descriptors, wiredInputs), bindings,
+        () => {
+          const graph = app.canvas?.graph;
+          rebindActiveGraphContext(graph);
+          const context = activeGraphContexts.get(graph);
+          if (context) return context.hostPath;
+          const paths = [...bindings.values()].flatMap(({ hosts }) => hosts.flatMap((host, index) => host.graph === graph ? [hosts.slice(0, index + 1).map((item) => item.id)] : []));
+          const unique = new Map(paths.map((path) => [JSON.stringify(path), path]));
+          return unique.size === 1 ? [...unique.values()][0] : null;
+        },
+      );
+    } } catch { clearDgProjection(); }
     return result;
+    } catch (error) {
+      if (app.graph === projectionRoot && projectionRevision === revision) clearDgProjection();
+      throw error;
+    }
   };
+}
+
+// Projection refresh is export-only, coalesced after a changed routing snapshot;
+// it never queues execution or calls export from a draw callback.
+let projectionRevision = 0;
+let projectionRoot = null;
+let projectionSignature = "";
+let projectionPending = false;
+function clearDgProjection() {
+  try { globalThis.__bvNodePresentationBridge?.clearInstanceDgProjection?.(app.canvas); } catch { /* Presentation must never break execution. */ }
+}
+function refreshDgProjection(routing) {
+  const bridge = globalThis.__bvNodePresentationBridge;
+  const signature = bridge?.dgDebugVisible?.() ? JSON.stringify([
+    routing.descriptors.map((d) => {
+      let graph = app.graph;
+      const hostModes = [];
+      for (const id of d.executionId.split(":").slice(0, -1)) {
+        const host = graphNodes(graph).find((node) => String(node.id) === id);
+        hostModes.push(host?.mode); graph = subgraphFor(host);
+      }
+      return [d.executionId, d.address, d.route, d.node.mode, hostModes, (d.node.inputs || []).map((slot) => slot.link)];
+    }),
+    routing.registry,
+  ]) : "";
+  if (projectionRoot === app.graph && projectionSignature === signature) return;
+  projectionRoot = app.graph; projectionSignature = signature; projectionRevision++;
+  clearDgProjection();
+  if (projectionPending || !signature || !routing.descriptors.length) return;
+  projectionPending = true;
+  const scheduledRevision = projectionRevision;
+  Promise.resolve().then(() => app.graphToPrompt()).catch(() => {
+    // The ordinary Run path still reports the compiler error. Do not show stale edges.
+  }).finally(() => { projectionPending = false; if (scheduledRevision !== projectionRevision) projectionSignature = ""; });
 }
 
 let revealMonitorStarted = false;
@@ -938,6 +1321,7 @@ function monitorHostRoutingNames(timestamp) {
     graphs.forEach((graph) => propagateGraph(graph));
   }
   hostRoutingSignature = nextSignature;
+  refreshDgProjection(routing);
 }
 
 function monitorRoutingNames(graph, visited = new Set()) {
@@ -964,6 +1348,8 @@ function startTypedOutputRevealMonitor() {
   let previousKey = "";
   let previousGraph = null;
   const monitor = (timestamp = performance.now()) => {
+    installSubgraphContextTracking();
+    globalThis.__bvNodePresentationBridge?.tickInstanceDgProjection?.(app.canvas);
     monitorHostRoutingNames(timestamp);
     monitorRoutingNames(app.graph);
     const connector = app.canvas?.linkConnector;

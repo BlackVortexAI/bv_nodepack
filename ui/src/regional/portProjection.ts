@@ -1,10 +1,10 @@
 import{legacyDebugVisible}from"./legacyPorts.js";
 import{markM0NodeElement}from"./m0VisualProjection.js";
 import{configurePresentationSizeLifecycle,installPresentationSizeLifecycle,isPresentationUserResizing,presentationSize,setAutomaticPresentationSize}from"./presentationSize.js";
+import{PROVIDER_TITLEBAR_MIDLINE_Y,providerRenderedWidth}from"./providerProjectionGeometry.js";
 
 const PROVIDERS=new Set(["BV_RUNTIME_RESOURCE_PROVIDER","BV_RUNTIME_RESOURCE_PROVIDER_M0"]);
 const LAYOUT_VERSION=1;
-const TITLEBAR_MIDLINE_Y=-15;
 const internal=(slot:any)=>PROVIDERS.has(String(slot?.type??""))||slot?.__bvM0ResourceSlot===true||slot?.__bvResourceSlot===true;
 const visibleLegacy=(slot:any)=>slot?.__bvLegacyPort===true&&!slot.hidden;
 const measurementView=(node:any,overrides:Record<PropertyKey,unknown>)=>{const local=new Map<PropertyKey,unknown>(Reflect.ownKeys(overrides).map(key=>[key,overrides[key]]));return new Proxy(node,{get(target,key){return local.has(key)?local.get(key):Reflect.get(target,key,target)},set(_target,key,value){local.set(key,value);return true}})};
@@ -36,7 +36,9 @@ export function refreshProjectedProviderAnchors(node:any,enabled=legacyDebugVisi
         if(!positionOrigins.has(slot))positionOrigins.set(slot,capturePosition(slot));
         const origin=positionOrigins.get(slot)!;
         if(origin.kind==="own"&&origin.descriptor.configurable===false){blocked++;continue}
-        try{Object.defineProperty(slot,"pos",{value:[direction==="input"?0:Number(node?.size?.[0]??0),TITLEBAR_MIDLINE_Y],writable:true,configurable:true,enumerable:false});projected++}catch{blocked++;restorePosition(slot)}
+        // Collapse does not necessarily emit onResize. Read presentation geometry
+        // at use time; native layout writes must not relocate the DG-only anchor.
+        try{Object.defineProperty(slot,"pos",{get:()=>[direction==="input"?0:providerRenderedWidth(node),PROVIDER_TITLEBAR_MIDLINE_Y],set:()=>{},configurable:true,enumerable:false});projected++}catch{blocked++;restorePosition(slot)}
     }
     if(current.size)projectedByNode.set(node,current);else projectedByNode.delete(node);
     dirty(node);
@@ -59,12 +61,18 @@ export function removeProjectedProviderAnchors(node:any){
     dirty(node);return Boolean(projected||binding);
 }
 
-export function setProjectedSlotLabel(slot:any,label:string){if(!slot)return;slot.label=label;slot.localized_name=label;}
+// Presentation refresh and topology reconciliation must agree on serialized
+// labels; alternating between an empty label and an explicit label creates a
+// spurious native Undo entry. Intent belongs to the slot, never its index/name.
+const projectedSlotLabels=new WeakMap<object,string>();
+export function applyProjectedSlotLabel(slot:any){if(!slot)return;const label=projectedSlotLabels.get(slot)??"";slot.label=label;slot.localized_name=label;}
+export function setProjectedSlotLabel(slot:any,label:string){if(!slot)return;projectedSlotLabels.set(slot,label);applyProjectedSlotLabel(slot);}
 
 export function configureProjectedPortLayout(options:{isUserResizing?:(node:any)=>boolean}){configurePresentationSizeLifecycle(options)}
 
-export function markProjectedProvider(slot:any){if(!slot)return;slot.hidden=true;slot.label="";slot.localized_name="";slot.__bvResourceSlot=true;slot.__bvM0ResourceSlot=true;slot.__bvM0PortHidden=true;}
+export function markProjectedProvider(slot:any){if(!slot)return;slot.hidden=true;applyProjectedSlotLabel(slot);slot.__bvResourceSlot=true;slot.__bvM0ResourceSlot=true;slot.__bvM0PortHidden=true;}
 
+/** Installs the shared projected-provider lifecycle on a static provider-only test node. */
 export function suppressInitialProjectedProviderDefinitions(nodeData:any,deferredPublicNames:string[]=[]){
     const optional=nodeData?.input?.optional;if(!optional)return[];
     const deferred=new Set(deferredPublicNames),removed:string[]=[],publicInputs:any[]=[];
@@ -94,7 +102,7 @@ export function retainNeededProjectedInputs(node:any,wantedNames:string[],matche
 
 function projected(slots:any[]|undefined,_debug:boolean){const result:any[]=[];for(const slot of slots??[]){if(internal(slot))continue;if(slot?.__bvLegacyPort){if(visibleLegacy(slot))result.push(slot);continue}if(!slot?.hidden)result.push(slot)}return result}
 
-export function installProjectedPortLayout(node:any){if(!node)return;const anchor=anchorBindings.get(node),anchorEnabled=anchor?.enabled??legacyDebugVisible();if(anchor)removeProjectedProviderAnchors(node);installPresentationSizeLifecycle(node);if(node.__bvProjectedPortOriginalComputeSize||typeof node.computeSize!=="function"){installProjectedProviderAnchors(node,anchorEnabled);return}const original=node.computeSize;node.__bvProjectedPortOriginalComputeSize=original;node.computeSize=function(){const inputs=this.inputs??[],outputs=this.outputs??[],nextInputs=projected(inputs,legacyDebugVisible()),nextOutputs=projected(outputs,legacyDebugVisible()),measure=(measuredInputs:any[],measuredOutputs:any[])=>original.apply(measurementView(this,{size:[Number(this.size?.[0]??0),60],inputs:measuredInputs,outputs:measuredOutputs}),arguments);const full=measure(inputs,outputs),compact=measure(nextInputs,nextOutputs),removedRows=Math.max(inputs.length,outputs.length)-Math.max(nextInputs.length,nextOutputs.length),structuralHeight=Math.max(60,Number(full?.[1]??0)-Math.max(0,removedRows)*20);return[Math.max(Number(compact?.[0]??0),Number(full?.[0]??0)),Math.min(Number(compact?.[1]??structuralHeight),structuralHeight)]};node.__bvRefreshPortProjection=()=>scheduleProjectedPortLayout(node);installProjectedProviderAnchors(node,anchorEnabled)}
+export function installProjectedPortLayout(node:any){if(!node)return;const anchor=anchorBindings.get(node),anchorEnabled=anchor?.enabled??legacyDebugVisible();if(anchor)removeProjectedProviderAnchors(node);installPresentationSizeLifecycle(node);if(node.__bvProjectedPortOriginalComputeSize||typeof node.computeSize!=="function"){installProjectedProviderAnchors(node,anchorEnabled);return}const original=node.computeSize;node.__bvProjectedPortOriginalComputeSize=original;node.computeSize=function(){const inputs=this.inputs??[],outputs=this.outputs??[],nextInputs=projected(inputs,legacyDebugVisible()),nextOutputs=projected(outputs,legacyDebugVisible()),measure=(measuredInputs:any[],measuredOutputs:any[])=>original.apply(measurementView(this,{size:[Number(this.size?.[0]??0),60],inputs:measuredInputs,outputs:measuredOutputs}),arguments);const full=measure(inputs,outputs),compact=measure(nextInputs,nextOutputs),removedRows=Math.max(inputs.length,outputs.length)-Math.max(nextInputs.length,nextOutputs.length),structuralHeight=Math.max(60,Number(full?.[1]??0)-Math.max(0,removedRows)*20);return[Number(compact?.[0]??0),Math.min(Number(compact?.[1]??structuralHeight),structuralHeight)]};node.__bvRefreshPortProjection=()=>scheduleProjectedPortLayout(node);installProjectedProviderAnchors(node,anchorEnabled)}
 
 export function compactProjectedPortLayout(node:any,minWidth=220,minHeight=60){installProjectedPortLayout(node);if(!node?.setSize)return;const width=Math.max(Number(node.size?.[0]??0),minWidth),computed=node.computeSize?.()??node.size??[minWidth,minHeight],arrangementPadding=Math.max(0,Number(node.__bvProjectedArrangementPadding??0)),measuredHeight=Math.max(minHeight,Number(computed[1]??minHeight)+arrangementPadding),next=presentationSize(node,[Math.max(width,Number(computed[0]??0),minWidth),measuredHeight]);if(Number(node.size?.[0]??0)!==next[0]||Number(node.size?.[1]??0)!==next[1])setAutomaticPresentationSize(node,next);node.__bvM0ResourceConsumer=(node.inputs??[]).some(internal);const first=(node.inputs??[]).findIndex(internal);node.__bvM0FanInAnchorSlot=first>=0?first:undefined;if(typeof document!=="undefined")markM0NodeElement(node,"consumer",legacyDebugVisible());node.setDirtyCanvas?.(true,true);node.graph?.setDirtyCanvas?.(true,true)}
 

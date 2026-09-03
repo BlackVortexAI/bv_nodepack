@@ -10,12 +10,12 @@ const document = JSON.stringify({
 });
 
 function fixture() {
-    const prompt = { id: 1, type: "BV Regional Prompt", widgets: [{ name: "regional_json", value: document }] };
-    const lora = { id: 2, type: "BV Regional LoRA", inputs: [{ name: "regional", link: 10 }] };
+    const prompt = { id: 1, type: "BV Regional Prompt", outputs:[{type:"BV_REGIONAL",links:[10]}], widgets: [{ name: "regional_json", value: document }] };
+    const lora = { id: 2, type: "BV Regional LoRA", outputs:[{type:"BV_REGIONAL",links:[11]}], inputs: [{ name: "regional", link: 10 }] };
     const mask = { id: 3, type: "BV Regional Detailer Mask", inputs: [{ name: "regional", link: 11 }] };
     const nodes = new Map([[1, prompt], [2, lora], [3, mask]]);
     const graph = {
-        _links: new Map([[10, { origin_id: 1 }], [11, { origin_id: 2 }]]),
+        _links: new Map([[10, { origin_id: 1,origin_slot:0,target_id:2,target_slot:0 }], [11, { origin_id: 2,origin_slot:0,target_id:3,target_slot:0 }]]),
         getNodeById(id) { return nodes.get(id); },
     };
     for (const node of nodes.values()) node.__bvConcreteGraph = graph;

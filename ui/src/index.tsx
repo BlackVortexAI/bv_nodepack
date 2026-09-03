@@ -30,6 +30,8 @@ import { compactNodeToComputedHeight } from "./regional/nodeLayout";
 import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetailerPromptV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { prepareLutV3 } from "./regional/lutV3Catalog";
+import { enableRegistryFamily } from "./regional/registryDgFamilies";
+import { installRegistryDgLifecycle } from "./regional/registryDgLifecycle";
 import { openLutDownloadDialog } from "./regional/lutDownloadDialog";
 import { openLutPlanDialog } from "./regional/lutPlanDialog";
 import { openLutRegistryDialog } from "./regional/lutRegistryDialog";
@@ -37,10 +39,14 @@ import { installLutNodePresentation } from "./regional/lutNodePresentation";
 import { installNodePresentationLifecycle } from "./regional/nodePresentationLifecycle";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
+import { installDgCanaryPrototype } from "./regional/dgCanaryPrototype";
+import { prepareDgClipboard } from "./regional/dgRouting";
+import { installProjectedClipboard } from "./regional/projectedPortInteraction";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui } from "./regional/loraV3Ui";
 import { installNamedLoraInventorySource, LORA_V3_INVENTORY_CHANGED_EVENT } from "./regional/loraV3Inventory";
 import LoraV3EditorWindow from "./regional/LoraV3EditorWindow";
 import { installM0CanvasVisibility, requestM0DebugAnimation } from "./regional/m0VisualProjection";
+import { publishInstanceDgProjection, clearInstanceDgProjection, tickInstanceDgProjection } from "./regional/instanceDgProjection";
 import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationReport, regionalEditorDraft, REGIONAL_MIGRATION_EVENT, REGIONAL_VALIDATION_EVENT } from "./regional/milestoneE";
 import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
 import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
@@ -58,6 +64,8 @@ import { openExportDialog } from "./export/events";
 import { emptyRegionalCanvasImageCatalog, ingestRegionalCanvasImagePublication, pruneRegionalCanvasImageCatalog } from "./regional/regionalCanvasImages";
 import { currentRegionalCanvasPublication, regionalCanvasExecutionOutputs, regionalCanvasSourceIsCurrent, subscribeRegionalCanvasExecutions } from "./regional/regionalCanvasExecution";
 (globalThis as any).__bvNodePresentationBridge=Object.assign((globalThis as any).__bvNodePresentationBridge??{}, {
+    publishInstanceDgProjection, clearInstanceDgProjection, tickInstanceDgProjection,
+    dgDebugVisible:legacyDebugVisible,
     applyClassic(node:any,nodeType:string){
         node.__bvPresentationManaged=true;
         return applyClassicNodePresentation(node,nodeType);
@@ -183,6 +191,7 @@ const upgradeDetailerPlanNode = (node: any) => {
                 const document = sourceRegionalDocument(node);
                 if (!document) return false;
                 openDetailerPlanDialog(document.regions, detectorCollectorsForPlan(node), hidden.value, value => {
+                    enableRegistryFamily(node,"detailer");
                     hidden.value = value;
                     prepareDetailerPlanV3(node,detailerGraphOwner(node));
                     refreshDetailerPlanNode(node);
@@ -607,6 +616,7 @@ comfyApp.registerExtension({
         ensureMountedOnce();
         installExporter(comfyApp,comfyApi);
         installM0CanvasVisibility((comfyApp as any).canvas);
+        installProjectedClipboard((comfyApp as any).canvas,prepareDgClipboard);
         applyUiPreferences((comfyApp as any).ui?.settings);
         setLegacyDebugVisible(Boolean((comfyApp as any).ui?.settings?.getSettingValue?.(LEGACY_DEBUG_SETTING_ID, false)),(comfyApp as any).graph);
         installGlobalTextareaCompletion();
@@ -741,6 +751,11 @@ comfyApp.registerExtension({
         onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
+        if(installDgCanaryPrototype(nodeType,nodeData)){
+            installNodePresentationLifecycle(nodeType,nodeData);
+            if(nodeData.name==="BV Titlebar Port Canary Receiver (THROW AWAY)")installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-dg-canary-received",widgetName:"bv_dg_received_preview",messageKey:"text",placeholder:"Run to verify the received DG payload.",minHeight:100,maxHeight:180});
+            return;
+        }
         installNodePresentationLifecycle(nodeType,nodeData);
         if(nodeData.name==="BV Inspect Any"){
             installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
@@ -817,24 +832,7 @@ comfyApp.registerExtension({
             return;
         }
         if (nodeData.name === "BV Regional Detailer Plan") {
-            const originalCreated = nodeType.prototype.onNodeCreated;
-            const originalConfigure = nodeType.prototype.onConfigure;
-            const originalConnectionsChange = nodeType.prototype.onConnectionsChange;
-            nodeType.prototype.onNodeCreated = function () {
-                const result = originalCreated?.apply(this, arguments);
-                queueMicrotask(() => upgradeDetailerPlanNode(this));
-                return result;
-            };
-            nodeType.prototype.onConfigure = function () {
-                const result = originalConfigure?.apply(this, arguments);
-                queueMicrotask(() => { queueRegionalMigrationReport(migrateRegionalNode(this)); upgradeDetailerPlanNode(this); });
-                return result;
-            };
-            nodeType.prototype.onConnectionsChange = function () {
-                const result = originalConnectionsChange?.apply(this, arguments);
-                queueMicrotask(() => { prepareDetailerPlanV3(this,detailerGraphOwner(this)); refreshDetailerPlanNode(this); applyClassicNodePresentation(this,"BV Regional Detailer Plan"); });
-                return result;
-            };
+            installRegistryDgLifecycle(nodeType,upgradeDetailerPlanNode,node=>{queueRegionalMigrationReport(migrateRegionalNode(node));upgradeDetailerPlanNode(node)});
             return;
         }
         if (nodeData.name === "BV Remote LLM Provider") {

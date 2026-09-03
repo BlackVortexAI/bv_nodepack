@@ -25,6 +25,14 @@ import {
   validateMaterializedPipeGraph,
 } from "../js/bv_smart_pipe_routing.js";
 
+test('local bypass chain terminates only at an active Merge and respects its mute state',()=>{
+ const make=()=>({'3':pipe('Follower','f','follow','skipped')});
+ const state={bypassedScopedNodeIds:new Set(['\u0000skipped']),bypassPredecessorsByScopedNodeId:new Map([['\u0000skipped',{kind:'merge',executionId:'1',scope:'',route:{nodeId:'merge'}}]]),activeExecutionIds:new Set(['1']),prunedExecutionIds:new Set()};
+ const active=make();materializeWirelessPipeLinks(active,state);assert.deepEqual(active['3'].inputs.pipe,['1',0]);
+ state.mutedScopedNodeIds=new Set(['\u0000merge']);const muted=make();materializeWirelessPipeLinks(muted,state);assert.ok(state.prunedExecutionIds.has('3'));
+ state.mutedScopedNodeIds.clear();state.activeExecutionIds.clear();assert.throws(()=>materializeWirelessPipeLinks(make(),state),/Merge is not active/);
+});
+
 function pipe(name, nodeId, mode = "root", predecessorId = null, inputs = {}) {
   return {
     class_type: "BV Smart Pipe",

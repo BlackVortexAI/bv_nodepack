@@ -23,10 +23,37 @@ export function cloneRouteRegistryPrefix(registry, oldPrefix, newPrefix) {
     if (cloned.predecessorAddress?.startsWith(normalizedOld)) {
       cloned.predecessorAddress = `${normalizedNew}${cloned.predecessorAddress.slice(normalizedOld.length)}`;
     }
+    for (const source of cloned.sources || []) {
+      if (source.address?.startsWith(normalizedOld)) {
+        source.address = `${normalizedNew}${source.address.slice(normalizedOld.length)}`;
+      }
+    }
     additions.push([clonedDestination, cloned]);
   }
   for (const [destination, edge] of additions) registry[destination] = edge;
   return additions.length;
+}
+
+// Pure preparation: callers publish only after the complete mapping has passed.
+export function relocateRouteRegistry(registry, mapping) {
+  const targets = new Set();
+  for (const [oldAddress, newAddress] of mapping) {
+    if (targets.has(newAddress) || (oldAddress !== newAddress && registry[newAddress] && !mapping.has(newAddress))) {
+      throw new Error(`SmartPipe relocation target conflict: ${newAddress}`);
+    }
+    targets.add(newAddress);
+  }
+  const result = structuredClone(registry);
+  for (const address of mapping.keys()) delete result[address];
+  for (const [address, edge] of Object.entries(registry)) {
+    const cloned = structuredClone(edge);
+    if (mapping.has(cloned.predecessorAddress)) cloned.predecessorAddress = mapping.get(cloned.predecessorAddress);
+    for (const source of cloned.sources || []) {
+      if (mapping.has(source.address)) source.address = mapping.get(source.address);
+    }
+    result[mapping.get(address) || address] = cloned;
+  }
+  return result;
 }
 
 export function reconcileRouteRegistryDestinations(registry, liveAddresses, state, now, graceMs = 1000) {
@@ -214,12 +241,19 @@ export function predecessorChoiceRoutes(routes, destinationId) {
   return (routes || []).filter((route) => !blocked.has(route.nodeId));
 }
 
-export function promptModeState(descriptors = []) {
-  const muted = descriptors.filter((descriptor) => descriptor?.node?.mode === 2);
-  const bypassed = descriptors.filter((descriptor) => descriptor?.kind === "pipe" && descriptor?.node?.mode === 4);
+export function effectiveDescriptorMode(descriptor) {
+  const modes = [descriptor?.node?.mode, ...(descriptor?.ancestorModes || [])];
+  return modes.includes(2) ? 2 : modes.includes(4) ? 4 : 0;
+}
+
+export function promptModeState(descriptors = [], registry = {}) {
+  const muted = descriptors.filter((descriptor) => effectiveDescriptorMode(descriptor) === 2);
+  const bypassed = descriptors.filter((descriptor) => descriptor?.kind === "pipe" && effectiveDescriptorMode(descriptor) === 4);
   return {
     bypassedAddresses: new Set(bypassed.map((descriptor) => descriptor.address)),
     bypassPredecessorAddresses: new Map(bypassed.map((descriptor) => {
+      if (Object.hasOwn(descriptor, "physicalPredecessorAddress")) return [descriptor.address, descriptor.physicalPredecessorAddress];
+      if (registry[descriptor.address]?.predecessorAddress) return [descriptor.address, registry[descriptor.address].predecessorAddress];
       const predecessor = descriptors.find((candidate) => candidate?.kind === "pipe"
         && executionScope(candidate.executionId) === executionScope(descriptor.executionId)
         && candidate.route?.nodeId === descriptor.route?.predecessorId);
@@ -259,11 +293,12 @@ export function materializeAddressedPipeLinks(apiPrompt, addressByExecutionId, r
         throw new Error(`BV Smart Pipe "${destinationAddress}": Bypass cycle detected at "${predecessorAddress}".`);
       }
       visited.add(predecessorAddress);
-      const bypassRoute = routeRegistry?.[predecessorAddress];
-      if (!bypassRoute?.predecessorAddress) {
+      const recorded = modeState.bypassPredecessorAddresses;
+      const next = recorded?.has(predecessorAddress) ? recorded.get(predecessorAddress) : routeRegistry?.[predecessorAddress]?.predecessorAddress;
+      if (!next) {
         throw new Error(`BV Smart Pipe "${destinationAddress}": Bypassed predecessor "${predecessorAddress}" has no predecessor to pass through.`);
       }
-      return resolvePredecessor(destinationAddress, bypassRoute.predecessorAddress, visited);
+      return resolvePredecessor(destinationAddress, next, visited);
     }
     const predecessorId = executionByAddress.get(predecessorAddress);
     if (!predecessorId || !["BV Smart Pipe", "BV Smart Pipe Merge"].includes(apiPrompt?.[predecessorId]?.class_type)) {
@@ -313,8 +348,8 @@ export function materializeSmartPipeMergeSources(apiPrompt, addressByExecutionId
       throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Bypass cycle detected at "${sourceAddress}".`);
     }
     visited.add(sourceAddress);
-    const predecessorAddress = routeRegistry?.[sourceAddress]?.predecessorAddress
-      || modeState.bypassPredecessorAddresses?.get(sourceAddress);
+    const recorded = modeState.bypassPredecessorAddresses;
+    const predecessorAddress = recorded?.has(sourceAddress) ? recorded.get(sourceAddress) : routeRegistry?.[sourceAddress]?.predecessorAddress;
     if (!predecessorAddress) {
       throw new Error(`BV Smart Pipe Merge "${destinationAddress}": Bypassed source "${sourceAddress}" has no predecessor to pass through.`);
     }
@@ -361,7 +396,16 @@ function resolveLocalPredecessor(record, byScope, modeState = {}, visited = new 
     if (visited.has(key)) throw new Error(`BV Smart Pipe "${record.route.name}": Bypass cycle detected.`);
     visited.add(key);
     const explicitPredecessor = modeState.bypassPredecessorsByScopedNodeId?.get(key);
-    if (explicitPredecessor) return explicitPredecessor;
+    if (explicitPredecessor?.kind === "merge") {
+      const mergeKey = `${explicitPredecessor.scope}\u0000${explicitPredecessor.route.nodeId}`;
+      if (modeState.mutedScopedNodeIds?.has(mergeKey)) return null;
+      if (!modeState.activeExecutionIds?.has(explicitPredecessor.executionId)) throw new Error(`BV Smart Pipe "${record.route.name}": Bypassed predecessor Merge is not active.`);
+      return explicitPredecessor;
+    }
+    if (explicitPredecessor) return explicitPredecessor.kind !== "merge" && explicitPredecessor.route?.nodeId
+      ? resolveLocalPredecessor({scope:explicitPredecessor.scope,route:{...record.route,predecessorId:explicitPredecessor.route.nodeId}},byScope,modeState,visited)
+      : explicitPredecessor;
+    if (modeState.bypassPredecessorsByScopedNodeId?.has(key)) throw new Error(`BV Smart Pipe "${record.route.name}": Bypassed predecessor has no proven predecessor to pass through.`);
     const route = modeState.routesByScopedNodeId?.get(key);
     if (!route?.predecessorId) {
       throw new Error(`BV Smart Pipe "${record.route.name}": Bypassed predecessor has no predecessor to pass through.`);
@@ -464,4 +508,24 @@ export function remapPromptOutputLinks(apiPrompt, outputIndexMaps) {
     }
   }
   return apiPrompt;
+}
+
+/** Read-only projection of the COMPLETE, validated compiler result. Never resolve
+ * routing here: the same compiler owns wired priority, modes, pruning and cycles. */
+export function effectiveSmartPipeEdges(apiPrompt, descriptors, wiredInputs = new Map()) {
+  const byExecution = new Map(descriptors.map((item) => [String(item.executionId), item]));
+  const edges = [];
+  for (const [executionId, entry] of Object.entries(apiPrompt || {})) {
+    const target = byExecution.get(executionId);
+    const classes = { pipe: "BV Smart Pipe", merge: "BV Smart Pipe Merge" };
+    if (!target || entry?.class_type !== classes[target.kind]) continue;
+    for (const [input, link] of Object.entries(entry.inputs || {})) {
+      if (!(target.kind === "pipe" ? input === "pipe" : /^pipe_\d+$/.test(input))) continue;
+      if (wiredInputs.get(executionId)?.has(input) || !Array.isArray(link) || link[1] !== 0) continue;
+      const source = byExecution.get(String(link[0]));
+      if (!source || !classes[source.kind] || apiPrompt[String(link[0])]?.class_type !== classes[source.kind]) continue;
+      edges.push(Object.freeze({ source: source.address, target: target.address, targetInput: input }));
+    }
+  }
+  return Object.freeze(edges);
 }

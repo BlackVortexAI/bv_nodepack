@@ -27,7 +27,7 @@ function restoreNativeGraph(node:any){
     else delete node.graph;
 }
 
-function withNativeGraphOwnership<T>(owner:any,nodes:any[],action:()=>T):T|false{
+export function withNativeGraphOwnership<T>(owner:any,nodes:any[],action:()=>T):T|false{
     if(!owner)return false;
     const unique=[...new Set(nodes.filter(Boolean))],bound:any[]=[];
     try{

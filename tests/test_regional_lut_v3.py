@@ -68,6 +68,19 @@ class RegionalLutV3Tests(unittest.TestCase):
         self.assertEqual(tuple(mask.shape), (1, 8, 8))
         self.assertEqual(strength, .5)
 
+    def test_cross_family_provider_identity_collision_never_returns_wrong_resource(self):
+        selected = payload(False)
+        selected["jobs"][0]["detector_source"] = {"collector_id": COLLECTOR, "resource_id": "face"}
+        lut_provider = {"schema": "bv.runtime_resource_provider", "version": 1, "provider_id": COLLECTOR,
+                        "resource_type": "bv-nodepack.lut", "resources": {"warm": builtin_lut("Warm Contrast")}}
+        detector_provider = {"schema": "bv.runtime_resource_provider", "version": 1, "provider_id": COLLECTOR,
+                             "resource_type": "bv-nodepack.detector", "resources": {"face": object()}}
+        for first, second in ((lut_provider, detector_provider), (detector_provider, lut_provider)):
+            with self.subTest(first=first["resource_type"]):
+                with self.assertRaisesRegex(RegionalContextError, "wrong identity or resource type"):
+                    BVRegionalLutPlanNode().build(DOCUMENT, json.dumps(selected), resource_provider_1=first,
+                                                  resource_provider_2=second)
+
     def test_loop_start_materializes_easy_regional_context_directly(self):
         registry = register_lut_contracts()
         regional = transform_lut_capability(DOCUMENT, payload(False), registry=registry).to_dict()

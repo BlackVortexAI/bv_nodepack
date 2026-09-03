@@ -1,6 +1,19 @@
 export const SMART_PIPE_DEFAULT_TITLE = "🌀 BV Smart Pipe";
 export const SMART_PIPE_MERGE_DEFAULT_TITLE = "🌀 BV Smart Pipe Merge";
 
+export function nextMergeSourceKey(sources = []) {
+  if (sources.length >= 16) return null;
+  const used = new Set(sources.map(source => source.key));
+  const ordinals = [...used].filter(key => /^pipe_\d+$/.test(key)).map(key => Number(key.slice(5))).filter(Number.isSafeInteger);
+  let ordinal = Math.max(0, ...ordinals) + 1;
+  if (!Number.isSafeInteger(ordinal) || ordinal > 16) ordinal = 1;
+  for (; ordinal <= 16; ordinal++) {
+    const key = `pipe_${String(ordinal).padStart(3, "0")}`;
+    if (!used.has(key)) return key;
+  }
+  return null;
+}
+
 export function mergeSourceIdentity(source) {
   return String(source?.address || "").trim() || null;
 }

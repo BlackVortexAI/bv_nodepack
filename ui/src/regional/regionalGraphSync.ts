@@ -8,7 +8,7 @@ function nestedGraph(node: any) {
 export function regionalWorkflowRoot(nodeOrGraph: any, fallback: any = null) {
     const graph = nodeOrGraph?._nodes || nodeOrGraph?.nodes
         ? nodeOrGraph
-        : nodeOrGraph?.graph ?? fallback;
+        : nodeOrGraph?.__bvConcreteGraph ?? nodeOrGraph?.graph ?? fallback;
     return graph?.rootGraph ?? graph ?? fallback;
 }
 

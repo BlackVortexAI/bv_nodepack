@@ -6,14 +6,102 @@ import { hasNodePresentationPolicy, REGIONAL_LORA_CONSUMER_NODE_TYPES, resolveNo
 import { applyClassicNodePresentation, applyClassicSubgraphLayout, removeNodePresentation } from "../ui/src/regional/classicNodePresentation.ts";
 import { setLegacyDebugVisible } from "../ui/src/regional/legacyPorts.ts";
 import { scheduleCompactLoraConsumerNode } from "../ui/src/regional/loraV3Graph.ts";
-import { markProjectedProvider, scheduleProjectedPortLayout } from "../ui/src/regional/portProjection.ts";
+import { markProjectedProvider, setProjectedSlotLabel, scheduleProjectedPortLayout } from "../ui/src/regional/portProjection.ts";
 import { configureNodes2NodePresentation, installNodes2NodePresentation, projectNodes2NodePresentation, removeNodes2NodePresentation } from "../ui/src/regional/nodes2NodePresentation.ts";
 import { installLutNodePresentation } from "../ui/src/regional/lutNodePresentation.ts";
 import { installNodePresentationLifecycle } from "../ui/src/regional/nodePresentationLifecycle.ts";
 import { lutLibrary } from "../ui/src/regional/lutLibrary.ts";
+import { installProjectedPortInteraction } from "../ui/src/regional/projectedPortInteraction.ts";
 import { configurePresentationSizeLifecycle, installPresentationSizeLifecycle, isPresentationUserResizing, presentationSize, removePresentationSizeLifecycle, setAutomaticPresentationSize } from "../ui/src/regional/presentationSize.ts";
 
 const indexSource=readFileSync(new URL("../ui/src/index.tsx",import.meta.url),"utf8");
+
+test("explicit provider labels stay stable across Classic refresh and DG reconciliation",()=>{
+  for(const direction of ['input','output'])for(const legacyDebug of [false,true]){
+    const provider={name:'resource_provider',type:'BV_RUNTIME_RESOURCE_PROVIDER',link:null,links:[]};
+    const normal={name:'alpha',type:'STRING',label:'Normal label',localized_name:'Normal localized',link:null,links:[]};
+    const node={id:990,size:[320,120],properties:{},inputs:direction==='input'?[normal,provider]:[],outputs:direction==='output'?[normal,provider]:[],widgets:[],computeSize(){return[320,120]},setSize(size){this.size=[...size]}};
+    const kind=direction==='input'?'BV Titlebar Port Canary Receiver (THROW AWAY)':'BV Titlebar Port Canary Sender (THROW AWAY)';
+    try{
+      markProjectedProvider(provider);setProjectedSlotLabel(provider,'DG');
+      applyClassicNodePresentation(node,kind,{legacyDebug});
+      const captured=JSON.stringify([node.inputs,node.outputs]);
+      for(let i=0;i<4;i++){
+        markProjectedProvider(provider);
+        assert.equal(JSON.stringify([node.inputs,node.outputs]),captured,'mark alone must not briefly clear the label');
+        setProjectedSlotLabel(provider,'DG');
+        assert.equal(JSON.stringify([node.inputs,node.outputs]),captured,'poll must not create a serialized label-only history change');
+        applyClassicNodePresentation(node,kind,{legacyDebug});
+        assert.equal(JSON.stringify([node.inputs,node.outputs]),captured,'Classic must preserve explicit presentation label');
+      }
+      assert.equal(provider.name,'resource_provider');
+      assert.equal(provider.label,'DG');assert.equal(provider.localized_name,'DG');
+      assert.equal(normal.label,'Normal label');assert.equal(normal.localized_name,'Normal localized');
+      const replacement={name:'resource_provider',type:'BV_RUNTIME_RESOURCE_PROVIDER',label:'previous native label'};
+      markProjectedProvider(replacement);
+      assert.equal(replacement.label,'','override belongs to the slot object, not its name or index');
+      setProjectedSlotLabel(replacement,'DG');markProjectedProvider(replacement);
+      assert.equal(replacement.label,'DG','marking also respects explicit labels');
+      setProjectedSlotLabel(replacement,'');markProjectedProvider(replacement);
+      assert.equal(replacement.label,'','explicit empty override remains supported');
+    }finally{removeNodePresentation(node)}
+  }
+});
+
+test("canary registration retains the shared presentation lifecycle before its early return",()=>{
+  const branch=indexSource.slice(indexSource.indexOf('if(installDgCanaryPrototype(nodeType,nodeData))'),indexSource.indexOf('if(nodeData.name==="BV Inspect Any")'));
+  const install=branch.indexOf('installNodePresentationLifecycle(nodeType,nodeData)');
+  assert.ok(install>=0&&install<branch.indexOf('return;'));
+});
+
+test("DG subgraph hosts explicitly enroll in the shared Vue presentation lifecycle",()=>{
+  const source=readFileSync(new URL('../ui/src/regional/dgRouting.ts',import.meta.url),'utf8');
+  assert.match(source,/if\(node\?\.subgraph\)installNodes2NodePresentation\(node,String\(node.type/);
+});
+
+test("Nodes 2.0 captures only opted-in DG row pointer actions and releases reused rows",()=>{
+  for(const direction of ['input','output'])for(const legacyDebug of [false,true]){
+    const row=nodes2Row('DG'),listeners=new Map();
+    row.addEventListener=(name,fn,capture)=>{assert.equal(capture,true);listeners.set(name,fn)};
+    row.removeEventListener=(name,fn)=>{if(listeners.get(name)===fn)listeners.delete(name)};
+    const dispatch=()=>{let blocked=false;listeners.get('pointerdown')?.({preventDefault(){blocked=true},stopImmediatePropagation(){}});return blocked};
+    const provider={name:'resource_provider',type:'BV_RUNTIME_RESOURCE_PROVIDER',link:17,links:[17]};
+    const node={id:440,inputs:direction==='input'?[provider]:[],outputs:direction==='output'?[provider]:[],widgets:[]};
+    const element={dataset:{},querySelectorAll:s=>s===`.lg-slot--${direction}`?[row]:[]};
+    const doc={querySelector:()=>element},kind='BV Titlebar Port Canary Receiver (THROW AWAY)';
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    assert.equal(dispatch(),false,'unregistered provider remains native');
+    installProjectedPortInteraction(node,s=>s?.type==='BV_RUNTIME_RESOURCE_PROVIDER');
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    assert.equal(dispatch(),true,'DG cannot reach native Vue pointer handler');
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    assert.equal(listeners.size,4,'repeated presentation does not stack handlers');
+    node[direction==='input'?'inputs':'outputs'][0]={name:'normal',type:'STRING'};
+    assert.equal(dispatch(),false,'event resolves current slot, not stale captured provider');
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    assert.equal(listeners.size,0,'row reuse releases DG capture');
+    const field=direction==='input'?'inputs':'outputs';
+    node[field]=[{name:'widget',type:'STRING'},provider];
+    row.querySelector=()=>({dataset:{slotKey:`440-${direction==='input'?'in':'out'}-1`}});
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    assert.equal(dispatch(),true,'filtered row uses canonical data-slot-key');
+    const unguarded={...node,id:441};
+    projectNodes2NodePresentation(unguarded,kind,doc,{legacyDebug});
+    assert.equal(listeners.size,0,'DOM reuse for unguarded node releases capture');
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    installProjectedPortInteraction(unguarded,s=>s?.type==='BV_RUNTIME_RESOURCE_PROVIDER');
+    projectNodes2NodePresentation(unguarded,kind,doc,{legacyDebug});
+    removeNodes2NodePresentation(node);
+    assert.equal(dispatch(),true,'old owner cleanup cannot release rebound row');
+    removeNodes2NodePresentation(unguarded);
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    removeNodes2NodePresentation(node);
+    assert.equal(listeners.size,0,'explicit removal releases handlers');
+    projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
+    projectNodes2NodePresentation(node,kind,{querySelector:()=>null},{legacyDebug});
+    assert.equal(listeners.size,0,'unmounted renderer releases handlers');
+  }
+});
 const lutV3CatalogSource=readFileSync(new URL("../ui/src/regional/lutV3Catalog.ts",import.meta.url),"utf8");
 
 const regionalPromptInventory = {
@@ -55,6 +143,25 @@ const controlCenterInventory={
   ports:[],
   widgets:[{name:"bv_control_config_json"},{name:"configure_control_center"},{name:"bv_control_conflict_status"}],
 };
+
+test("throw-away titlebar canaries use the central provider presentation contract",()=>{
+  const inventory={
+    ports:[
+      {direction:"input",name:"alpha",type:"BV_RUNTIME_RESOURCE_PROVIDER",connected:true},
+      {direction:"output",name:"beta",type:"BV_RUNTIME_RESOURCE_PROVIDER",connected:true},
+    ],
+    widgets:[],
+  };
+  for(const nodeType of["BV Titlebar Port Canary Sender (THROW AWAY)","BV Titlebar Port Canary Receiver (THROW AWAY)"]){
+    assert.equal(hasNodePresentationPolicy(nodeType),true);
+    for(const surface of["classic","ghost","nodes2"]){
+      for(const legacyDebug of[false,true]){
+        const plan=resolveNodePresentation(nodeType,inventory,{surface,legacyDebug});
+        assert.ok(plan.ports.every(({role,visible})=>role==="provider"&&!visible));
+      }
+    }
+  }
+});
 
 test("Control Center shares one technical-state and action contract on every surface",()=>{
   for(const surface of["classic","ghost","nodes2"]){
