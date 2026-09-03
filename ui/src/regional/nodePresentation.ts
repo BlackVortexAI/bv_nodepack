@@ -22,12 +22,6 @@ export type PresentationException=Readonly<{
 
 export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
     {
-        id:"throwaway-dg-selector-lifecycle",
-        implementation:["ui/src/regional/dgCanaryPrototype.ts#installReceiverSelector"],
-        reason:"The opt-in experiment combines a backend state widget with a nonserialized native selector whose objects may be replaced during configure. Its per-node watcher is retired on removal; current widget references are resolved on each refresh.",
-        centralizationPath:"Before product adoption, move graph-scoped selection and watcher ownership into a shared provider-selection lifecycle. Geometry already uses portProjection; received-value previews use executionResultPreview. See docs/design/node-presentation.md.",
-    },
-    {
         id:"react-node-dom-widget-host",
         implementation:["ui/src/regional/reactNodeWidgetHost.tsx"],
         reason:"ComfyUI owns the DOM-widget lifecycle and exposes it through addDOMWidget, whose mount, configure, measurement and removal timing differs from normal BV managed windows.",
@@ -38,12 +32,6 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         implementation:["ui/src/regional/portProjection.ts#installRegionalPromptCreationLayout","ui/src/regional/portProjection.ts#suppressInitialProjectedProviderDefinitions","ui/src/regional/portProjection.ts#reconcileDeferredPublicInputs","ui/src/index.tsx#BV Regional Prompt bootstrap"],
         reason:"ComfyUI measures and materializes the backend definition before the Regional Prompt instance has its projected provider markers, action widgets and dynamically reconciled provider slots. Public inputs added after those providers must therefore be deferred or old saved target-slot indices would reconnect to the wrong type.",
         centralizationPath:"The exception invokes generic centralized suppression/reconciliation helpers and preserves existing slot objects. Remove the bootstrap seam when ComfyUI exposes a supported pre-materialization order in which dynamic provider slots and public inputs can be declared without changing saved indices.",
-    },
-    {
-        id:"m0-runtime-resource-projection",
-        implementation:["ui/src/regional/m0ResourceSpike.tsx"],
-        reason:"The M0 collector and consumers create graph-bound provider slots and DOM pickers dynamically, before the normal policy inventory is complete.",
-        centralizationPath:"Move its local widget hiding and slot flags behind central widget/port projection helpers before extending M0.",
     },
     {
         id:"control-center-dynamic-widgets",
@@ -128,9 +116,6 @@ const REGIONAL_LORA_CONSUMER_POLICY:NodePresentationPolicy={
 
 const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     ...Object.fromEntries(REGIONAL_LORA_CONSUMER_NODE_TYPES.map(nodeType=>[nodeType,REGIONAL_LORA_CONSUMER_POLICY])),
-    // PROTOTYPE — THROW AWAY. Enrollment only; provider roles are inferred from slot types.
-    "BV Titlebar Port Canary Sender (THROW AWAY)":{},
-    "BV Titlebar Port Canary Receiver (THROW AWAY)":{},
     "BV Control Center":{
         widgets:[
             {role:"internalState",names:["bv_control_config_json"]},

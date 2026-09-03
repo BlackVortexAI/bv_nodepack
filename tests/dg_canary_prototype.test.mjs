@@ -3,7 +3,7 @@ import test from "node:test";
 import { registerDgAdapter, dgSenderChoices, connectDgSender, connectedDgSender, disconnectDgSender, reconcileDgTopology, activateDgReceiver, deactivateDgReceiver, scheduleDgUpgrade } from "../ui/src/regional/dgRouting.ts";
 import { connectLocalLoraCollectors, linkedLocalLoraCollectors, localLoraCollectors, loraProviderIdentity } from "../ui/src/regional/loraV3Graph.ts";
 import {installProjectedClipboard,installProjectedPortCanvasInteraction} from "../ui/src/regional/projectedPortInteraction.ts";
-import { prepareDgClipboard, connectDgCanarySender, disconnectDgCanarySender, dgCanarySenderChoices, installDgAnchorInteractionGuard, installDgCanaryPrototype, reconcileDgCanaryTopology } from "../ui/src/regional/dgCanaryPrototype.ts";
+import { prepareDgClipboard, connectDgCanarySender, disconnectDgCanarySender, dgCanarySenderChoices, installDgAnchorInteractionGuard, installDgCanaryPrototype, reconcileDgCanaryTopology } from "./fixtures/dgCanaryPrototype.ts";
 import {activateNewRegistryDgConsumer,connectRegistryDgInput} from "../ui/src/regional/loraRegistryDgAdapter.ts";
 import {reconcileRegistryFamily} from "../ui/src/regional/registryDgReconcile.ts";
 import {prepareDetailerPlanV3,reconcileDetailerV3Now} from "../ui/src/regional/detailerV3Graph.ts";

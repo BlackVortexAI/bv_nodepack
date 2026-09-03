@@ -1,13 +1,13 @@
 // Throwaway test UI and storage adapter; DG mechanics live in dgRouting.
-import { compactProjectedPortLayout, suppressInitialProjectedProviderDefinitions } from "./portProjection";
+import { compactProjectedPortLayout, suppressInitialProjectedProviderDefinitions } from "../../ui/src/regional/portProjection";
 import {
     registerDgAdapter, dgSenderChoices as dgCanarySenderChoices,
     connectDgSender as connectDgCanarySender, disconnectDgSender as disconnectDgCanarySender,
     reconcileDgTopology as reconcileDgCanaryTopology, installDgAnchorInteractionGuard,
     installConversionGuards, providerIndex, prepareProvider, queueDgUpgrade,
     isDgReceiverActive, activateDgReceiver, deactivateDgReceiver, type DgSenderChoice,
-} from "./dgRouting";
-export { prepareDgClipboard, installDgAnchorInteractionGuard } from "./dgRouting";
+} from "../../ui/src/regional/dgRouting";
+export { prepareDgClipboard, installDgAnchorInteractionGuard } from "../../ui/src/regional/dgRouting";
 export { dgCanarySenderChoices, connectDgCanarySender, disconnectDgCanarySender, reconcileDgCanaryTopology };
 
 const SENDER="BV Titlebar Port Canary Sender (THROW AWAY)";

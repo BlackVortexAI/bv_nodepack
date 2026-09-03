@@ -277,7 +277,7 @@ class NodeListTests(unittest.TestCase):
         )
 
     def test_m0_feasibility_nodes_are_not_publicly_registered(self):
-        from py.nodes.bv_regional_v3_m0 import (
+        from fixtures.bv_regional_v3_m0 import (
             NODE_CLASS_MAPPINGS,
             NODE_DISPLAY_NAME_MAPPINGS,
         )

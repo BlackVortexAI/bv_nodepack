@@ -4,7 +4,7 @@ import test from "node:test";
 import React from "../ui/node_modules/react/index.js";
 import { renderToStaticMarkup } from "../ui/node_modules/react-dom/server.node.js";
 import { ResourcePicker } from "../ui/src/ui/components/ResourcePicker.tsx";
-import { M0ResourcePickerPanel } from "../ui/src/regional/M0ResourcePickerPanel.tsx";
+import { M0ResourcePickerPanel } from "./fixtures/M0ResourcePickerPanel.tsx";
 import { sanitizeM0MultiSelections, sanitizeM0SingleSelection } from "../ui/src/regional/m0Selections.ts";
 import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs } from "../ui/src/regional/m0GraphContract.ts";
 import { installM0CanvasVisibility, markM0NodeElement, projectedProviderLink } from "../ui/src/regional/m0VisualProjection.ts";
@@ -124,17 +124,9 @@ test("the shared picker panel exposes a non-serialized debug control",()=>{
   assert.doesNotMatch(html,/>Collector One</);assert.match(html,/>Alpha</);
 });
 
-test("Nodes 2.0 hides every persisted id widget without leaving click overlays",()=>{
+test("production styles exclude fake-node widget overlays",()=>{
   const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
-  for(const name of ["collector_id","resource_id","resource_a_id","resource_b_id"]){
-    assert.match(styles,new RegExp(`input\\[aria-label="${name}"\\]`));
-  }
-  const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
-  assert.match(source,/host\.style\.position="relative"/);
-  assert.match(source,/host\.style\.zIndex="1"/);
-  assert.match(styles,/node-type="BV M0 Fake Resource Collector"/);
-  assert.match(styles,/node-type="BV M0 Fake Resource Consumer"/);
-  assert.match(source,/addEventListener\("executed",listener\)/);
+  assert.doesNotMatch(styles,/BV M0 Fake|bv-m0-picker|bv-m0-binding|bv-proto-/);
 });
 
 test("a stale Nodes 2.0 marker retry cannot overwrite the current debug state",()=>{
@@ -166,7 +158,7 @@ test("Nodes 2.0 provider ports are hidden by their stable type, including subgra
 });
 
 test("the spike uses ordinary graph links without prompt hooks or name fallback",()=>{
-  const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
+  const source=readFileSync(new URL("./fixtures/m0ResourceSpike.tsx",import.meta.url),"utf8");
   const traversal=readFileSync(new URL("../ui/src/regional/m0LocalGraph.ts",import.meta.url),"utf8");
   const selections=readFileSync(new URL("../ui/src/regional/m0Selections.ts",import.meta.url),"utf8");
   assert.match(source,/source\.connect\(output,node,input\)/);
@@ -571,7 +563,7 @@ test("multi debug projects every native edge onto one visual fan-in anchor",()=>
 });
 
 test("copy remapping is based on stable ids and the copied real link",()=>{
-  const source=readFileSync(new URL("../ui/src/regional/m0ResourceSpike.tsx",import.meta.url),"utf8");
+  const source=readFileSync(new URL("./fixtures/m0ResourceSpike.tsx",import.meta.url),"utf8");
   assert.match(source,/crypto\.randomUUID\(\)/);
   assert.match(source,/source\?\.__bvM0IdRemap/);
   assert.match(source,/remap\.collector\[String\(cid\.value\)\]/);

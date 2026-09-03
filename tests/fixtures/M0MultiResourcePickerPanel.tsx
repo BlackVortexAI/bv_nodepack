@@ -1,5 +1,5 @@
-import React from "react";
-import { Button, ResourcePicker, ResourcePickerCollector, ToggleField } from "../ui/components";
+import React from "../../ui/node_modules/react/index.js";
+import { Button, ResourcePicker, ResourcePickerCollector, ToggleField } from "../../ui/src/ui/components";
 
 export type M0ResourceBinding={binding_id:string;collector_id:string;resource_id:string;resolved:boolean};
 

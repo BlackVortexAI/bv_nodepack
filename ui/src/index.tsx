@@ -38,8 +38,6 @@ import { openLutRegistryDialog } from "./regional/lutRegistryDialog";
 import { installLutNodePresentation } from "./regional/lutNodePresentation";
 import { installNodePresentationLifecycle } from "./regional/nodePresentationLifecycle";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
-import { installM0ResourceSpike } from "./regional/m0ResourceSpike";
-import { installDgCanaryPrototype } from "./regional/dgCanaryPrototype";
 import { prepareDgClipboard } from "./regional/dgRouting";
 import { installProjectedClipboard } from "./regional/projectedPortInteraction";
 import { compactLoraConsumerNode, hideLoraV3Widget, installLoraV3ConsumerSlot, installLoraV3Ui } from "./regional/loraV3Ui";
@@ -751,18 +749,12 @@ comfyApp.registerExtension({
         onClick: (event?:MouseEvent) => toggleToolbarWindowLauncher(event?.currentTarget instanceof HTMLElement?event.currentTarget:undefined),
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
-        if(installDgCanaryPrototype(nodeType,nodeData)){
-            installNodePresentationLifecycle(nodeType,nodeData);
-            if(nodeData.name==="BV Titlebar Port Canary Receiver (THROW AWAY)")installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-dg-canary-received",widgetName:"bv_dg_received_preview",messageKey:"text",placeholder:"Run to verify the received DG payload.",minHeight:100,maxHeight:180});
-            return;
-        }
         installNodePresentationLifecycle(nodeType,nodeData);
         if(nodeData.name==="BV Inspect Any"){
             installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
             return;
         }
         if(nodeData.name==="BV Regional Prompt")suppressInitialProjectedProviderDefinitions(nodeData,["canvas_image"]);
-        if (installM0ResourceSpike(nodeType, nodeData)) return;
         if(nodeData.name==="BV LoRA Registry"){installLoraRegistryUi(nodeType,nodeData,comfyApi,detailerGraphOwner);return}
         const legacyDescriptors=legacyPortDescriptors(nodeData.name);
         if(legacyDescriptors.length){

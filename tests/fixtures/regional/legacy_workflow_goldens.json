@@ -58,7 +58,7 @@
   "root_graph_cases": [
     {
       "id": "m0-four-collector-root-graph",
-      "workflow": "examples/workflows/bv-regional-v3-m0-multi-fan-in.json",
+      "workflow": "tests/fixtures/regional/bv-regional-v3-m0-multi-fan-in.json",
       "collector_count": 4,
       "consumer_count": 1,
       "provider_link_count": 4,

@@ -1,6 +1,8 @@
 import React,{ReactNode,useEffect,useRef,useState}from"react";
 import{createRoot}from"react-dom/client";
-import styles from"./index.css?inline";
+import baseStyles from"./index.css?inline";
+import prototypeStyles from"./prototypes/showcase.css?inline";
+const styles=baseStyles+"\n"+prototypeStyles;
 import{applyBvTheme,DEFAULT_BV_THEME,type BvAppearance}from"./ui/theme";
 import{Accordion,Badge,BooleanField,BoundsField,Breadcrumbs,Button,BvFooterActions,BvWindowFooter,BvWindowHeader,BvWindowNavigator,Callout,Card,CheckboxField,CodeBlock,ColorField,CommandPalette,ControlDensity,DataTable,DefinitionList,Dialog,Divider,EmptyState,ImagePicker,JsonEditor,Keybinding,KeybindingField,MenuButton,MultiSelect,NativePickerField,NumberField,OptionSet,Pagination,PanelFooter,PanelHeader,Progress,RichSelect,SearchField,Section,SecretField,SelectField,SortableItem,SortableList,SplitButton,Steps,Tabs,TagInput,TagSelect,TextareaField,TextField,Toast,ToastStack,ToggleField,Toolbar,Tooltip,UiDensity}from"./ui";
 import{DetectorRegistryDialogView}from"./regional/DetectorRegistryDialogView";

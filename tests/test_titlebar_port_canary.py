@@ -7,7 +7,7 @@ from unittest.mock import patch
 import torch
 
 
-MODULE_PATH = Path(__file__).parents[1] / "py" / "nodes" / "bv_titlebar_port_canary.py"
+MODULE_PATH = Path(__file__).parent / "fixtures" / "bv_titlebar_port_canary.py"
 SPEC = importlib.util.spec_from_file_location("bv_titlebar_port_canary", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 _previous = os.environ.get("BV_ENABLE_TITLEBAR_PORT_CANARY")

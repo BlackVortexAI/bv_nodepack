@@ -152,7 +152,7 @@ the native layout so ordinary ports and the trailing Add port retain contiguous
 rows. The debug endpoint is derived from the first ordinary slot's real position,
 one `M0_PROVIDER_SLOT_HEIGHT` above it; it is not the hidden technical slot's
 position. Slot arrays and canonical link indices are not changed by this adapter.
-The throw-away routing experiment uses `SubgraphOutput.connect(output, source)`
+The shared routing service uses `SubgraphOutput.connect(output, source)`
 for the inner output segment, because the special Output node is not a normal
 `LGraphNode` with an `inputs` array.
 
@@ -198,7 +198,7 @@ pointer entry before output drag/detach as well as the separate Special-I/O poin
 Special-I/O preserves last-hit priority and the ordinary add slot. No slot arrays, indices,
 positions or programmatic connection APIs are rewritten by this adapter.
 
-The opt-in `throwaway-dg-conversion-lifecycle` exception installs the shared
+The DG conversion lifecycle installs the shared
 `projectedPortInteraction.ts#installProjectedPortConversion` wrapper on graph instances
 after graph assignment, including newly returned child graphs. Native synchronous
 `convertToSubgraph` and `unpackSubgraph` reconnect existing edges through connection veto hooks; only those
@@ -212,16 +212,8 @@ Regression contract: `tests/dg_canary_prototype.test.mjs` native conversion, str
 exception-reset and deleted receiver ownership tests. This remains shared NodePack infrastructure,
 not a ComfyUI source modification.
 
-The opt-in `dgCanaryPrototype.ts#installReceiverSelector` throwaway lifecycle is registered as
-`throwaway-dg-selector-lifecycle`. It hides backend selection state and provides a native,
-nonserialized combo. Configure may replace widget objects; callbacks resolve current widgets,
-and removal invalidates polling and queued upgrades. Before adoption by product nodes, extract
-this graph-scoped selection lifecycle into a shared provider-selection adapter. The experiment's
-received-value display uses `executionResultPreview.tsx` and the shared React widget host, not
-a local drawing implementation. The receiver reports actual provider payload, never selection ID.
-
-Both canary definitions enroll in the normal shared presentation lifecycle. The
-shared `dgRouting.ts#installDgAnchorInteractionGuard` also enrolls opted-in subgraph hosts directly in
+Test-only node adapters live under `tests/fixtures` and are not registered by the
+NodePack. The shared `dgRouting.ts#installDgAnchorInteractionGuard` also enrolls opted-in subgraph hosts directly in
 `nodes2NodePresentation`, since hosts have no BV backend definition lifecycle;
 removal releases that enrollment and a later route reconciliation can rebind it.
 This host enrollment is owned by the central connection service. Virtual I/O keeps its canvas path.
@@ -248,8 +240,7 @@ mutate live nodes or perform routing. Regression: `tests/dg_canary_prototype.tes
 `dgRouting.ts` owns traversal, persistent sender identities, LCA routing through
 nested/sibling graphs, shared-boundary protection, reconciliation, clipboard
 remapping, programmatic connection permission and receiver epoch invalidation.
-`dgCanaryPrototype.ts` is the test UI/storage adapter; Python test payloads remain
-unchanged. SmartPipe and Collector are not migrated by this extraction. Registry
+`tests/fixtures/dgCanaryPrototype.ts` supplies isolated regression fixtures only. SmartPipe and Collector are not migrated by this extraction. Registry
 adoption is a separate explicit opt-in pilot described below, not a global migration.
 
 Register a `DgNodeAdapter` with unique ID, sender/receiver predicates and live plus
@@ -309,11 +300,8 @@ primitives: they do not write/clear adapter selection, so later reconciliation
 can restore the selected route. Lifecycle adapters call `activateDgReceiver`,
 `deactivateDgReceiver` and `queueDgUpgrade` for stale-work protection.
 
-Remaining exception: `dgCanaryPrototype.ts#installReceiverSelector` owns native
-test combo creation and its 250-ms watcher because its backend widget contract is
-throwaway-only. Core discovery/routing are already central; a future product
-selection UI must use this interface rather than copy the test combo. See
-`PRESENTATION_EXCEPTIONS.throwaway-dg-selector-lifecycle`.
+The former throwaway selector is retained only as a regression fixture; it has no
+production entry point or presentation exception.
 DG integration runs on the standard ComfyUI frontend; the experimental
 NativeModeTest frontend is not a dependency. Presentation and routing extensions
 remain inside this NodePack. Native mute/bypass semantics still apply: suppressing

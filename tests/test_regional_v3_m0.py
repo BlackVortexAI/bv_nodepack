@@ -1,5 +1,5 @@
 import unittest
-from py.nodes.bv_regional_v3_m0 import (
+from fixtures.bv_regional_v3_m0 import (
     BVM0FakeMultiResourceConsumer,
     BVM0FakeResourceCollector,
     BVM0FakeResourceConsumer,

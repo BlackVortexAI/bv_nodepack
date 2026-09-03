@@ -1,15 +1,14 @@
-// Registered presentation exception: m0-runtime-resource-projection.
-// See PRESENTATION_EXCEPTIONS in nodePresentation.ts for rationale and exit path.
-import React from "react";
-import ReactDOM from "react-dom/client";
-import { getApi, getApp } from "../appHelper.js";
-import { ResourcePickerCollector } from "../ui/components";
+// Regression-only M0 adapter. Not imported or registered by the NodePack.
+import React from "../../ui/node_modules/react/index.js";
+import ReactDOM from "../../ui/node_modules/react-dom/client.js";
+import { getApi, getApp } from "../../ui/src/appHelper.js";
+import { ResourcePickerCollector } from "../../ui/src/ui/components";
 import { M0ResourcePickerPanel } from "./M0ResourcePickerPanel";
 import { M0MultiResourcePickerPanel, M0ResourceBinding } from "./M0MultiResourcePickerPanel";
-import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs, M0_MAX_MULTI_COLLECTORS, M0_PROVIDER_TYPE } from "./m0GraphContract";
-import { installM0CanvasVisibility, markM0NodeElement, requestM0DebugAnimation, syncM0DebugRoot } from "./m0VisualProjection";
-import { resolveM0LocalLinkedCollector } from "./m0LocalGraph";
-import { sanitizeM0MultiSelections, sanitizeM0SingleSelection } from "./m0Selections";
+import { compactM0HiddenProviderSlots, ensureM0CollectorOutput, ensureM0ConsumerInput, ensureM0MultiConsumerInputs, M0_MAX_MULTI_COLLECTORS, M0_PROVIDER_TYPE } from "../../ui/src/regional/m0GraphContract";
+import { installM0CanvasVisibility, markM0NodeElement, requestM0DebugAnimation, syncM0DebugRoot } from "../../ui/src/regional/m0VisualProjection";
+import { resolveM0LocalLinkedCollector } from "../../ui/src/regional/m0LocalGraph";
+import { sanitizeM0MultiSelections, sanitizeM0SingleSelection } from "../../ui/src/regional/m0Selections";
 
 const COLLECTOR="BV M0 Fake Resource Collector", CONSUMER="BV M0 Fake Resource Consumer", MULTI_CONSUMER="BV M0 Fake Multi Resource Consumer", PROVIDER=M0_PROVIDER_TYPE;
 const A="a1bdeceb-76ae-4e45-ae36-e5c2664819ce", B="d97a4268-c02c-42a3-8793-8e578e12e12c";

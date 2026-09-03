@@ -21,7 +21,7 @@ test("explicit provider labels stay stable across Classic refresh and DG reconci
     const provider={name:'resource_provider',type:'BV_RUNTIME_RESOURCE_PROVIDER',link:null,links:[]};
     const normal={name:'alpha',type:'STRING',label:'Normal label',localized_name:'Normal localized',link:null,links:[]};
     const node={id:990,size:[320,120],properties:{},inputs:direction==='input'?[normal,provider]:[],outputs:direction==='output'?[normal,provider]:[],widgets:[],computeSize(){return[320,120]},setSize(size){this.size=[...size]}};
-    const kind=direction==='input'?'BV Titlebar Port Canary Receiver (THROW AWAY)':'BV Titlebar Port Canary Sender (THROW AWAY)';
+    const kind=direction==='input'?'BV Regional Detailer Plan':'BV LoRA Registry';
     try{
       markProjectedProvider(provider);setProjectedSlotLabel(provider,'DG');
       applyClassicNodePresentation(node,kind,{legacyDebug});
@@ -48,10 +48,8 @@ test("explicit provider labels stay stable across Classic refresh and DG reconci
   }
 });
 
-test("canary registration retains the shared presentation lifecycle before its early return",()=>{
-  const branch=indexSource.slice(indexSource.indexOf('if(installDgCanaryPrototype(nodeType,nodeData))'),indexSource.indexOf('if(nodeData.name==="BV Inspect Any")'));
-  const install=branch.indexOf('installNodePresentationLifecycle(nodeType,nodeData)');
-  assert.ok(install>=0&&install<branch.indexOf('return;'));
+test("production registration excludes throwaway test adapters",()=>{
+  assert.doesNotMatch(indexSource,/installDgCanaryPrototype|installM0ResourceSpike|bv-dg-canary-received/);
 });
 
 test("DG subgraph hosts explicitly enroll in the shared Vue presentation lifecycle",()=>{
@@ -68,7 +66,7 @@ test("Nodes 2.0 captures only opted-in DG row pointer actions and releases reuse
     const provider={name:'resource_provider',type:'BV_RUNTIME_RESOURCE_PROVIDER',link:17,links:[17]};
     const node={id:440,inputs:direction==='input'?[provider]:[],outputs:direction==='output'?[provider]:[],widgets:[]};
     const element={dataset:{},querySelectorAll:s=>s===`.lg-slot--${direction}`?[row]:[]};
-    const doc={querySelector:()=>element},kind='BV Titlebar Port Canary Receiver (THROW AWAY)';
+    const doc={querySelector:()=>element},kind='BV Regional Detailer Plan';
     projectNodes2NodePresentation(node,kind,doc,{legacyDebug});
     assert.equal(dispatch(),false,'unregistered provider remains native');
     installProjectedPortInteraction(node,s=>s?.type==='BV_RUNTIME_RESOURCE_PROVIDER');
@@ -144,7 +142,7 @@ const controlCenterInventory={
   widgets:[{name:"bv_control_config_json"},{name:"configure_control_center"},{name:"bv_control_conflict_status"}],
 };
 
-test("throw-away titlebar canaries use the central provider presentation contract",()=>{
+test("real registry and consumer use the central provider presentation contract",()=>{
   const inventory={
     ports:[
       {direction:"input",name:"alpha",type:"BV_RUNTIME_RESOURCE_PROVIDER",connected:true},
@@ -152,7 +150,7 @@ test("throw-away titlebar canaries use the central provider presentation contrac
     ],
     widgets:[],
   };
-  for(const nodeType of["BV Titlebar Port Canary Sender (THROW AWAY)","BV Titlebar Port Canary Receiver (THROW AWAY)"]){
+  for(const nodeType of["BV LoRA Registry","BV Regional Detailer Plan"]){
     assert.equal(hasNodePresentationPolicy(nodeType),true);
     for(const surface of["classic","ghost","nodes2"]){
       for(const legacyDebug of[false,true]){
