@@ -369,11 +369,11 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
                 ]},
                 { type:"tabset", weight:54, minWidth:320, children:[{ type:"tab", id:"bv.regional.canvas", name:"Canvas", component:"canvas", enablePopoutFloatIcon:true }] },
                 { type:"row", weight:24, minWidth:260, children:[
-                    { type:"tabset", weight:75, selected:0, children:[
+                    { type:"tabset", weight:56, selected:0, children:[
                         { type:"tab", id:"bv.regional.global", name:"Global", component:"global", enablePopoutFloatIcon:true },
                         { type:"tab", id:"bv.regional.document", name:"Document", component:"document", enablePopoutFloatIcon:true }
                     ] },
-                    { type:"tabset", weight:25, children:[{ type:"tab", id:"bv.regional.region", name:"Region", component:"region", enablePopoutFloatIcon:true }] }
+                    { type:"tabset", weight:44, children:[{ type:"tab", id:"bv.regional.region", name:"Region", component:"region", enablePopoutFloatIcon:true }] }
                 ]}
               ]} }} panels={[
                 { id:"regions", layoutId:"bv.regional.regions", title:"Regions", weight:22, minWidth:220, content:

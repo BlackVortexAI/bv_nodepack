@@ -163,13 +163,30 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
 def resolve_stack_paths(
     scope_stacks: dict[str, Any],
     find_lora: Any = None,
+    *,
+    allowed_roots: Any = None,
 ) -> dict[str, list[tuple[str, float, float]]]:
     if not scope_stacks:
         return {}
-    if find_lora is None:
+    if find_lora is None or allowed_roots is None:
         import folder_paths
+        if find_lora is None:
+            find_lora = lambda path: folder_paths.get_full_path("loras", path)
+        if allowed_roots is None:
+            allowed_roots = folder_paths.get_folder_paths("loras")
+    configured_roots = [Path(root).absolute() for root in allowed_roots]
+    real_roots = [root.resolve() for root in configured_roots]
 
-        find_lora = lambda path: folder_paths.get_full_path("loras", path)
+    def approved_path(candidate: Path) -> Path:
+        # Reject unrelated absolute paths before filesystem resolution (including UNC).
+        if not any(candidate.absolute().is_relative_to(root) for root in configured_roots + real_roots):
+            raise ValueError("LoRA path is outside configured LoRA folders; register its folder in ComfyUI")
+        resolved = candidate.resolve()
+        if not any(resolved.is_relative_to(root) for root in real_roots):
+            raise ValueError("LoRA path resolves outside configured LoRA folders")
+        if not resolved.is_file():
+            raise ValueError(f"LoRA file not found: {candidate}")
+        return resolved
 
     resolved_stacks: dict[str, list[tuple[str, float, float]]] = {}
     resolved_paths: dict[str, str] = {}
@@ -180,12 +197,12 @@ def resolve_stack_paths(
             canonical = resolved_paths.get(source)
             if canonical is None:
                 resolved = Path(source)
-                if not resolved.is_file():
+                if not resolved.is_absolute():
                     found = find_lora(source)
                     if not found:
                         raise ValueError(f"LoRA file not found: {source}")
                     resolved = Path(found)
-                canonical = str(resolved.resolve())
+                canonical = str(approved_path(resolved))
                 resolved_paths[source] = canonical
             resolved_entries.append((canonical, float(model_strength), float(clip_strength)))
         resolved_stacks[scope] = resolved_entries

@@ -69,6 +69,18 @@ def _ancestors(prompt: dict[str, Any], node_id: str) -> list[tuple[str, dict[str
     return found
 
 
+def _linked_scalar(prompt: dict[str, Any], value: Any) -> Any:
+    if not (isinstance(value, list) and len(value) == 2):
+        return value
+    node = prompt.get(str(value[0]))
+    if not isinstance(node, dict):
+        return value
+    inputs = node.get("inputs", {})
+    if node.get("class_type") == "BV Seed" and int(value[1]) == 0:
+        return inputs.get("seed", inputs.get("seed_bv", value))
+    return value
+
+
 def _sampler_info(prompt: Any, unique_id: Any) -> dict[str, Any] | None:
     if not isinstance(prompt, dict) or unique_id is None:
         return None
@@ -99,7 +111,7 @@ def _sampler_info(prompt: Any, unique_id: Any) -> dict[str, Any] | None:
         "sampler": _text(inputs.get("sampler_name")) or None,
         "scheduler": _text(inputs.get("scheduler")) or None,
         "cfg": inputs.get("cfg"),
-        "seed": inputs.get("seed", inputs.get("noise_seed")),
+        "seed": _linked_scalar(prompt, inputs.get("seed", inputs.get("noise_seed"))),
         "denoise": inputs.get("denoise"),
         "model": model_name,
         "global_loras": global_loras,
@@ -195,7 +207,8 @@ def build_regional_metadata(
         if sampler["denoise"] is not None and float(sampler["denoise"]) != 1.0:
             values.append(f"Denoising strength: {sampler['denoise']}")
         if resources:
-            values.append("Lora hashes: " + ", ".join(f"{item['name']}: {item['sha256'][:10]}" for item in resources))
+            hashes = ", ".join(f"{item['name']}: {item['sha256'][:10]}" for item in resources)
+            values.append(f'Lora hashes: "{hashes}"')
         values.append("Version: ComfyUI / BV Node Pack")
         lines.append(", ".join(values))
         parameters = "\n".join(lines)

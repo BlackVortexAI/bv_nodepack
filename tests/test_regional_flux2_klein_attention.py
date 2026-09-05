@@ -64,8 +64,8 @@ class RegionalFlux2KleinAttentionTests(unittest.TestCase):
         self.assertEqual(tuple(positive[0][0].shape), (1, 512, 12_288))
         self.assertEqual(int(positive[0][1]["attention_mask"].sum()), 15)
         self.assertEqual(positive[0][1]["bv_regional_prefix_padding"], 497)
-        self.assertEqual(torch.count_nonzero(negative[0][0]), 0)
-        self.assertEqual(torch.count_nonzero(negative[0][1]["pooled_output"]), 0)
+        self.assertGreater(torch.count_nonzero(negative[0][0]), 0)
+        self.assertGreater(torch.count_nonzero(negative[0][1]["pooled_output"]), 0)
         self.assertEqual(aspect, 1.0)
 
     def test_grid_factorization_tracks_canvas_aspect(self):

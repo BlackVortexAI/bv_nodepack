@@ -221,7 +221,53 @@ class LoraRegistryTests(unittest.TestCase):
             folders = FakeFolderPaths(["look.safetensors"], {"look.safetensors": str(model)})
             self.assertEqual(lora_preview_path("look.safetensors", folders), jpg.resolve())
             item = discover_loras(folders)["items"][0]
-            self.assertEqual(item["preview_url"], "/bv_nodepack/loras/preview?name=look.safetensors")
+            self.assertTrue(item["preview_url"].startswith("/bv_nodepack/loras/preview?name=look.safetensors&v="))
+            first_url = item["preview_url"]
+            jpg.write_bytes(b"changed-preview")
+            second_url = discover_loras(folders)["items"][0]["preview_url"]
+            self.assertNotEqual(second_url, first_url)
+            self.assertEqual(discover_loras(folders)["items"][0]["preview_url"], second_url)
+
+    def test_preview_accepts_lora_manager_stem_images_after_preview_family(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = root / "look.safetensors"
+            model.write_bytes(b"model")
+            manager_jpeg = root / "look.jpeg"
+            manager_jpeg.write_bytes(b"manager")
+            (root / "orphan.jpeg").write_bytes(b"orphan")
+            folders = FakeFolderPaths(["look.safetensors"], {"look.safetensors": str(model)})
+            self.assertEqual(lora_preview_path("look.safetensors", folders), manager_jpeg.resolve())
+            self.assertIn("&v=", discover_loras(folders)["items"][0]["preview_url"])
+            preferred = root / "look.preview.jpg"
+            preferred.write_bytes(b"preferred")
+            self.assertEqual(lora_preview_path("look.safetensors", folders), preferred.resolve())
+
+    def test_preview_safety_uses_lora_manager_pg_boundary_and_safe_source_precedence(self):
+        cases = (
+            (0, None, True),
+            (1, None, True),
+            (2, False, False),
+            (32, None, False),
+            (None, False, True),
+            (None, None, False),
+            (True, None, False),
+            ("1", None, False),
+            (-1, None, False),
+        )
+        for level, cm_nsfw, expected in cases:
+            with self.subTest(level=level, cm_nsfw=cm_nsfw):
+                with TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    model = root / "look.safetensors"
+                    model.write_bytes(b"model")
+                    (root / "look.jpeg").write_bytes(b"preview")
+                    if level is not None:
+                        (root / "look.metadata.json").write_text(json.dumps({"preview_nsfw_level": level}), encoding="utf-8")
+                    if cm_nsfw is not None:
+                        (root / "look.cm-info.json").write_text(json.dumps({"Nsfw": cm_nsfw}), encoding="utf-8")
+                    folders = FakeFolderPaths(["look.safetensors"], {"look.safetensors": str(model)})
+                    self.assertIs(discover_loras(folders)["items"][0]["preview_safe"], expected)
 
 
 if __name__ == "__main__":

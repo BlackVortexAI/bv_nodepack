@@ -47,10 +47,11 @@ import { installM0CanvasVisibility, requestM0DebugAnimation } from "./regional/m
 import { publishInstanceDgProjection, clearInstanceDgProjection, tickInstanceDgProjection } from "./regional/instanceDgProjection";
 import { migrateRegionalNode, migrationReportMessage, queueRegionalMigrationReport, regionalEditorDraft, REGIONAL_MIGRATION_EVENT, REGIONAL_VALIDATION_EVENT } from "./regional/milestoneE";
 import { clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, LEGACY_DEBUG_COMMAND_ID, LEGACY_DEBUG_SETTING_ID, legacyPortDescriptors, legacyUsage, refreshLegacyPorts, setLegacyDebugVisible } from "./regional/legacyPorts";
-import { applyReducedEffects, applyUiPreferences, applyUiSize, bindWindowSwitchModePersistence, getWindowSwitchMode, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
+import { applyReducedEffects, applyUiPreferences, applyUiSize, bindMaturePreviewPersistence, bindWindowSwitchModePersistence, getWindowSwitchMode, LORA_MATURE_PREVIEWS_SETTING_ID, setMaturePreviewVisibility, setWindowSwitchMode, UI_REDUCED_EFFECTS_SETTING_ID, UI_SIZE_SETTING_ID, UI_WINDOW_SWITCH_MODE_SETTING_ID } from "./ui/preferences";
 import { bvWindowActivity, BvGlobalToastStack, collectScopedNodes, createOpenLastBvEditorAction, createScopedBvWindowOpen, dismissBvToast, setWindowMenuVisible, showBvToast, switchBvView, toggleToolbarWindowLauncher, ToolbarWindowLauncher, ToolbarLauncherColumn, windowMenuVisible, type BvWindowCandidate, type BvWindowType } from "./ui";
 import { reconcileDeferredPublicInputs, setProjectedSlotLabel, suppressInitialProjectedProviderDefinitions } from "./regional/portProjection";
 import { applyClassicNodePresentation, applyClassicSubgraphLayout, removeNodePresentation } from "./regional/classicNodePresentation";
+import { reconcileConfiguredNodeOutputs } from "./regional/nodeOutputCompatibility";
 import { installNodePreviewProjection } from "./regional/nodePreviewProjection";
 import { configurePresentationSizeLifecycle } from "./regional/presentationSize";
 import { installExecutionResultPreview } from "./regional/executionResultPreview";
@@ -84,6 +85,7 @@ bindCompletionSettingPersistence(value => (comfyApp as any).ui?.settings?.setSet
 bindCompletionDatasetPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_DATASETS_SETTING_ID, value));
 bindCompletionPlacementPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(COMPLETION_PLACEMENT_SETTING_ID, value));
 bindWindowSwitchModePersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(UI_WINDOW_SWITCH_MODE_SETTING_ID, value));
+bindMaturePreviewPersistence(value => (comfyApp as any).ui?.settings?.setSettingValue?.(LORA_MATURE_PREVIEWS_SETTING_ID, value));
 import "./components/control/bv_control_center";
 
 const OPEN_CONTROL_RACK_EVENT = "bv-open-control-rack";
@@ -665,6 +667,14 @@ comfyApp.registerExtension({
         tooltip: "Choose whether changing the node in a BV editor minimizes or closes the current window. Hold Shift to invert the mode once.",
         onChange: (value: string) => setWindowSwitchMode(value, false),
     }, {
+        id: LORA_MATURE_PREVIEWS_SETTING_ID as any,
+        name: "Show Mature or Unrated LoRA Previews",
+        type: "boolean",
+        defaultValue: false,
+        category: ["BV Node Pack", "LoRA", "Mature previews"],
+        tooltip: "Persistently allow mature or unrated local LoRA preview images in BV interfaces. Disabled by default.",
+        onChange: (value: boolean) => setMaturePreviewVisibility(value, false),
+    }, {
         id: LEGACY_DEBUG_SETTING_ID as any,
         name: "Enable BV Regional Legacy Debug Mode",
         type: "boolean",
@@ -984,6 +994,7 @@ comfyApp.registerExtension({
         };
     },
     afterConfigureGraph() {
+        reconcileConfiguredNodeOutputs((comfyApp as any).graph);
         scheduleRegionalConsumersRefresh((comfyApp as any).graph);
         queueMicrotask(refreshBvToolbarCapabilities);
     },

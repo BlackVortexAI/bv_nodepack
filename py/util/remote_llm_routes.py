@@ -8,6 +8,7 @@ from .remote_llm import (
     delete_remote_api_key,
     load_provider_catalog,
     remote_api_key_status,
+    remote_api_key_endpoint,
     set_remote_api_key,
 )
 
@@ -33,6 +34,7 @@ async def remote_llm_providers(_request):
                 "default_model": profile.default_model,
                 "auth_mode": profile.auth_mode,
                 "configured": profile.auth_mode == "none" or configured.get(profile.id, False),
+                "approved_endpoint": remote_api_key_endpoint(profile.id),
             }
             for profile in load_provider_catalog()
         ],
@@ -49,7 +51,9 @@ async def remote_llm_set_api_key(request):
             raise RemoteLLMConfigurationError("Unknown remote LLM provider profile")
         if profile.auth_mode == "none":
             raise RemoteLLMConfigurationError("This provider does not use an API key")
-        set_remote_api_key(profile_id, body.get("api_key") or "")
+        if not isinstance(body.get("endpoint"), str) or not body["endpoint"]:
+            raise RemoteLLMConfigurationError("Confirm the destination endpoint when saving the API key; refresh the browser after updating")
+        set_remote_api_key(profile_id, body.get("api_key") or "", endpoint=body["endpoint"])
         return web.json_response({"version": 1, "profile_id": profile_id, "configured": True})
     except (RemoteLLMConfigurationError, ValueError, TypeError) as error:
         return web.json_response({"error": str(error)}, status=400)

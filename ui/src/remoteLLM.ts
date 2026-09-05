@@ -10,6 +10,7 @@ type ProviderProfile = {
     default_model: string;
     auth_mode: "bearer" | "none";
     configured: boolean;
+    approved_endpoint: string | null;
 };
 
 let profilesPromise: Promise<ProviderProfile[]> | null = null;
@@ -61,7 +62,7 @@ const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: st
         status.disabled = selected.auth_mode === "none";
         status.label = selected.auth_mode === "none"
             ? "✓ No API key required"
-            : `${selected.configured ? "✓" : "⚠"} Configure ${selected.label} API Key`;
+            : `${selected.configured && selected.approved_endpoint ? "✓" : "⚠"} Configure ${selected.label} API Key`;
     }
     node.setDirtyCanvas?.(true, true);
 };
@@ -70,20 +71,24 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
     if (!selected) return;
     if (selected.auth_mode === "none") return;
-    mountBvView(close => createElement(RemoteLlmApiKeyDialog, { label: selected.label, configured: selected.configured, close,
+    // Snapshot the displayed destination; later workflow edits must not change the save request.
+    const destination = selected.allow_custom_endpoint ? String(widget(node, "custom_endpoint")?.value ?? "") : selected.endpoint;
+    mountBvView(close => createElement(RemoteLlmApiKeyDialog, { label: selected.label, configured: selected.configured, destination, approvedEndpoint: selected.approved_endpoint, close,
       onSave: async (apiKey: string) => {
         const response = await fetch(api.apiURL("/bv_nodepack/remote_llm/api_key"), {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ profile_id: selected.id, api_key: apiKey }),
+            body: JSON.stringify({ profile_id: selected.id, api_key: apiKey, endpoint: destination }),
         });
         if (!response.ok) return (await response.json().catch(() => null))?.error ?? "Could not save API key.";
         selected.configured = true;
+        selected.approved_endpoint = destination;
         applyProfile(node, profiles);
         loadProfiles(api, true);
       }, onDelete: async () => {
         const response = await fetch(api.apiURL(`/bv_nodepack/remote_llm/api_key/${encodeURIComponent(selected.id)}`), { method: "DELETE" });
         if (!response.ok) return "Could not delete API key.";
         selected.configured = false;
+        selected.approved_endpoint = null;
         applyProfile(node, profiles);
         loadProfiles(api, true);
       }

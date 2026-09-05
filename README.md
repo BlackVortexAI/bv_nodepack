@@ -11,13 +11,10 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.2.3 includes centralized native node presentation,
-> Regional Canvas image sources and aligned LoRA Registry interaction and
-> outputs.**
-> The accompanying
-> [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) is online but still
-> under construction, so missing screenshots or incomplete pages do not indicate
-> missing runtime features.
+> **BV Node Pack 1.3.0** adds unified Regional negative-prompt policies, local embedding
+> completion, catalog and UI improvements, and Subgraph-aware routing.
+> The [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) contains the full
+> node reference and task-oriented guides.
 >
 > Existing Regional workflows retain compatibility and supported node-local data is
 > migrated when a workflow is loaded. Loading does not overwrite the workflow file,
@@ -38,11 +35,31 @@ git clone https://github.com/BlackVortexAI/bv_nodepack.git
 
 Restart ComfyUI and hard-refresh the browser after installation or update.
 
+Registry review remains open in [issue #217](https://github.com/Comfy-Org/registry-backend/issues/217).
+Registry publication, security-review status and the version offered by Manager are
+separate states; Manager may offer an older version while review is pending.
+
+### Updating to 1.3.0
+
+- Re-enter existing API keys for custom OpenAI-compatible providers through
+  **Configure API Key** and confirm the displayed destination. Keys are bound to
+  that full endpoint; redirects are blocked. Fixed-provider legacy keys retain
+  their catalog destination.
+- Regional LoRA stacks accept files only inside configured ComfyUI LoRA folders,
+  including `extra_model_paths.yaml` entries. Register additional folders there;
+  absolute paths within configured folders remain supported.
+- Text logs reject linked log files and linked `bv_logs` directories. Use an
+  ordinary log directory below the configured ComfyUI output root.
+
+Keep ComfyUI and its settings routes restricted to trusted users, and review
+imported workflows before running them. These safeguards do not constitute
+Registry approval or a guarantee that arbitrary workflows are safe.
+
 ## Feature overview
 
 ### Regional prompting and LoRA routing
 
-![Regional V3 Editor with layered character and interaction regions](examples/images/regional-v3-editor.png)
+![Regional V3 Editor with layered character and interaction regions](docs/assets/releases/1.3.0/regional-editor.png)
 
 Create named regions with layered geometry, prompts and stable identities, then
 compile them through native conditioning or supported model-specific attention
@@ -51,6 +68,15 @@ backends. Regional V3 supports independently resolved workflow-local LoRA resour
 [Read the Regional V3 guide →](https://blackvortexai.github.io/bv_nodepack_wiki/node-guides/regional-v3)
 
 ### LUT and LoRA libraries
+
+![LoRA library catalog](docs/assets/releases/1.3.0/lora-catalog.png)
+
+<details>
+<summary>View the LUT catalog</summary>
+
+![Stable LUT catalog](docs/assets/releases/1.3.0/lut-catalog.png)
+
+</details>
 
 Configure workflow-local LUT and LoRA resources through the shared BV interfaces.
 The LUT catalog has separate Stable and Experimental channels, retains a local
@@ -64,7 +90,9 @@ the same loader and registry path.
 
 ### Smart Pipes
 
-![Smart Pipe wireless merge](examples/images/smart-pipe-wireless-merge.png)
+![Native Smart Pipe connections in the Nord theme](docs/assets/releases/1.3.0/smart-pipe.png)
+
+*Reviewed native wiring diagram; not an executed workflow.*
 
 Carry typed workflow state through wired or wireless branches while preserving stable
 slot identity.
@@ -73,8 +101,6 @@ slot identity.
 
 ### Workflow Control
 
-![Control Center workflow states](examples/images/control-center-workflow-states.png)
-
 Switch named workflow stages deterministically between active, muted and bypassed
 states.
 
@@ -82,7 +108,9 @@ states.
 
 ### Structured prompts
 
-![Prompt AST categories](examples/images/prompt-ast-categories.png)
+![Prompt Encode, Category Switch and Decode connections](docs/assets/releases/1.3.0/prompt-pipeline.png)
+
+*Reviewed native wiring diagram; not an executed workflow.*
 
 Encode, filter, route and decode semantic prompt blocks without fragile string
 replacement.
@@ -91,16 +119,12 @@ replacement.
 
 ### Subgraph interface tools
 
-![Subgraph UI layout](examples/images/subgraph-ui-layout.png)
-
 Project headings, dividers, spacers and controlled choices onto purpose-built
 Subgraphs.
 
 [Read the Subgraph Interface guide →](https://blackvortexai.github.io/bv_nodepack_wiki/node-guides/subgraph-interface)
 
 ### Latent utilities
-
-![Random-ratio latent workflow](examples/images/empty-latent-random-ratio.png)
 
 Create deterministic latent sizes and transformations for reusable workflows.
 
@@ -128,6 +152,25 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.3.0 — 2026-09-05
+
+- Unify Regional negative-prompt policies (`auto`, `prompt`, `zero_out`) across
+  Anima, FLUX.2, Krea 2 and Z-Image, with scoped Anima negatives and CFG token masking.
+- Add local `embedding:` completion to shared prompt editors.
+- Improve LoRA catalog refresh, preview sidecar discovery and persistent preview
+  preferences; previews remain opt-in.
+- Improve shared resizable previews, window text selection and GraphImage DOM capture.
+- Add the built-in **Day for Night** LUT and image sender preview/pass-through
+  behavior when no target is selected.
+- Improve Civitai seed and LoRA hash metadata, and workflow-scoped DG routing
+  through Subgraphs for registries and Smart Pipes.
+- Refresh documentation with all 62 public-node screenshots and reviewed native
+  wiring diagrams. Wiring captures do not establish successful workflow execution.
+- Bind remote API keys to approved endpoints, block redirects, and harden text-log
+  aliases and Regional LoRA path boundaries.
+- Update the frontend build toolchain; the release audit reports no known npm
+  advisories at the time of validation.
+
 ### 1.2.3 — 2026-09-01
 
 - Harden the Comfy Registry package by excluding development tests and UI source
@@ -153,30 +196,3 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
 - Extend `BV Regional Image Save` with an optional Regional Context input and
   Civitai-compatible prompt, sampler, model, LoRA and hash metadata while
   preserving existing workflows when the input is disconnected.
-
-### 1.2.0 — 2026-08-29
-
-- Add the workflow-local `BV LoRA Registry`, catalog library and Full/Quick
-  selection flows while retaining the published V2 registry chain.
-- Complete the asynchronous LUT catalog with separate Stable and Experimental
-  channels, offline working-copy fallback, manual refresh and checksum-verified
-  downloads.
-- Add nine deterministic built-in looks: Digital Green, Machine Blue, Dustfire,
-  Steel Action, Sunbleached Coast, Expired Film, Classic Monochrome, Grayscale
-  and HDR Color Boost.
-- Expand the Experimental LUT channel to 46 profile- and license-documented
-  candidates without changing the tested Stable channel.
-- Normalize newly discovered LUT paths across Windows and browser-facing choices
-  so Registry and Loader selections remain interoperable.
-
-The built-in looks were manually tested and the Experimental catalog was confirmed
-to load on 2026-08-29. This does not claim verification of every external LUT
-download.
-
----
-
-## Continue with the BV Node Pack Wiki
-
-Installation details, complete node references, migration guidance,
-acknowledgements and task-oriented workflow guides are maintained in the
-**[BV Node Pack Wiki →](https://blackvortexai.github.io/bv_nodepack_wiki/)**

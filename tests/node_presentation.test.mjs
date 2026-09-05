@@ -377,7 +377,7 @@ test("Classic sender layout excludes hidden provider outputs without changing ca
     {type:"BV LUT Registry",inputs:[],outputs:["lut_count","registry_summary","resource_provider"],provider:2,widgets:["config_json","configure_lut_registry"],start:46},
     {type:"BV LUT Registry",inputs:[],outputs:["lut_count","resource_provider","registry_summary"],provider:1,widgets:["config_json","configure_lut_registry"],start:46},
     {type:"BV Detector Registry",inputs:[],outputs:["detector_count","registry_summary","resource_provider"],provider:2,widgets:["config_json","configure_detector_registry"],start:46},
-    {type:"BV LoRA Registry",inputs:[],outputs:["resource_provider","lora_count","registry_summary"],provider:0,widgets:["config_json","open_lora_registry"],start:46},
+    {type:"BV LoRA Registry",inputs:[],outputs:["lora_count","registry_summary","resource_provider"],provider:2,widgets:["config_json","open_lora_registry"],start:46},
     {type:"BV LoRA Stack Collector",inputs:["resource_provider"],outputs:["resource_provider"],provider:0,widgets:["collector_id"],start:undefined},
   ];
   for(const fixture of fixtures){

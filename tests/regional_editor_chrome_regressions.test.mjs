@@ -31,5 +31,5 @@ test("the window shelf participates in the BV theme token scope", () => {
 });
 
 test("factory layout groups Document behind the initially active Global tab", () => {
-  assert.match(editor, /type:"tabset", weight:75, selected:0, children:\[\s*\{ type:"tab", id:"bv\.regional\.global"[\s\S]*?\{ type:"tab", id:"bv\.regional\.document"/);
+  assert.match(editor, /type:"tabset", weight:56, selected:0, children:\[\s*\{ type:"tab", id:"bv\.regional\.global"[\s\S]*?\{ type:"tab", id:"bv\.regional\.document"/);
 });

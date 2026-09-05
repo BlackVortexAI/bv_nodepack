@@ -16,6 +16,7 @@ CATALOG_SCHEMA = "bv.lora_catalog"
 CATALOG_VERSION = 1
 MAX_SIDECAR_BYTES = 2 * 1024 * 1024
 PREVIEW_SUFFIXES = (".preview.png", ".preview.jpg", ".preview.jpeg", ".preview.webp")
+MANAGER_PREVIEW_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 
 
 def _uuid(value: Any, label: str) -> str:
@@ -195,7 +196,7 @@ def _plain_text(value: Any, limit: int = 2000) -> str:
 
 
 def _preview_path(resolved_lora: Path) -> Path | None:
-    for suffix in PREVIEW_SUFFIXES:
+    for suffix in (*PREVIEW_SUFFIXES, *MANAGER_PREVIEW_SUFFIXES):
         candidate = resolved_lora.with_name(f"{resolved_lora.stem}{suffix}")
         if candidate.is_file():
             return candidate.resolve()
@@ -205,6 +206,13 @@ def _preview_path(resolved_lora: Path) -> Path | None:
 def lora_preview_path(logical_name: Any, folder_paths_module=None) -> Path | None:
     _logical, resolved = resolve_lora_path(logical_name, folder_paths_module)
     return _preview_path(resolved)
+
+
+def _preview_is_safe(metadata: dict[str, Any], cm_info: dict[str, Any]) -> bool:
+    level = metadata.get("preview_nsfw_level")
+    if isinstance(level, int) and not isinstance(level, bool) and level >= 0:
+        return level < 2
+    return cm_info.get("Nsfw") is False
 
 
 def _catalog_item(logical: str, resolved: Path) -> dict[str, Any]:
@@ -223,13 +231,17 @@ def _catalog_item(logical: str, resolved: Path) -> dict[str, Any]:
     author = str(_first(creator.get("username"), cm_info.get("AuthorUsername"), "") or "")
     description = _plain_text(_first(metadata.get("notes"), metadata.get("modelDescription"), cm_info.get("ModelDescription"), civitai.get("description")))
     preview = _preview_path(resolved)
-    preview_safe = metadata.get("preview_nsfw_level") == 0 or cm_info.get("Nsfw") is False
+    preview_safe = _preview_is_safe(metadata, cm_info)
     sources = [name for name, value in (("metadata", metadata), ("cm-info", cm_info)) if value]
     directory = PurePosixPath(logical).parent.as_posix()
     if directory == ".":
         directory = ""
     local_type = str(_first(model_metadata.get("type"), cm_info.get("ModelType"), "LoRA") or "LoRA")
     category = str(_first(model_tags[0] if model_tags else None, tags[0] if tags else None, directory.split("/")[0] if directory else None, "Uncategorized"))
+    preview_revision = None
+    if preview:
+        preview_stat = preview.stat()
+        preview_revision = f"{preview_stat.st_mtime_ns:x}-{preview_stat.st_size:x}"
     return {
         "name": logical,
         "display_name": display_name,
@@ -239,7 +251,7 @@ def _catalog_item(logical: str, resolved: Path) -> dict[str, Any]:
         "author": author,
         "description": description,
         "size": resolved.stat().st_size,
-        "preview_url": f"/bv_nodepack/loras/preview?name={quote(logical, safe='')}" if preview else None,
+        "preview_url": f"/bv_nodepack/loras/preview?name={quote(logical, safe='')}&v={preview_revision}" if preview_revision else None,
         "preview_safe": preview_safe,
         "metadata_sources": sources,
         "type": local_type,

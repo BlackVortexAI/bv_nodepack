@@ -13,6 +13,14 @@ export type ReactNodeWidgetSpec={id:string;name:string;minHeight:number;maxHeigh
 type MountedWidget={host:HostLike;root:RootLike;widget:any;disconnect:()=>void};
 type HostLifecycle={generation:number;removed:boolean};
 
+export function intrinsicNodeWidgetContentHeight(host:HostLike){
+    const children=Array.from(host.children??[]) as HTMLElement[];
+    if(!children.length)return Math.ceil(Math.max(host.getBoundingClientRect?.().height??0,host.scrollHeight??0));
+    const contentBottom=children.reduce((bottom,child)=>Math.max(bottom,Number(child.offsetTop??0)+Math.max(Number(child.scrollHeight??0),Number(child.offsetHeight??0),Number(child.getBoundingClientRect?.().height??0))),0);
+    const paddingBottom=typeof getComputedStyle==="function"?Number.parseFloat(getComputedStyle(host).paddingBottom)||0:0;
+    return Math.ceil(contentBottom+paddingBottom);
+}
+
 let platform:HostPlatform={
     createHost:()=>document.createElement("div"),
     createContentHost:host=>{const content=document.createElement("div");content.className="bv-react-node-widget-content";host.appendChild(content);return content},
@@ -21,7 +29,7 @@ let platform:HostPlatform={
     applyPresentation:(node,nodeType)=>{applyClassicNodePresentation(node,nodeType)},
     viewportHeight:()=>typeof window==="undefined"?700:window.innerHeight,
     observeHost:(host,onHeight)=>{
-        const measure=()=>onHeight(Math.ceil(Math.max(host.getBoundingClientRect?.().height??0,host.scrollHeight??0)));
+        const measure=()=>onHeight(intrinsicNodeWidgetContentHeight(host));
         const observer=typeof ResizeObserver==="undefined"?null:new ResizeObserver(measure);
         observer?.observe(host);queueMicrotask(measure);
         return()=>observer?.disconnect();
@@ -60,9 +68,14 @@ export function renderReactNodeWidget(node:any,nodeType:string,spec:ReactNodeWid
     if(typeof node.addDOMWidget!=="function")return null;
     const host=platform.createHost();host.className="bv-ui bv-react-node-widget-host";host.dataset.bvNodeWidget=spec.id;
     const content=platform.createContentHost(host);
-    if(spec.maxHeight){content.className=`${content.className} bv-react-node-widget-scroll`.trim();content.style.maxHeight=`min(${spec.maxHeight}px, 60vh)`;content.style.overflowY=spec.overflow??"auto";content.style.overscrollBehavior="contain"}
+    if(spec.maxHeight){content.className=`${content.className} bv-react-node-widget-scroll`.trim();content.style.maxHeight=`min(${spec.maxHeight}px, 60vh, 100%)`;content.style.overflowY=spec.overflow??"auto";content.style.overscrollBehavior="contain"}
     let effectiveHeight=Math.min(spec.minHeight,heightCap(spec)),reconcilePending=false,disposed=false;
-    const widget=node.addDOMWidget(spec.name,"div",host,{serialize:false,getMinHeight:()=>Math.min(effectiveHeight,heightCap(spec))});
+    const widget=node.addDOMWidget(spec.name,"div",host,{
+        serialize:false,
+        margin:10,
+        getMinHeight:()=>Math.min(spec.minHeight,heightCap(spec)),
+        getMaxHeight:()=>heightCap(spec),
+    });
     if(!widget)return null;
     widget.serialize=false;
     const root=platform.createRoot(content),stopObserving=platform.observeHost(content,height=>{

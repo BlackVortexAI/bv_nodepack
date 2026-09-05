@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {configureReactNodeWidgetHost,installReactNodeWidgetHost,refreshReactNodeWidget} from "../ui/src/regional/reactNodeWidgetHost.tsx";
+import {configureReactNodeWidgetHost,installReactNodeWidgetHost,intrinsicNodeWidgetContentHeight,refreshReactNodeWidget} from "../ui/src/regional/reactNodeWidgetHost.tsx";
+
+test("intrinsic DOM widget measurement ignores height stretched by the node",()=>{
+  const content={
+    children:[{offsetTop:0,scrollHeight:318,offsetHeight:318,getBoundingClientRect:()=>({height:318})}],
+    scrollHeight:820,
+    getBoundingClientRect:()=>({height:820}),
+  };
+  assert.equal(intrinsicNodeWidgetContentHeight(content),318);
+});
 
 test("central React node widget host mounts once, rerenders and owns cleanup",()=>{
   const events=[];
@@ -43,7 +52,7 @@ test("central React node widget host tracks content height and disconnects measu
   const node=new NodeType();node.addDOMWidget=(_name,_type,_host,next)=>{options=next;return{serialize:true}};
   node.onNodeCreated();
   assert.equal(typeof resize,"function");assert.equal(options.getMinHeight(),72);
-  resize(344);assert.equal(options.getMinHeight(),344);assert.equal(events.filter(item=>item==="presentation").length,2);
+  resize(344);assert.equal(options.getMinHeight(),72);assert.equal(events.filter(item=>item==="presentation").length,2);
   resize(344);assert.equal(events.filter(item=>item==="presentation").length,2);
   resize(40);assert.equal(options.getMinHeight(),72);
   node.onRemoved();assert.equal(disconnects,1);
@@ -63,8 +72,8 @@ test("central React node widget host measures intrinsic content and coalesces re
   installReactNodeWidgetHost(NodeType,"BV LoRA Registry",{id:"registry-intrinsic",name:"registry_widget",minHeight:72,render:()=>"view"});
   const node=new NodeType();node.addDOMWidget=(_name,_type,element,next)=>{assert.equal(element,outer);options=next;return{serialize:true}};
   node.onNodeCreated();assert.equal(queue.length,1);queue.shift()();assert.equal(presentations,1);
-  resize(180);resize(240);assert.equal(queue.length,1);assert.equal(options.getMinHeight(),240);queue.shift()();assert.equal(presentations,2);
-  resize(120);assert.equal(queue.length,1);queue.shift()();assert.equal(options.getMinHeight(),120);assert.equal(presentations,3);
+  resize(180);resize(240);assert.equal(queue.length,1);assert.equal(options.getMinHeight(),72);queue.shift()();assert.equal(presentations,2);
+  resize(120);assert.equal(queue.length,1);queue.shift()();assert.equal(options.getMinHeight(),72);assert.equal(presentations,3);
   node.onRemoved();resize(300);assert.equal(queue.length,0);assert.equal(disconnects,1);
 });
 
@@ -121,11 +130,11 @@ test("central React node widget host caps intrinsic height against both pixels a
   assert.equal(events.filter(item=>Array.isArray(item)&&item[0]==="action").length,1);
   assert.deepEqual(node.widgets[0].spec,{existing:"kept",socketless:true});
   assert.equal(node.widgets[0].serialize,false);node.widgets[0].callback();assert.deepEqual(events.at(-1),["open",9]);
-  resize(900);assert.equal(options.getMinHeight(),420);
-  viewportHeight=500;assert.equal(options.getMinHeight(),300);
-  resize(900);assert.equal(options.getMinHeight(),300);
+  resize(900);assert.equal(options.getMinHeight(),72);assert.equal(options.getMaxHeight(),420);
+  viewportHeight=500;assert.equal(options.getMinHeight(),72);assert.equal(options.getMaxHeight(),300);
+  resize(900);assert.equal(options.getMinHeight(),72);
   viewportHeight=900;
-  resize(180);assert.equal(options.getMinHeight(),180);
+  resize(180);assert.equal(options.getMinHeight(),72);
   assert.match(content.className,/bv-react-node-widget-scroll/);
-  assert.equal(content.style.maxHeight,"min(420px, 60vh)");assert.equal(content.style.overflowY,"auto");
+  assert.equal(options.margin,10);assert.equal(options.getHeight,undefined);assert.equal(content.style.maxHeight,"min(420px, 60vh, 100%)");assert.equal(content.style.overflowY,"auto");
 });

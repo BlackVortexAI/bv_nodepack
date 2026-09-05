@@ -72,6 +72,13 @@ def _expired_film(rgb: torch.Tensor) -> torch.Tensor:
     return faded + split * torch.tensor([0.06, -0.05, 0.045])
 
 
+def _day_for_night(rgb: torch.Tensor) -> torch.Tensor:
+    luminance = (rgb @ torch.tensor([0.2126, 0.7152, 0.0722])).unsqueeze(-1)
+    night_signal = torch.pow(torch.clamp((luminance - 0.06) / 0.94, 0.0, 1.0), 1.35)
+    color_detail = 0.9 + rgb * 0.1
+    return night_signal * color_detail * torch.tensor([0.08, 0.36, 0.78])
+
+
 def _classic_monochrome(rgb: torch.Tensor) -> torch.Tensor:
     luminance = rgb @ torch.tensor([0.299, 0.587, 0.114])
     filmic = (luminance - 0.5) * 1.08 + 0.5
@@ -99,6 +106,7 @@ BUILTIN_LUT_REGISTRY = {
     "Steel Action": _steel_action,
     "Sunbleached Coast": _sunbleached_coast,
     "Expired Film": _expired_film,
+    "Day for Night": _day_for_night,
     "Classic Monochrome": _classic_monochrome,
     "Grayscale": _grayscale,
     "HDR Color Boost": _hdr_color_boost,

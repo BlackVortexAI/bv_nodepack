@@ -59,10 +59,13 @@ class RegionalAnimaAdapterTests(unittest.TestCase):
         compile_anima_adapter(document, clip)
         self.assertEqual(clip.encoded[0], "wooden tables, warm interior")
 
-    def test_auto_zeroes_negative_when_global_negative_is_empty(self):
+    def test_auto_zeroes_negative_when_all_negative_sources_are_empty(self):
         document = copy.deepcopy(fixture())
         document["negative_mode"] = "auto"
         document["prompts"]["global"]["negative_source"] = ""
+        document["prompts"]["background"]["negative_source"] = ""
+        for region in document["regions"]:
+            region["prompts"]["negative_source"] = ""
         positive, negative, _, _ = compile_anima_adapter(document, FakeClip())
         self.assertEqual(len(positive), len(negative))
         self.assertTrue(all(torch.count_nonzero(item[0]) == 0 for item in negative))

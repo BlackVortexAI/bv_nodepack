@@ -21,10 +21,13 @@ sys.modules["comfy.patcher_extension"] = patcher_extension_module
 
 from util.regional.anima_patcher import (  # noqa: E402
     WRAPPER_KEY,
+    AnimaConditioningRegionChain,
+    AnimaRegionalConditioningPatch,
     _build_flux_cross_attention_bias,
     _build_flux_self_attention_bias,
     _diffusion_model_wrapper,
     _late_image_lora_scale,
+    _scoped_negative_bias,
 )
 from util.regional.anima_token_lora import AnimaTokenLoRAPatch  # noqa: E402
 from util.regional.krea2_token_lora import (  # noqa: E402
@@ -36,7 +39,146 @@ from util.regional.krea2_token_lora import (  # noqa: E402
 )
 
 
+from util.regional.prompt_policy import ANIMA_SCOPED_NEGATIVE
+
+
 class RegionalAnimaPatcherTests(unittest.TestCase):
+    def test_scoped_negative_wrapper_preserves_global_routing_padding_and_lora(self):
+        def conditioning(value, length):
+            return [[torch.full((1, length, 8), value), {}]]
+
+        for order in ([0, 1], [1, 0], [1]):
+            for batch_size in (1, 2):
+                with self.subTest(order=order, batch_size=batch_size):
+                    background = conditioning(2.0, 2)
+                    background[0][1][ANIMA_SCOPED_NEGATIVE] = conditioning(-4.0, 4)
+                    background[0][1][ANIMA_SCOPED_NEGATIVE][0][1]["t5xxl_ids"] = torch.ones(4)
+                    local = conditioning(3.0, 2)
+                    local[0][1][ANIMA_SCOPED_NEGATIVE] = conditioning(-5.0, 5)
+                    local[0][1][ANIMA_SCOPED_NEGATIVE][0][1]["t5xxl_ids"] = torch.ones(5)
+                    region = AnimaConditioningRegionChain(
+                        None, torch.tensor([[[1., 0.], [1., 0.]]]), local, 1.0, "left")
+                    patch = AnimaRegionalConditioningPatch(
+                        [region], "global", 1., 10., 0., 1., 0., 0., 1, 1, background)
+                    spec = TokenLoRASpec("local", "local.safetensors", 1., frozenset({"left"}))
+                    patch.token_lora = AnimaTokenLoRAPatch([spec], TokenLoRAReport())
+                    original_op = lambda *args: None
+                    attn = types.SimpleNamespace(attn_op=original_op)
+
+                    class Model:
+                        patch_spatial = 1
+                        patch_temporal = 1
+                        blocks = [types.SimpleNamespace(cross_attn=attn)]
+
+                        def preprocess_text_embeds(self, value, ids, **kwargs):
+                            return torch.cat([value, value[:, :1]], dim=1)
+
+                    class Executor:
+                        class_obj = Model()
+
+                        def __call__(self, *args, **kwargs):
+                            self.context = args[2].clone()
+                            self.bias = attn.attn_op.keywords["attn_bias"].clone()
+                            self.runtime = _RUNTIME.get()
+                            return args[0]
+
+                    executor = Executor()
+                    context = torch.cat([torch.full((batch_size, 3, 8), -9. if item == 1 else 9.)
+                                         for item in order])
+                    _diffusion_model_wrapper(
+                        executor, torch.zeros((len(order)*batch_size, 4, 1, 2, 2)),
+                        torch.zeros(len(order)*batch_size), context,
+                        transformer_options={WRAPPER_KEY: patch, "cond_or_uncond": order})
+                    # T5 preprocessing expands negatives to 5 + 6; global has 3 tokens.
+                    self.assertEqual(executor.context.shape[1], 14)
+                    self.assertIs(attn.attn_op, original_op)
+                    for chunk, polarity in enumerate(order):
+                        row = chunk * batch_size
+                        bias = executor.bias[row, 0]
+                        if polarity == 1:
+                            self.assertTrue(torch.all(executor.context[row, 11:] == -9))
+                            self.assertTrue(torch.all(bias[:, 11:] == 0))
+                            self.assertTrue(torch.isneginf(bias[[0, 2], :5]).all())
+                            self.assertTrue(torch.all(bias[[1, 3], :5] == 0))
+                            self.assertTrue(torch.isneginf(bias[[1, 3], 5:11]).all())
+                            self.assertTrue(torch.all(bias[[0, 2], 5:11] == 0))
+                        else:
+                            self.assertTrue(torch.isneginf(bias[:, 2:5]).all())
+                            self.assertTrue(torch.isneginf(bias[:, 7:]).all())
+                    mask = executor.runtime.token_masks["local"]
+                    self.assertEqual(mask.shape[1], 18)
+                    self.assertTrue(torch.all(mask[:, 11:14] == 0))
+                    self.assertEqual(mask[0, 14:, 0].tolist(), [1., 0., 1., 0.])
+
+    def test_scoped_negative_bias_uses_soft_strength_contract(self):
+        masks = torch.tensor([[0., 1.], [1., 0.]])
+        values = [torch.ones((1, 2, 8)), torch.ones((1, 3, 8))]
+        bias = _scoped_negative_bias(
+            masks, values, [2, 3, 1], torch.device("cpu"), torch.float32,
+            mask_strength=0.5, slot_strengths=torch.tensor([0.2, 0.5]))[0, 0]
+        self.assertAlmostEqual(float(bias[0, 0]), -3.0)
+        self.assertAlmostEqual(float(bias[1, 2]), -1.2, places=5)
+        self.assertTrue(torch.all(bias[:, -1] == 0))
+
+    def test_negative_region_does_not_leak_into_uncovered_or_zero_strength_area(self):
+        masks = torch.tensor([[0., 1.], [1., 0.]])
+        slots = [None, torch.ones((1, 3, 8))]
+        for weight in (0.0, 1.0):
+            bias = _scoped_negative_bias(
+                masks, slots, [2, 3, 1], torch.device("cpu"), torch.float32,
+                slot_strengths=torch.tensor([1., weight]))[0, 0]
+            self.assertTrue(torch.isneginf(bias[1, :5]).all())
+            self.assertTrue(torch.all(bias[:, -1] == 0))
+            if weight == 0:
+                self.assertTrue(torch.isneginf(bias[:, :5]).all())
+
+    def test_optional_background_and_skipped_cross_blocks_keep_correct_cfg_context(self):
+        conditioning = [[torch.ones((1, 2, 8)),
+                         {ANIMA_SCOPED_NEGATIVE: [[torch.full((1, 5, 8), -5.), {}]]}]]
+        region = AnimaConditioningRegionChain(
+            None, torch.tensor([[[1., 0.], [1., 0.]]]), conditioning, 1., "left")
+        patch = AnimaRegionalConditioningPatch(
+            [region], "uncovered_only", 1., 10., 0., 1., 0., 0., 2, 1)
+        original = lambda *args: None
+        attns = [types.SimpleNamespace(attn_op=original) for _ in range(2)]
+
+        class Model:
+            patch_spatial = 1
+            patch_temporal = 1
+            blocks = [types.SimpleNamespace(cross_attn=attn) for attn in attns]
+
+        class Executor:
+            class_obj = Model()
+            def __call__(self, *args, **kwargs):
+                self.context = args[2].clone()
+                self.biases = [attn.attn_op.keywords["attn_bias"].clone() for attn in attns]
+                return args[0]
+        executor = Executor()
+        context = torch.cat([torch.full((1, 3, 8), -9.), torch.full((1, 3, 8), 9.)])
+        _diffusion_model_wrapper(executor, torch.zeros((2, 4, 1, 2, 2)),
+                                 torch.zeros(2), context,
+                                 transformer_options={WRAPPER_KEY: patch, "cond_or_uncond": [1, 0]})
+        self.assertTrue(torch.all(executor.context[1, :3] == 9))
+        self.assertTrue(torch.isneginf(executor.biases[1][1, :, :, 5:]).all())
+        self.assertTrue(torch.isneginf(executor.biases[1][0, :, :, :3]).all())
+        self.assertTrue(all(attn.attn_op is original for attn in attns))
+
+    def test_base_ratio_one_keeps_original_sampler_context(self):
+        region = AnimaConditioningRegionChain(None, torch.ones((1, 2, 2)),
+                                             [[torch.ones((1, 2, 8)), {}]], 1.)
+        patch = AnimaRegionalConditioningPatch(
+            [region], "uncovered_only", 1., 10., 0., 1., 0., 1., 1, 1)
+        class Executor:
+            def __call__(self, *args, **kwargs):
+                self.context = args[2]
+                return args[0]
+        executor = Executor()
+        context = torch.ones((1, 3, 8))
+        _diffusion_model_wrapper(executor, torch.zeros((1, 4, 1, 2, 2)),
+                                 torch.zeros(1), context,
+                                 transformer_options={WRAPPER_KEY: patch, "cond_or_uncond": [1]})
+        self.assertIs(executor.context, context)
+
     def test_uses_bv_specific_wrapper_key(self):
         self.assertEqual(WRAPPER_KEY, "bv_anima_regional_conditioning")
 

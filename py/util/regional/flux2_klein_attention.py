@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from .context import context_document
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
+from .prompt_policy import use_negative_prompts, zero_encoded, mask_cfg_padding
 
 
 BACKEND_ID = "flux2_klein_9b_joint_attention"
@@ -22,6 +23,8 @@ class Flux2KleinRegionalSlot:
     mask: torch.Tensor | None
     strength: float
     token_count: int
+    positive_token_count: int | None = None
+    negative_token_count: int | None = None
 
 
 def _selection(document: dict[str, Any], scope: str, region_id: str | None = None) -> dict[str, Any]:
@@ -75,6 +78,7 @@ def compile_flux2_klein_attention(
     document: Any, clip: Any
 ) -> tuple[list, list, list[Flux2KleinRegionalSlot], float]:
     clean = context_document(document)
+    use_negative = use_negative_prompts(clean)
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])
 
@@ -88,57 +92,56 @@ def compile_flux2_klein_attention(
             regions.append((region, mask))
             occupied = torch.maximum(occupied, mask)
 
-    specifications: list[tuple[str, torch.Tensor | None, float, dict[str, Any]]] = [
-        ("global", None, 1.0, _prompt(clean, "global"))
+    specifications = [
+        ("global", None, 1.0, *selection_prompts(_selection(clean, "global")))
     ]
-    background = _prompt(clean, "background")
-    if background["source"].strip():
-        specifications.append(("background", 1.0 - occupied, 1.0, background))
+    background = selection_prompts(_selection(clean, "background"))
+    if any(prompt["source"].strip() for prompt in background):
+        specifications.append(("background", 1.0 - occupied, 1.0, *background))
     for region, mask in regions:
-        prompt = _prompt(clean, "region", region["id"])
-        if prompt["source"].strip():
+        prompts = selection_prompts(_selection(clean, "region", region["id"]))
+        if any(prompt["source"].strip() for prompt in prompts):
             specifications.append(
-                (region["name"], mask, max(0.0, float(region["strength"])), prompt)
+                (region["name"], mask, max(0.0, float(region["strength"])), *prompts)
             )
     if len(specifications) == 1:
         raise ValueError("FLUX.2 Klein attention routing requires a prompted background or region mask")
 
-    encoded: list[torch.Tensor] = []
+    positive_values, negative_values = [], []
+    positive_masks, negative_masks = [], []
     slots: list[Flux2KleinRegionalSlot] = []
-    metadata: dict[str, Any] | None = None
-    for name, mask, strength, prompt in specifications:
-        value, current_metadata = _encode_trimmed(clip, prompt["text"], f"{name} positive")
-        encoded.append(value)
-        slots.append(Flux2KleinRegionalSlot(name, mask, strength, int(value.shape[1])))
-        if metadata is None:
-            metadata = current_metadata
+    positive_metadata = negative_metadata = None
+    for name, mask, strength, positive_prompt, negative_prompt in specifications:
+        pos, pos_meta = _encode_trimmed(clip, positive_prompt["text"], f"{name} positive")
+        neg, neg_meta = (
+            _encode_trimmed(clip, negative_prompt["text"], f"{name} negative")
+            if use_negative else zero_encoded(pos, pos_meta)
+        )
+        count = max(pos.shape[1], neg.shape[1])
+        positive_values.append(F.pad(pos, (0, 0, 0, count - pos.shape[1])))
+        negative_values.append(F.pad(neg, (0, 0, 0, count - neg.shape[1])))
+        positive_masks.append(F.pad(pos_meta["attention_mask"], (0, count - pos.shape[1])))
+        negative_masks.append(F.pad(neg_meta["attention_mask"], (0, count - neg.shape[1])))
+        slots.append(Flux2KleinRegionalSlot(name, mask, strength, count, positive_token_count=int(pos.shape[1]), negative_token_count=int(neg.shape[1])))
+        if positive_metadata is None:
+            positive_metadata, negative_metadata = pos_meta, neg_meta
 
-    assert metadata is not None
-    positive_embedding = torch.cat(encoded, dim=1)
-    raw_tokens = int(positive_embedding.shape[1])
-    padded_tokens = max(512, raw_tokens)
-    prefix_padding = padded_tokens - raw_tokens
-    if prefix_padding:
-        positive_embedding = F.pad(positive_embedding, (0, 0, prefix_padding, 0))
-    metadata["attention_mask"] = torch.cat(
-        (
-            torch.zeros((1, prefix_padding), device=positive_embedding.device),
-            torch.ones((1, raw_tokens), device=positive_embedding.device),
-        ),
-        dim=1,
-    )
-    metadata["bv_regional_backend"] = BACKEND_ID
-    metadata["bv_regional_prefix_padding"] = prefix_padding
-    positive = [[positive_embedding, metadata]]
+    raw_tokens = sum(slot.token_count for slot in slots)
+    prefix_padding = max(512, raw_tokens) - raw_tokens
 
-    negative_metadata = metadata.copy()
-    negative_metadata["attention_mask"] = metadata["attention_mask"].clone()
-    for key, value in tuple(negative_metadata.items()):
-        if torch.is_tensor(value) and key != "attention_mask":
-            negative_metadata[key] = torch.zeros_like(value)
-    negative_metadata["bv_negative_mode"] = "zero_distilled"
-    negative = [[torch.zeros_like(positive_embedding), negative_metadata]]
+    def finish(values, masks, metadata):
+        embedding = F.pad(torch.cat(values, dim=1), (0, 0, prefix_padding, 0))
+        metadata = metadata.copy()
+        metadata["attention_mask"] = F.pad(torch.cat(masks, dim=1), (prefix_padding, 0))
+        metadata["bv_regional_backend"] = BACKEND_ID
+        metadata["bv_regional_prefix_padding"] = prefix_padding
+        return [[embedding, metadata]]
+
+    positive = finish(positive_values, positive_masks, positive_metadata)
+    negative = finish(negative_values, negative_masks, negative_metadata)
+    negative[0][1]["bv_negative_mode"] = "prompt" if use_negative else "zero_out"
     return positive, negative, slots, width / height
+
 
 
 def _grid_for_tokens(tokens: int, aspect_ratio: float) -> tuple[int, int]:
@@ -248,6 +251,8 @@ class Flux2KleinAttentionPatch:
                 strength, q.device, q.dtype, int(q.shape[0])
             )
             self._cache[cache_key] = bias
+        bias = mask_cfg_padding(
+            bias, self.slots, text_tokens - sum(slot.token_count for slot in self.slots), options)
         if torch.is_tensor(attn_mask) and attn_mask.ndim >= 3:
             bias = bias + attn_mask.to(device=q.device, dtype=q.dtype)
         return {"attn_mask": bias}

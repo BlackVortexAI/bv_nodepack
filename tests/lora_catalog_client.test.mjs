@@ -36,6 +36,42 @@ test("local LoRA catalog client does not permanently cache failures",async()=>{
   assert.deepEqual(await client.load(api),catalog);assert.equal(calls,2);assert.equal(updates,1);unsubscribe();
 });
 
+test("explicit reload bypasses cache, publishes fresh metadata and keeps last-known-good on failure",async()=>{
+  let calls=0;
+  const first={...catalog,items:[{name:"demo.safetensors",display_name:"Before",preview_url:"/preview?v=1"}]};
+  const second={...catalog,items:[{name:"demo.safetensors",display_name:"After",preview_url:"/preview?v=2"}]};
+  const client=createLoraCatalogClient(async()=>{calls++;if(calls===1)return{ok:true,json:async()=>first};if(calls===2)return{ok:true,json:async()=>second};throw new Error("scan failed")}),api={apiURL:path=>`local:${path}`};
+  assert.deepEqual(await client.load(api),first);assert.equal(calls,1);
+  assert.deepEqual(await client.reload(api),second);assert.equal(calls,2);assert.deepEqual(client.getSnapshot(),second);
+  await assert.rejects(client.reload(api),/scan failed/);assert.equal(calls,3);assert.deepEqual(client.getSnapshot(),second);
+});
+
+test("parallel explicit reloads are singleflight",async()=>{
+  let calls=0,resolveFetch;
+  const client=createLoraCatalogClient(()=>{calls++;return new Promise(resolve=>{resolveFetch=resolve})}),api={apiURL:path=>`local:${path}`};
+  const first=client.reload(api),second=client.reload(api);assert.equal(calls,1);
+  resolveFetch({ok:true,json:async()=>catalog});await Promise.all([first,second]);assert.equal(calls,1);
+});
+
+test("a slower initial load cannot replace a newer reload",async()=>{
+  const pending=[];
+  const client=createLoraCatalogClient(()=>new Promise(resolve=>pending.push(resolve))),api={apiURL:path=>`local:${path}`};
+  const initial=client.load(api),refreshed=client.reload(api);
+  const fresh={...catalog,items:[{name:"fresh.safetensors"}]},stale={...catalog,items:[{name:"stale.safetensors"}]};
+  pending[1]({ok:true,json:async()=>fresh});assert.deepEqual(await refreshed,fresh);
+  pending[0]({ok:true,json:async()=>stale});assert.deepEqual(await initial,fresh);assert.deepEqual(client.getSnapshot(),fresh);
+});
+
+test("a valid initial load becomes the shared fallback when a newer reload fails",async()=>{
+  const pending=[];let updates=0;
+  const client=createLoraCatalogClient(()=>new Promise((resolve,reject)=>pending.push({resolve,reject}))),api={apiURL:path=>`local:${path}`};
+  client.subscribe(()=>updates++);
+  const initial=client.load(api),refreshed=client.reload(api),fallback={...catalog,items:[{name:"fallback.safetensors"}]};
+  pending[1].reject(new Error("reload failed"));await assert.rejects(refreshed,/reload failed/);
+  pending[0].resolve({ok:true,json:async()=>fallback});assert.deepEqual(await initial,fallback);
+  assert.deepEqual(client.getSnapshot(),fallback);assert.equal(updates,1);assert.deepEqual(await client.load(api),fallback);
+});
+
 test("LoRA catalog bootstrap is non-blocking, singleflight and handles startup failure",async()=>{
   let calls=0,resolveFetch;
   const client=createLoraCatalogClient(()=>{calls++;return new Promise(resolve=>{resolveFetch=resolve})}),api={apiURL:path=>`local:${path}`};

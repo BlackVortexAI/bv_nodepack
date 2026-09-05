@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from .context import context_document
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
+from .prompt_policy import use_negative_prompts, zero_encoded, mask_cfg_padding
 
 
 BACKEND_ID = "zimage_joint_attention"
@@ -23,6 +24,8 @@ class ZImageRegionalSlot:
     mask: torch.Tensor | None
     strength: float
     token_count: int
+    positive_token_count: int | None = None
+    negative_token_count: int | None = None
 
 
 def _selection(document: dict[str, Any], scope: str, region_id: str | None = None) -> dict[str, Any]:
@@ -58,6 +61,7 @@ def _prepare_mask(mask: torch.Tensor) -> torch.Tensor:
 
 def compile_zimage_attention(document: Any, clip: Any) -> tuple[list, list, list[ZImageRegionalSlot], float]:
     clean = context_document(document)
+    use_negative = use_negative_prompts(clean)
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])
 
@@ -100,18 +104,20 @@ def compile_zimage_attention(document: Any, clip: Any) -> tuple[list, list, list
     attention_masks_negative: list[torch.Tensor] = []
     for name, mask, strength, positive_prompt, negative_prompt in specifications:
         pos, pos_meta = _encode_one(clip, positive_prompt["text"], f"{name} positive")
-        # Z-Image Turbo is distilled without a useful negative-CFG branch.
-        # Keep an identically shaped zero context solely because KSampler still
-        # requires a negative CONDITIONING input.
-        neg, neg_meta = torch.zeros_like(pos), pos_meta.copy()
-        for key, value in tuple(neg_meta.items()):
-            if torch.is_tensor(value) and key != "attention_mask":
-                neg_meta[key] = torch.zeros_like(value)
-        encoded_positive.append(pos)
-        encoded_negative.append(neg)
-        slots.append(ZImageRegionalSlot(name, mask, strength, int(pos.shape[1])))
-        attention_masks_positive.append(pos_meta.get("attention_mask", torch.ones(pos.shape[:2])))
-        attention_masks_negative.append(neg_meta.get("attention_mask", torch.ones(neg.shape[:2])))
+        neg, neg_meta = (
+            _encode_one(clip, negative_prompt["text"], f"{name} negative")
+            if use_negative else zero_encoded(pos, pos_meta)
+        )
+        count = max(pos.shape[1], neg.shape[1])
+        encoded_positive.append(F.pad(pos, (0, 0, 0, count - pos.shape[1])))
+        encoded_negative.append(F.pad(neg, (0, 0, 0, count - neg.shape[1])))
+        slots.append(ZImageRegionalSlot(name, mask, strength, count, positive_token_count=int(pos.shape[1]), negative_token_count=int(neg.shape[1])))
+        attention_masks_positive.append(F.pad(
+            pos_meta.get("attention_mask", torch.ones(pos.shape[:2], device=pos.device)),
+            (0, count - pos.shape[1])))
+        attention_masks_negative.append(F.pad(
+            neg_meta.get("attention_mask", torch.ones(neg.shape[:2], device=neg.device)),
+            (0, count - neg.shape[1])))
         if positive_metadata is None:
             positive_metadata = pos_meta
             negative_metadata = neg_meta
@@ -220,6 +226,7 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
             full_embed.dtype,
             int(full_embed.shape[0]),
         )
+        bias = mask_cfg_padding(bias, patch.slots, 0, transformer_options)
         return (result[0], bias, *result[2:])
 
     diffusion_model.patchify_and_embed = types.MethodType(patched_patchify, diffusion_model)

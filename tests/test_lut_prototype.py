@@ -98,8 +98,8 @@ class LutPrototypeTests(unittest.TestCase):
         expected = (
             "Identity", "Warm Contrast", "Cool Graphite",
             "Digital Green", "Machine Blue", "Dustfire", "Steel Action",
-            "Sunbleached Coast", "Expired Film", "Classic Monochrome",
-            "Grayscale", "HDR Color Boost",
+            "Sunbleached Coast", "Expired Film", "Day for Night",
+            "Classic Monochrome", "Grayscale", "HDR Color Boost",
         )
         self.assertEqual(lut_prototype.BUILTIN_LUT_NAMES, expected)
         with patch("py.nodes.bv_lut_prototype._disk_luts", return_value={}):
@@ -139,6 +139,14 @@ class LutPrototypeTests(unittest.TestCase):
         expired_highlight = grade("Expired Film", [0.8, 0.8, 0.8])
         self.assertGreater(expired_shadow[1], expired_shadow[0])
         self.assertGreater(expired_highlight[0], expired_highlight[1])
+        day_for_night = grade("Day for Night", neutral)
+        self.assertTrue(torch.all(day_for_night < torch.tensor(neutral)))
+        self.assertGreater(day_for_night[2], day_for_night[1] * 2)
+        self.assertGreater(day_for_night[1], day_for_night[0] * 3)
+        self.assertLess(day_for_night[0], 0.05)
+        day_for_night_white = grade("Day for Night", [1.0, 1.0, 1.0])
+        self.assertGreater(day_for_night_white[2], 0.7)
+        self.assertLess(day_for_night_white[2], 0.85)
         colorful = [0.8, 0.35, 0.1]
         classic = grade("Classic Monochrome", colorful)
         grayscale = grade("Grayscale", colorful)

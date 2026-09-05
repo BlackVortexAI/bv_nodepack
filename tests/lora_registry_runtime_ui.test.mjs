@@ -11,6 +11,8 @@ const indexSource=readFileSync(new URL("../ui/src/index.tsx",import.meta.url),"u
 const showcase=readFileSync(new URL("../ui/src/showcase.tsx",import.meta.url),"utf8");
 const forms=readFileSync(new URL("../ui/src/ui/components/forms.tsx",import.meta.url),"utf8");
 const data=readFileSync(new URL("../ui/src/ui/components/data.tsx",import.meta.url),"utf8");
+const content=readFileSync(new URL("../ui/src/ui/components/content.tsx",import.meta.url),"utf8");
+const windowSource=readFileSync(new URL("../ui/src/ui/window.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
 const hoverPreview=data.slice(data.indexOf("export function HoverPreview"),data.indexOf("export function IncrementalResourceList"));
 
@@ -38,6 +40,67 @@ test("inline LoRA widget is a compact bounded row layout instead of a full form"
   assert.doesNotMatch(styles,/\.bv-compact-resource-row>\.bv-compact-resource-values\{[^}]*grid-row:2/);
   assert.match(styles,/\.bv-compact-resource-title\{[^}]*text-overflow:ellipsis/);
   assert.doesNotMatch(styles,/\.bv-lora-node-(?:toggle|strength|entry|stack)/);
+});
+
+test("LoRA library keeps sparse grid tracks fixed and copies triggers directly through shared BVUI",()=>{
+  assert.match(styles,/\.bv-resource-grid>\.bv-resource-result\{[^}]*align-self:start;[^}]*grid-template-rows:140px 82px auto/);
+  assert.match(styles,/\.bv-resource-result \.bv-badge\{[^}]*overflow:hidden;[^}]*text-overflow:ellipsis;[^}]*white-space:nowrap/);
+  assert.match(library,/<TruncatedCopyText text=\{selected\.trigger_words\.join\(", "\)\} label="Trigger words" wrap\/>/);
+  assert.match(content,/export function TruncatedCopyText/);
+  assert.match(styles,/\.bv-resource-grid\{[^}]*repeat\(auto-fill,/);
+  assert.doesNotMatch(styles,/\.bv-resource-grid\{[^}]*repeat\(auto-fit,/);
+  assert.match(content,/className=\{`bv-truncated-copy-value\$\{wrap\?" wrap":""\}`\}/);
+  assert.match(content,/aria-label=\{'Copy '\+label\}/);
+  assert.doesNotMatch(content,/className="bv-truncated-copy-popover"|<Popover/);
+  assert.match(content,/navigator\.clipboard\.writeText\(text\)/);
+});
+
+test("the complete resource detail column owns vertical scrolling without a nested description scroller",()=>{
+  assert.match(styles,/\.bv-resource-detail\{[^}]*overflow-x:hidden;[^}]*overflow-y:auto/);
+  assert.doesNotMatch(styles,/\.bv-resource-detail p\{[^}]*(?:max-height|overflow:auto)/);
+  assert.match(styles,/\.bv-truncated-copy-value\.wrap\{[^}]*white-space:normal;[^}]*overflow-wrap:anywhere/);
+  assert.match(styles,/\.bv-resize-separator:focus-visible\{[^}]*var\(--bv-ui-focus-ring\)/);
+});
+
+test("LoRA metadata text keeps the native context menu while window export remains available elsewhere",()=>{
+  assert.match(view,/data-bv-native-context/);
+  assert.match(windowSource,/\[data-bv-native-context\]/);
+  assert.match(windowSource,/Export BV UI Image…/);
+  assert.match(windowSource,/event\.preventDefault\(\);event\.stopPropagation\(\);setCaptureMenu/);
+});
+
+test("mature or unrated LoRA previews use the persisted global BV preference",()=>{
+  assert.match(library,/Show mature or unrated previews/);
+  assert.match(library,/item\.preview_safe\|\|showMature/);
+  assert.match(library,/safe=\{item\.preview_safe\|\|showMature\}/);
+  assert.match(library,/useSyncExternalStore\(subscribeMaturePreviewVisibility,getMaturePreviewVisibility,getMaturePreviewVisibility\)/);
+  assert.match(library,/onValue=\{setMaturePreviewVisibility\}/);
+  assert.doesNotMatch(library,/\[showMature,setShowMature\]=useState|localStorage|sessionStorage/);
+  assert.match(indexSource,/id: LORA_MATURE_PREVIEWS_SETTING_ID as any,[\s\S]*?defaultValue: false,[\s\S]*?onChange: \(value: boolean\) => setMaturePreviewVisibility\(value, false\)/);
+  assert.match(library,/<div className="bv-resource-preview-policy"><ToggleField label="Show mature or unrated previews"/);
+  assert.doesNotMatch(library,/bv-resource-browser-actions"><ToggleField/);
+  assert.match(styles,/\.bv-resource-preview-policy\{[^}]*min-width:0;[^}]*flex-wrap:wrap/);
+  assert.match(library,/<div className="bv-resource-browser"><div className="bv-resource-browser-controls"><TimedStatusSlot/);
+  assert.match(styles,/\.bv-resource-browser\{[^}]*grid-template-rows:auto minmax\(0,1fr\)/);
+  assert.match(styles,/\.bv-resource-browser-controls\{[^}]*display:grid;[^}]*min-width:0/);
+});
+
+test("LoRA registry reuses shared trigger copy and both catalog surfaces expose a real metadata reload",()=>{
+  assert.match(view,/<TruncatedCopyText text=\{item\.trigger_words\.join\(", "\)\} label="Trigger words"\/>/);
+  assert.match(view,/Reload local metadata/);
+  assert.match(library,/Reload local metadata/);
+  assert.match(view,/loraCatalogClient\.reload\(api\)/);
+});
+
+test("LoRA browser has a narrow single-column reflow without a horizontal facet scroller",()=>{
+  assert.match(styles,/\.bv-resource-browser\{container:bv-resource-browser \/ inline-size/);
+  assert.match(styles,/@container bv-resource-browser \(max-width:980px\)/);
+  const narrow=styles.slice(styles.indexOf("@container bv-resource-browser (max-width:720px)"),styles.indexOf("/* Shared compact interaction language"));
+  assert.match(narrow,/\.bv-resource-browser-body\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(narrow,/\.bv-resource-facets\{[^}]*flex-wrap:wrap/);
+  assert.doesNotMatch(styles,/\.bv-resource-facets\{[^}]*overflow-x:auto/);
+  assert.match(styles,/\.bv-resource-detail h3[^}]*overflow-wrap:anywhere/);
+  assert.match(styles,/\.bv-callout>div\s*\{[^}]*min-width:0/);
 });
 
 test("LoRA library delegates bounded incremental rendering to shared BVUI",()=>{

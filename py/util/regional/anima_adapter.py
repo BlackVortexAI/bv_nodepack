@@ -9,6 +9,7 @@ from .clip_hooks import clip_with_hooks
 from .context import context_document
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
+from .prompt_policy import ANIMA_SCOPED_NEGATIVE, use_negative_prompts
 
 
 ANIMA_REGIONS = "ANIMA_CONDITIONING_REGIONS"
@@ -76,6 +77,7 @@ def compile_anima_adapter(
 
     clean = context_document(document)
     scoped_hooks = hooks_by_scope or {}
+    use_negative = use_negative_prompts(clean)
     width, height = clean["canvas"]["width"], clean["canvas"]["height"]
 
     global_positive_source, global_positive_text = _prompt_text(clean, "global", "positive")
@@ -94,8 +96,8 @@ def compile_anima_adapter(
         if not region_used_for(region, "generation"):
             continue
         selection = _selection(clean, "region", region["id"])
-        prompt = selection_prompts(selection)[0]
-        if not prompt["source"].strip():
+        prompt, negative_prompt = selection_prompts(selection)
+        if not prompt["source"].strip() and not (use_negative and negative_prompt["source"].strip()):
             continue
         mask = render_selection(selection, width, height)
         if not bool(torch.any(mask > 0)):
@@ -111,11 +113,22 @@ def compile_anima_adapter(
     if chain is None:
         raise ValueError("Anima regional conditioning requires at least one enabled region with a prompt and a non-empty mask")
 
-    global_negative_source, global_negative_text = _prompt_text(clean, "global", "negative")
-    mode = clean["negative_mode"]
-    if mode == "zero_out" or (mode == "auto" and not global_negative_source.strip()):
+    _, global_negative_text = _prompt_text(clean, "global", "negative")
+    if not use_negative:
         negative = _zero_out(positive)
     else:
         negative = _encode(clip, global_negative_text, scoped_hooks.get("global"))
 
+    # Transport scoped negatives through the existing conditioning ports.
+    # The public document and external chain shape remain unchanged.
+    if use_negative:
+        background_source, background_text = _prompt_text(clean, "background", "negative")
+        if background_source.strip():
+            background[0][1][ANIMA_SCOPED_NEGATIVE] = _encode(
+                clip, background_text, scoped_hooks.get("background"))
+        for entry in chain.flatten():
+            prompts = selection_prompts(_selection(clean, "region", entry.scope))
+            if prompts[1]["source"].strip():
+                entry.conditioning[0][1][ANIMA_SCOPED_NEGATIVE] = _encode(
+                    clip, prompts[1]["text"], scoped_hooks.get(entry.scope))
     return positive, negative, chain, background

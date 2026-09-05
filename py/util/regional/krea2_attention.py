@@ -11,6 +11,7 @@ from .clip_hooks import clip_with_hooks
 from .context import context_document
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
+from .prompt_policy import use_negative_prompts, zero_encoded, mask_cfg_padding
 
 
 BACKEND_ID = "krea2_joint_attention_experimental"
@@ -25,6 +26,8 @@ class Krea2RegionalSlot:
     strength: float
     token_count: int
     scope: str | None = None
+    positive_token_count: int | None = None
+    negative_token_count: int | None = None
 
 
 def _selection(document: dict[str, Any], scope: str, region_id: str | None = None) -> dict[str, Any]:
@@ -101,6 +104,7 @@ def compile_krea2_attention(
     hooks_by_scope: dict[str, Any] | None = None,
 ) -> tuple[list, list, list[Krea2RegionalSlot], float]:
     clean = context_document(document)
+    use_negative = use_negative_prompts(clean)
     scoped_hooks = hooks_by_scope or {}
     width = int(clean["canvas"]["width"])
     height = int(clean["canvas"]["height"])
@@ -147,15 +151,16 @@ def compile_krea2_attention(
         pos, pos_meta = _encode_trimmed(
             clip, positive_prompt["text"], f"{name} positive", hooks
         )
-        neg, neg_meta = _encode_trimmed(
-            clip, negative_prompt["text"], f"{name} negative", hooks
+        neg, neg_meta = (
+            _encode_trimmed(clip, negative_prompt["text"], f"{name} negative", hooks)
+            if use_negative else zero_encoded(pos, pos_meta)
         )
         count = max(int(pos.shape[1]), int(neg.shape[1]))
         positive_values.append(_pad_tokens(pos, count))
         negative_values.append(_pad_tokens(neg, count))
         positive_masks.append(F.pad(pos_meta["attention_mask"], (0, count - pos.shape[1])))
         negative_masks.append(F.pad(neg_meta["attention_mask"], (0, count - neg.shape[1])))
-        slots.append(Krea2RegionalSlot(name, mask, strength, count, scope))
+        slots.append(Krea2RegionalSlot(name, mask, strength, count, scope, positive_token_count=int(pos.shape[1]), negative_token_count=int(neg.shape[1])))
         positive_metadata = positive_metadata or pos_meta
         negative_metadata = negative_metadata or neg_meta
 
@@ -279,6 +284,8 @@ class Krea2AttentionPatch:
                 strength, q.device, q.dtype, int(q.shape[0])
             )
             self._cache[cache_key] = bias
+        bias = mask_cfg_padding(
+            bias, self.slots, text_tokens - sum(slot.token_count for slot in self.slots), options)
         if torch.is_tensor(attn_mask) and attn_mask.ndim >= 3:
             bias = bias + attn_mask.to(device=q.device, dtype=q.dtype)
         return {"attn_mask": bias}

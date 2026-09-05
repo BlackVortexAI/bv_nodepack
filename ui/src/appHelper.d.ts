@@ -7,5 +7,6 @@ declare module "./appHelper.js" {
         queuePrompt(number: number, data: unknown, options?: unknown): Promise<{prompt_id?:string}>;
         apiURL(path: string): string;
         fetchApi(route: string, options?: RequestInit): Promise<Response>;
+        getEmbeddings(): Promise<string[]>;
     };
 }

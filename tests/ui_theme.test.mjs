@@ -51,6 +51,9 @@ test("canvas widget hosts bridge shared controls to ComfyUI node-widget tokens",
   assert.match(css, /\.bv-readonly-text-block\{[^}]*background:var\(--bv-ui-input\)/);
   assert.match(css, /\.bv-compact-resource-row\{[^}]*background:var\(--bv-ui-surface-subtle\)/);
   assert.doesNotMatch(css, /\.bv-readonly-text-block\{[^}]*#[0-9a-f]{3,8}/i);
+  assert.match(hostRule, /box-sizing:border-box/);
+  assert.match(css, /\.bv-react-node-widget-scroll\{[^}]*scrollbar-color:var\(--bv-widget-muted\) transparent[^}]*scrollbar-width:thin/);
+  assert.match(css, /\.bv-react-node-widget-scroll::-webkit-scrollbar-thumb\{[^}]*background:var\(--bv-widget-muted\)[^}]*border:2px solid var\(--bv-widget-surface\)/);
 });
 
 test("alternative concepts remain non-production catalog specifications", async () => {

@@ -113,7 +113,7 @@ class RegionalLoraHookContractTests(unittest.TestCase):
             "right": [(canonical, 0.8, 0.6)],
         }
 
-        resolved = resolve_stack_paths(stacks, lambda path: canonical if path == "alias.safetensors" else None)
+        resolved = resolve_stack_paths(stacks, lambda path: canonical if path == "alias.safetensors" else None, allowed_roots=[Path(__file__).parent])
 
         self.assertEqual(resolved["left"], resolved["right"])
 

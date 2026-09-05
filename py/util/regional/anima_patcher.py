@@ -13,6 +13,8 @@ import torch.nn.functional as F
 
 import comfy.patcher_extension
 
+from .prompt_policy import ANIMA_SCOPED_NEGATIVE
+
 
 WRAPPER_KEY = "bv_anima_regional_conditioning"
 REGION_TYPE = "ANIMA_CONDITIONING_REGIONS"
@@ -388,12 +390,27 @@ class AnimaRegionalConditioningPatch:
         self.region_conditionings: list[tuple[torch.Tensor, dict]] = []
         self.background_conditioning: Optional[tuple[torch.Tensor, dict]] = None
         self.token_lora = None
+        self.scoped_negative_conditionings: list[Optional[tuple[torch.Tensor, dict]]] = []
+
+        def take_negative(metadata):
+            value = metadata.pop(ANIMA_SCOPED_NEGATIVE, None)
+            if value is None:
+                return None
+            if len(value) != 1:
+                raise ValueError("Anima scoped negative requires one conditioning segment")
+            embedding, values = _extract_conditioning_parts(value, "scoped negative")
+            return embedding.detach().float().cpu().contiguous(), values.copy()
+
 
         if background_conditioning is not None:
             cond, metadata = _extract_conditioning_parts(
                 background_conditioning, "background_conditioning"
             )
-            self.background_conditioning = (cond.detach().float().cpu().contiguous(), metadata.copy())
+            metadata = metadata.copy()
+            self.scoped_negative_conditionings.append(take_negative(metadata))
+            self.background_conditioning = (cond.detach().float().cpu().contiguous(), metadata)
+        else:
+            self.scoped_negative_conditionings.append(None)
 
         for idx, region in enumerate(regions, start=1):
             weight = max(float(region.weight), 0.0)
@@ -401,6 +418,8 @@ class AnimaRegionalConditioningPatch:
             cond, metadata = _extract_conditioning_parts(
                 region.conditioning, f"region_{idx}.conditioning"
             )
+            metadata = metadata.copy()
+            self.scoped_negative_conditionings.append(take_negative(metadata))
             self.region_masks.append(mask)
             self.region_weights.append(weight)
             self.region_scopes.append(region.scope or f"region_{idx}")
@@ -456,6 +475,22 @@ class AnimaRegionalConditioningPatch:
                 t5xxl_weights=_as_batched_weights(t5xxl_weights, cond),
             )
         return cond
+
+    def prepare_scoped_negative_conds(self, diffusion_model, device, dtype):
+        prepared = []
+        for entry in self.scoped_negative_conditionings:
+            if entry is None:
+                prepared.append(None)
+                continue
+            cond, metadata = entry
+            cond = cond.to(device=device, dtype=dtype)
+            ids = metadata.get("t5xxl_ids")
+            if ids is not None and hasattr(diffusion_model, "preprocess_text_embeds"):
+                cond = diffusion_model.preprocess_text_embeds(
+                    cond, _as_batched_ids(ids, device),
+                    t5xxl_weights=_as_batched_weights(metadata.get("t5xxl_weights"), cond))
+            prepared.append(cond)
+        return prepared
 
     def is_active(self, transformer_options: dict) -> bool:
         sigmas = transformer_options.get("sigmas", None)
@@ -589,6 +624,87 @@ def _execute_image_only_token_lora(
     finally:
         _RUNTIME.reset(runtime_token)
 
+def _scoped_cfg_context(context, positive_slots, negative_slots, cond_or_unconds, batch_size):
+    """Align CFG slot boundaries without truncating either polarity."""
+    lengths = [max(pos.shape[1], neg.shape[1] if neg is not None else 0)
+               for pos, neg in zip(positive_slots, negative_slots)]
+    lengths.append(context.shape[1])  # global negative stays spatially global
+
+    def batched(value):
+        if value.shape[0] == 1:
+            return value.expand(batch_size, -1, -1)
+        if value.shape[0] != batch_size:
+            raise RuntimeError("Scoped conditioning batch does not match sampler batch")
+        return value
+
+    chunks = []
+    for original, polarity in zip(context.chunk(len(cond_or_unconds)), cond_or_unconds):
+        slots = negative_slots if polarity == 1 else positive_slots
+        values = []
+        for index, value in enumerate(slots):
+            if value is None:
+                value = original.new_zeros((batch_size, 0, original.shape[-1]))
+            value = batched(value)
+            values.append(F.pad(value, (0, 0, 0, lengths[index] - value.shape[1])))
+        values.append(original if polarity == 1 else torch.zeros_like(original))
+        chunks.append(torch.cat(values, dim=1))
+    return torch.cat(chunks), lengths
+
+
+def _scoped_negative_bias(token_masks, negative_slots, lengths, device, dtype,
+                          mask_strength=1.0, slot_strengths=None):
+    """Use the positive routing strength contract while keeping global open."""
+    image_tokens = token_masks.shape[1]
+    actual_lengths = [value.shape[1] if value is not None and slot_strengths[index] > 0 else 0
+                      for index, value in enumerate(negative_slots)]
+    masks = token_masks.clone()
+    for index, value in enumerate(negative_slots):
+        if actual_lengths[index] == 0:
+            masks[index] = 0
+    uncovered = ~masks.bool().any(dim=0)
+    # Put global first for the shared bias builder; its zero spatial mask keeps
+    # global availability independent of the local strength interpolation.
+    masks = torch.cat([torch.zeros_like(masks[:1]), masks])
+    weights = torch.cat([torch.zeros(1, device=device, dtype=dtype), slot_strengths])
+    compact = _build_flux_cross_attention_bias(
+        masks, [lengths[-1]] + actual_lengths, "global", device, dtype,
+        mask_strength=mask_strength, slot_strengths=weights)
+    bias = torch.full((1, 1, image_tokens, sum(lengths)), float("-inf"), device=device, dtype=dtype)
+    source = lengths[-1]
+    target = 0
+    for actual, length in zip(actual_lengths, lengths):
+        bias[:, :, :, target:target+actual] = compact[:, :, :, source:source+actual]
+        source += actual
+        target += length
+    # With no local membership the positive helper's soft fallback is neutral.
+    # Here the independent global slot is sufficient; do not leak local negatives.
+    bias[:, :, uncovered, :target] = float("-inf")
+    bias[:, :, :, target:] = compact[:, :, :, :lengths[-1]]
+    return bias
+
+
+def _cfg_padding_bias(positive_slots, negative_slots, lengths, order, batch_size, image_tokens):
+    sample = positive_slots[0]
+    branches = []
+    for polarity in order:
+        valid = torch.zeros(sum(lengths), device=sample.device, dtype=torch.bool)
+        offset = 0
+        slots = negative_slots if polarity == 1 else positive_slots
+        for slot, length in zip(slots, lengths):
+            if slot is not None:
+                valid[offset:offset+slot.shape[1]] = True
+            offset += length
+        if polarity == 1:
+            valid[offset:] = True
+        bias = torch.zeros((batch_size, 1, image_tokens, sum(lengths)),
+                           device=sample.device, dtype=sample.dtype)
+        bias[:, :, :, ~valid] = float("-inf")
+        branches.append(bias)
+    return torch.cat(branches)
+
+
+
+
 def _diffusion_model_wrapper(executor, *args, **kwargs):
     transformer_options = kwargs.get("transformer_options", None)
     if not isinstance(transformer_options, dict):
@@ -714,6 +830,20 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
 
     unified_context = torch.cat(unified_chunks, dim=0)  # [B_total, S_total, D]
 
+    # Scoped negatives use aligned per-scope slots plus an independent global
+    # negative slot. Legacy/external chains without the metadata keep their path.
+    prepare_negatives = getattr(patch, "prepare_scoped_negative_conds", None)
+    negative_slots = prepare_negatives(diffusion_model, device, dtype) if prepare_negatives else []
+    scoped_negative = any(value is not None for value in negative_slots)
+    positive_index = cond_or_unconds.index(0) if 0 in cond_or_unconds else 0
+    positive_base = context[positive_index*batch_size:(positive_index+1)*batch_size]
+    positive_slots = [background_cond_batched if background_cond_batched is not None
+                      else positive_base] + region_conds_batched
+    if scoped_negative:
+        unified_context, text_lengths = _scoped_cfg_context(
+            context, positive_slots, negative_slots, cond_or_unconds, batch_size)
+        S_total = sum(text_lengths)
+
     # ---- Token masks ----------------------------------------------------
     # Compute padded token-grid dimensions (matches what _forward sees after
     # pad_to_patch_size).
@@ -773,12 +903,28 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
         (1, 1, cond_bias.shape[2], S_total), float("-inf"), device=device, dtype=dtype
     )
     uncond_bias[:, :, :, :S_background] = 0.0
+    if scoped_negative:
+        # Positive padding must never leak, including at soft mask strengths.
+        offset = 0
+        for value, length in zip(positive_slots, text_lengths):
+            cond_bias[:, :, :, offset + value.shape[1]:offset + length] = float("-inf")
+            offset += length
+        cond_bias[:, :, :, offset:] = float("-inf")
+        # Background negative is outside regions, independent of positive base_mode.
+        negative_masks = token_masks.clone()
+        negative_masks[0] = ~token_masks[1:].bool().any(dim=0)
+        uncond_bias = _scoped_negative_bias(
+            negative_masks, negative_slots, text_lengths, device, dtype,
+            mask_strength=patch.cross_mask_strength, slot_strengths=slot_strengths)
 
     bias_parts: list[torch.Tensor] = []
     for cond_or_uncond in cond_or_unconds:
         b = uncond_bias if cond_or_uncond == 1 else cond_bias
         bias_parts.append(b.expand(batch_size, -1, -1, -1))
     full_bias = torch.cat(bias_parts, dim=0)
+    padding_bias = (_cfg_padding_bias(
+        positive_slots, negative_slots, text_lengths, cond_or_unconds,
+        batch_size, cond_bias.shape[2]) if scoped_negative else None)
 
     full_self_bias: Optional[torch.Tensor] = None
     if patch.self_mask_strength > 0.0:
@@ -848,13 +994,15 @@ def _diffusion_model_wrapper(executor, *args, **kwargs):
         for block_index, block in enumerate(getattr(diffusion_model, "blocks", [])):
             if (
                 patch.cross_mask_strength > 0.0
-                and block_index % patch.cross_inject_every_n_blocks == 0
+                and (scoped_negative or block_index % patch.cross_inject_every_n_blocks == 0)
             ):
                 cross_attn = getattr(block, "cross_attn", None)
                 if cross_attn is not None:
                     original_op = cross_attn.attn_op
                     # partial binds attn_bias; call signature stays (q, k, v, transformer_options=...)
-                    cross_attn.attn_op = partial(_masked_attn_op, attn_bias=full_bias)
+                    block_bias = (full_bias if block_index % patch.cross_inject_every_n_blocks == 0
+                                  else padding_bias)
+                    cross_attn.attn_op = partial(_masked_attn_op, attn_bias=block_bias)
                     patched.append((cross_attn, original_op))
 
             if (

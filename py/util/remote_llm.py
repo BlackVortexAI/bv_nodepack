@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import ipaddress
 import re
 import tempfile
 import threading
@@ -23,6 +24,7 @@ USER_SETTINGS_FILENAME = "remote_llm_settings.json"
 USER_SECRETS_FILENAME = "remote_llm_secrets.json"
 REMOTE_CACHE_SCHEMA = "bv.remote_llm.response-cache"
 _REMOTE_CACHE_LOCK = threading.RLock()
+_REMOTE_SECRETS_LOCK = threading.RLock()
 SUPPORTED_ADAPTERS = frozenset({"openai_chat"})
 SUPPORTED_REQUEST_PROFILES = frozenset({"standard", "venice"})
 SUPPORTED_AUTH_MODES = frozenset({"bearer", "none"})
@@ -105,8 +107,14 @@ def _strict_object(value: Any, required: set[str], path: str) -> dict[str, Any]:
 
 
 def _validated_endpoint(value: Any, path: str) -> str:
-    endpoint = str(value).strip()
-    parsed = urllib.parse.urlsplit(endpoint)
+    endpoint = str(value)
+    if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in endpoint) or any(char in endpoint for char in "\\?#"):
+        raise RemoteLLMConfigurationError(f"{path} contains unsupported URL characters")
+    try:
+        parsed = urllib.parse.urlsplit(endpoint)
+        port = parsed.port
+    except ValueError as error:
+        raise RemoteLLMConfigurationError(f"{path} is not a valid endpoint") from error
     is_loopback_http = parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
     if (
         (parsed.scheme != "https" and not is_loopback_http)
@@ -119,7 +127,20 @@ def _validated_endpoint(value: Any, path: str) -> str:
         raise RemoteLLMConfigurationError(
             f"{path} must be HTTPS or loopback HTTP without credentials, query, or fragment"
         )
-    return endpoint
+    host = parsed.hostname
+    if "%" in host:
+        raise RemoteLLMConfigurationError(f"{path} contains an unsupported hostname")
+    try:
+        host = ipaddress.ip_address(host).compressed
+    except ValueError:
+        try:
+            host = host.encode("idna").decode("ascii").lower()
+        except UnicodeError as error:
+            raise RemoteLLMConfigurationError(f"{path} contains an invalid hostname") from error
+    authority = f"[{host}]" if ":" in host else host
+    if port is not None and port != (443 if parsed.scheme == "https" else 80):
+        authority += f":{port}"
+    return urllib.parse.urlunsplit((parsed.scheme, authority, parsed.path or "/", "", ""))
 
 
 def load_provider_catalog(path: Path | None = None) -> tuple[RemoteProviderProfile, ...]:
@@ -198,7 +219,7 @@ def default_remote_cache_directory() -> Path:
 
 
 def _empty_secrets_document() -> dict[str, Any]:
-    return {"schema": "bv.remote_llm.secrets", "version": 1, "api_keys": {}}
+    return {"schema": "bv.remote_llm.secrets", "version": 2, "api_keys": {}, "endpoints": {}}
 
 
 def _load_secrets_document(path: Path | None = None) -> dict[str, Any]:
@@ -209,12 +230,54 @@ def _load_secrets_document(path: Path | None = None) -> dict[str, Any]:
         value = json.loads(secrets_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RemoteLLMConfigurationError(f"Cannot load remote LLM secrets '{secrets_path}': {error}") from error
-    root = _strict_object(value, {"schema", "version", "api_keys"}, "remote LLM secrets")
-    if root["schema"] != "bv.remote_llm.secrets" or root["version"] != 1 or not isinstance(root["api_keys"], dict):
+    fields = {"schema", "version", "api_keys"}
+    if isinstance(value, dict) and value.get("version") == 2:
+        fields.add("endpoints")
+    root = _strict_object(value, fields, "remote LLM secrets")
+    if root["schema"] != "bv.remote_llm.secrets" or root["version"] not in {1, 2} or not isinstance(root["api_keys"], dict):
         raise RemoteLLMConfigurationError("Remote LLM secrets schema/version is unsupported")
     if any(not isinstance(key, str) or not isinstance(secret, str) for key, secret in root["api_keys"].items()):
         raise RemoteLLMConfigurationError("Remote LLM secrets contain invalid entries")
+    if root["version"] == 2:
+        endpoints = root["endpoints"]
+        if not isinstance(endpoints, dict) or set(endpoints) != set(root["api_keys"]):
+            raise RemoteLLMConfigurationError("Remote LLM secrets require matching endpoint bindings")
+        for endpoint in endpoints.values():
+            # Explicit null preserves an unapproved legacy key without granting it a destination.
+            if endpoint is not None:
+                if not isinstance(endpoint, str):
+                    raise RemoteLLMConfigurationError("Invalid remote LLM endpoint binding")
+                _validated_endpoint(endpoint, "Stored endpoint")
     return root
+
+
+def _profile(profile_id: str) -> RemoteProviderProfile:
+    profile = next((item for item in load_provider_catalog() if item.id == profile_id), None)
+    if profile is None:
+        raise RemoteLLMConfigurationError("Unknown remote LLM provider profile")
+    return profile
+
+
+def _bound_endpoint(value: dict[str, Any], profile: RemoteProviderProfile) -> str | None:
+    if value["version"] == 1:
+        return None if profile.allow_custom_endpoint else profile.endpoint
+    return value["endpoints"].get(profile.id)
+
+
+def remote_api_key_endpoint(profile_id: str, path: Path | None = None) -> str | None:
+    value = _load_secrets_document(path)
+    return _bound_endpoint(value, _profile(profile_id)) if value["api_keys"].get(profile_id) else None
+
+
+def _upgrade_secrets(value: dict[str, Any]) -> dict[str, Any]:
+    if value["version"] == 1:
+        profiles = {profile.id: profile for profile in load_provider_catalog()}
+        value["endpoints"] = {
+            key: _bound_endpoint(value, profiles[key]) if key in profiles else None
+            for key in value["api_keys"]
+        }
+        value["version"] = 2
+    return value
 
 
 def _write_secrets_document(value: dict[str, Any], path: Path | None = None) -> None:
@@ -240,28 +303,48 @@ def remote_api_key_status(path: Path | None = None) -> dict[str, bool]:
     return {profile_id: bool(value.strip()) for profile_id, value in _load_secrets_document(path)["api_keys"].items()}
 
 
-def set_remote_api_key(profile_id: str, api_key: str, path: Path | None = None) -> None:
+def set_remote_api_key(profile_id: str, api_key: str, path: Path | None = None, *, endpoint: str | None = None) -> None:
     profile = str(profile_id).strip()
     secret = str(api_key).strip()
     if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", profile):
         raise RemoteLLMConfigurationError("Remote LLM provider profile ID is invalid")
     if not secret or len(secret) > 8192 or any(ord(char) < 32 for char in secret):
         raise RemoteLLMConfigurationError("Remote LLM API key is invalid")
-    value = _load_secrets_document(path)
-    value["api_keys"][profile] = secret
-    _write_secrets_document(value, path)
+    definition = _profile(profile)
+    if definition.auth_mode != "bearer":
+        raise RemoteLLMConfigurationError("This provider does not use an API key")
+    if endpoint is None and definition.allow_custom_endpoint:
+        raise RemoteLLMConfigurationError("Choose and confirm the endpoint when saving this API key")
+    approved = _validated_endpoint(endpoint if endpoint is not None else definition.endpoint, "Approved endpoint")
+    if not definition.allow_custom_endpoint and approved != definition.endpoint:
+        raise RemoteLLMConfigurationError("This provider requires its catalog endpoint")
+    with _REMOTE_SECRETS_LOCK:
+        value = _upgrade_secrets(_load_secrets_document(path))
+        value["api_keys"][profile] = secret
+        value["endpoints"][profile] = approved
+        _write_secrets_document(value, path)
 
 
 def delete_remote_api_key(profile_id: str, path: Path | None = None) -> None:
+    with _REMOTE_SECRETS_LOCK:
+        value = _upgrade_secrets(_load_secrets_document(path))
+        value["api_keys"].pop(str(profile_id).strip(), None)
+        value["endpoints"].pop(str(profile_id).strip(), None)
+        _write_secrets_document(value, path)
+
+
+def get_remote_api_key(profile_id: str, path: Path | None = None, *, endpoint: str | None = None) -> str:
+    profile = _profile(profile_id)
     value = _load_secrets_document(path)
-    value["api_keys"].pop(str(profile_id).strip(), None)
-    _write_secrets_document(value, path)
-
-
-def get_remote_api_key(profile_id: str, path: Path | None = None) -> str:
-    secret = str(_load_secrets_document(path)["api_keys"].get(str(profile_id).strip(), "")).strip()
+    secret = value["api_keys"].get(profile_id, "").strip()
     if not secret:
         raise RemoteLLMConfigurationError(f"No API key is configured for remote LLM provider '{profile_id}'")
+    approved = _bound_endpoint(value, profile)
+    if approved is None or (endpoint is None and profile.allow_custom_endpoint):
+        raise RemoteLLMConfigurationError("API key has no approved endpoint. Open Configure API Key, verify the destination and save the key again.")
+    requested = _validated_endpoint(endpoint if endpoint is not None else profile.endpoint, "Request endpoint")
+    if requested != _validated_endpoint(approved, "Approved endpoint"):
+        raise RemoteLLMConfigurationError("API key is not approved for this endpoint. Verify the destination in Configure API Key and save the key again.")
     return secret
 
 
@@ -347,10 +430,15 @@ def load_user_defaults(
 HttpTransport = Callable[[str, dict[str, str], bytes, int], tuple[int, bytes]]
 
 
+class _NoRemoteRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RemoteLLMProviderError("Remote LLM redirects are blocked. Configure the final endpoint directly.")
+
+
 def _urllib_transport(url: str, headers: dict[str, str], body: bytes, timeout: int) -> tuple[int, bytes]:
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.build_opener(_NoRemoteRedirects()).open(request, timeout=timeout) as response:
             payload = response.read(MAX_HTTP_RESPONSE_BYTES + 1)
             return int(response.status), payload
     except urllib.error.HTTPError as error:
@@ -380,11 +468,13 @@ class OpenAICompatibleChatProvider:
         cache_directory: Path | None | bool = None,
         auth_mode: str = "bearer",
         local_execution: bool = False,
+        credential_resolver: Callable[[str], str] | None = None,
     ):
         self.provider_id = str(provider_id).strip()
         self.endpoint = str(endpoint).strip()
         self.model = str(model).strip()
         self._api_key_resolver = api_key_resolver
+        self._credential_resolver = credential_resolver
         self.reasoning_effort = str(reasoning_effort).strip()
         self.timeout_seconds = int(timeout_seconds)
         self._extra_body = dict(extra_body or {})
@@ -413,20 +503,21 @@ class OpenAICompatibleChatProvider:
         if require_api_key and self.auth_mode == "bearer":
             self._resolved_api_key()
 
-    def _resolved_api_key(self) -> str:
-        api_key = str(self._api_key_resolver()).strip()
+    def _resolved_api_key(self, endpoint: str | None = None) -> str:
+        target = self.endpoint if endpoint is None else endpoint
+        api_key = str(self._credential_resolver(target) if self._credential_resolver else self._api_key_resolver()).strip()
         if not api_key:
             raise ValueError("Remote LLM API key is not configured")
         return api_key
 
-    def _cache_path(self, payload: dict[str, Any]) -> Path | None:
+    def _cache_path(self, payload: dict[str, Any], endpoint: str | None = None) -> Path | None:
         if self._cache_directory is None:
             return None
         identity = {
             "schema": REMOTE_CACHE_SCHEMA,
             "version": 1,
             "provider_id": self.provider_id,
-            "endpoint": self.endpoint,
+            "endpoint": self.endpoint if endpoint is None else endpoint,
             "payload": payload,
         }
         digest = hashlib.sha256(
@@ -481,8 +572,9 @@ class OpenAICompatibleChatProvider:
                 Path(temporary_name).unlink(missing_ok=True)
 
     def generate(self, request: LLMRequest) -> LLMResponse:
-        self.validate_configuration(require_api_key=True)
-        api_key = self._resolved_api_key() if self.auth_mode == "bearer" else ""
+        endpoint = _validated_endpoint(self.endpoint, "Remote LLM endpoint")
+        self.validate_configuration(require_api_key=False)
+        api_key = self._resolved_api_key(endpoint) if self.auth_mode == "bearer" else ""
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -506,7 +598,7 @@ class OpenAICompatibleChatProvider:
         if self.reasoning_effort != "none":
             payload["reasoning_effort"] = self.reasoning_effort
 
-        cache_path = self._cache_path(payload)
+        cache_path = self._cache_path(payload, endpoint)
         with _REMOTE_CACHE_LOCK if cache_path is not None else nullcontext():
             if cache_path is not None:
                 cached = self._read_cached_response(cache_path)
@@ -520,7 +612,7 @@ class OpenAICompatibleChatProvider:
             if self.auth_mode == "bearer":
                 headers["Authorization"] = f"Bearer {api_key}"
             status, raw_response = self._transport(
-                self.endpoint,
+                endpoint,
                 headers,
                 json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
                 self.timeout_seconds,
@@ -592,4 +684,5 @@ def build_remote_provider(
         cache_directory=cache_directory,
         auth_mode=profile.auth_mode,
         local_execution=profile.local_execution,
+        credential_resolver=None if api_key_resolver is not None else lambda requested: get_remote_api_key(profile.id, endpoint=requested),
     )

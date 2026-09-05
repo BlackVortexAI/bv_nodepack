@@ -284,8 +284,8 @@ class BVLoraRegistryNode:
     def INPUT_TYPES(cls):
         return {"required": {"config_json": ("STRING", {"default": "", "multiline": True})}}
 
-    RETURN_TYPES = (RUNTIME_PROVIDER, "INT", "STRING")
-    RETURN_NAMES = ("resource_provider", "lora_count", "registry_summary")
+    RETURN_TYPES = ("INT", "STRING", RUNTIME_PROVIDER)
+    RETURN_NAMES = ("lora_count", "registry_summary", "resource_provider")
     FUNCTION = "collect"
     CATEGORY = CATEGORY_LORA
     DESCRIPTION = "Builds several named, independently switchable LoRA stacks from ComfyUI's local LoRA catalog."
@@ -293,7 +293,7 @@ class BVLoraRegistryNode:
     def collect(self, config_json=""):
         registry, registry_id = materialize_lora_registry(config_json)
         lora_count, registry_summary = lora_registry_diagnostics(config_json)
-        return build_lora_provider(registry_id, registry["stacks"]), lora_count, registry_summary
+        return lora_count, registry_summary, build_lora_provider(registry_id, registry["stacks"])
 
 
 class BVLoraStackCollectorNode:
@@ -756,7 +756,7 @@ class BVRegionalFlux2KleinAttentionNode:
     CATEGORY = CATEGORY_MODEL_FLUX2_KLEIN
     DESCRIPTION = (
         "Joint-attention regional routing for the exact FLUX.2 Klein 9B architecture. "
-        "The distilled profile uses zero negative conditioning and a standard KSampler."
+        "Negative conditioning follows the selected negative_mode policy; sampling uses a standard KSampler."
     )
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
@@ -1067,11 +1067,14 @@ class BVRegionalImageSendNode(_BVRegionalImageTargetMixin, PreviewImage):
     FUNCTION = "send"
     OUTPUT_NODE = True
     CATEGORY = CATEGORY_OUTPUT
-    DESCRIPTION = "Previews an image, sends it to a selected BV Regional Editor, and passes the image through."
+    DESCRIPTION = "Previews an image, optionally sends it to a selected BV Regional Editor, and passes the image through."
 
     def send(self, images, document_id, prompt=None, extra_pnginfo=None, unique_id=None):
-        target = self._validate_target(document_id)
         output = self.save_images(images, "bv_regional_background", prompt, extra_pnginfo)
+        target = str(document_id or "").strip()
+        if not target:
+            output["result"] = (images,)
+            return output
         return self._targeted_output(output, images, target, unique_id, "regional-image-send")
 
 

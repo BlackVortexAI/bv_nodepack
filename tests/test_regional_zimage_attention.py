@@ -54,15 +54,15 @@ class RegionalZImageAttentionTests(unittest.TestCase):
         self.assertEqual(slots[0].name, "global")
         self.assertGreater(aspect, 0)
 
-    def test_compiler_concatenates_slots_and_always_emits_zero_negative(self):
+    def test_compiler_concatenates_slots_and_preserves_prompt_negative(self):
         positive, negative, slots, aspect = compile_zimage_attention(fixture(), FakeClip())
         self.assertEqual([s.name for s in slots], [
             "global", "background", "Person left", "Face left", "Blue umbrella"
         ])
         self.assertEqual(tuple(positive[0][0].shape), (1, 15, 4))
         self.assertEqual(tuple(positive[0][1]["attention_mask"].shape), (1, 15))
-        self.assertEqual(torch.count_nonzero(negative[0][0]), 0)
-        self.assertEqual(torch.count_nonzero(negative[0][1]["pooled_output"]), 0)
+        self.assertGreater(torch.count_nonzero(negative[0][0]), 0)
+        self.assertGreater(torch.count_nonzero(negative[0][1]["pooled_output"]), 0)
         self.assertEqual(aspect, 1.0)
 
     def test_joint_bias_keeps_text_and_image_attention_open_but_routes_image_to_text(self):

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { collectSuggestions, completionRequest, CompletionContext, CompletionSuggestion, insertSuggestion } from "./engine";
 import { localCompletionProvider } from "./localProvider";
+import { embeddingCompletionProvider } from "./embeddingRuntimeProvider";
 import { useCompletionEnabled, useCompletionPlacement } from "./settings";
 import { completionPopupPosition } from "./position";
 import { TextareaControl } from "../ui/components";
@@ -33,7 +34,7 @@ export default function PromptTextarea({ value, onValue, completionContext, onKe
         if (!request) return close();
         const controller = new AbortController(); abortRef.current = controller;
         timerRef.current = window.setTimeout(async () => {
-            const items = await collectSuggestions(request, [localCompletionProvider], controller.signal);
+            const items = await collectSuggestions(request, [embeddingCompletionProvider, localCompletionProvider], controller.signal);
             if (controller.signal.aborted) return;
             const element = textarea.current;
             setSuggestions(items); setSelected(0);

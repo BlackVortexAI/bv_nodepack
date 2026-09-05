@@ -12,6 +12,11 @@ test("global completion targets native multiline widgets and provides an explici
     assert.match(source, /stopImmediatePropagation/);
 });
 
+test("both completion adapters include ComfyUI embeddings beside local datasets", () => {
+    assert.match(source, /\[embeddingCompletionProvider, localCompletionProvider\]/);
+    assert.match(promptTextareaSource, /\[embeddingCompletionProvider, localCompletionProvider\]/);
+});
+
 test("global completion reevaluates suggestions when the caret moves", () => {
     assert.match(source, /addEventListener\("select", search\)/);
     assert.match(source, /removeEventListener\("select", search\)/);

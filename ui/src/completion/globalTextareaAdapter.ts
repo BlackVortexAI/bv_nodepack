@@ -1,5 +1,6 @@
 import { collectSuggestions, completionRequest, insertSuggestion, type CompletionSuggestion } from "./engine";
 import { localCompletionProvider } from "./localProvider";
+import { embeddingCompletionProvider } from "./embeddingRuntimeProvider";
 import { COMPLETION_CHANGE_EVENT, COMPLETION_PLACEMENT_CHANGE_EVENT, completionEnabled, completionPlacement } from "./settings";
 import { completionPopupPosition } from "./position";
 import { createElement } from "react";
@@ -68,7 +69,7 @@ function attach(textarea: HTMLTextAreaElement) {
         abort = new AbortController();
         const controller = abort;
         timer = window.setTimeout(async () => {
-            const items = await collectSuggestions(current, [localCompletionProvider], controller.signal);
+            const items = await collectSuggestions(current, [embeddingCompletionProvider, localCompletionProvider], controller.signal);
             if (controller.signal.aborted || document.activeElement !== textarea) return;
             suggestions = items;
             selected = 0;

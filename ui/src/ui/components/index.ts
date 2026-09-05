@@ -4,6 +4,7 @@ export * from "./compactInteractions";
 export * from "./data";
 export * from "./feedback";
 export * from "./forms";
+export * from "./layout";
 export * from "./navigation";
 export * from "./overlays";
 export * from "./ResourcePicker";

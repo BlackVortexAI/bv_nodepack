@@ -388,13 +388,13 @@ class RegionalNodeTests(unittest.TestCase):
             stack["id"]: {"id": stack["id"], "name": stack["name"], "stack": []} for stack in config["stacks"]
         }}
         with mock.patch.object(self.module, "materialize_lora_registry", return_value=(registry, "11111111-1111-4111-8111-111111111111")):
-            provider, lora_count, registry_summary = self.module.BVLoraRegistryNode().collect(json.dumps(config))
+            lora_count, registry_summary, provider = self.module.BVLoraRegistryNode().collect(json.dumps(config))
         self.assertEqual(provider["provider_id"], "11111111-1111-4111-8111-111111111111")
         self.assertEqual(provider["resources"], registry["stacks"])
         self.assertEqual(lora_count, 2)
         self.assertEqual(registry_summary, "Portrait: 2/3 active\nStyle: 0/2 active · stack disabled\nEmpty: 0/0 active")
-        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, (self.module.RUNTIME_PROVIDER, "INT", "STRING"))
-        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("resource_provider", "lora_count", "registry_summary"))
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, ("INT", "STRING", self.module.RUNTIME_PROVIDER))
+        self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("lora_count", "registry_summary", "resource_provider"))
 
     def test_empty_lora_registry_reports_no_active_loras(self):
         config = {
@@ -404,7 +404,7 @@ class RegionalNodeTests(unittest.TestCase):
         }
         registry = {"schema": "bv.lora_stack_registry", "version": 1, "stacks": {}}
         with mock.patch.object(self.module, "materialize_lora_registry", return_value=(registry, config["registry_id"])):
-            provider, lora_count, registry_summary = self.module.BVLoraRegistryNode().collect(json.dumps(config))
+            lora_count, registry_summary, provider = self.module.BVLoraRegistryNode().collect(json.dumps(config))
         self.assertEqual(provider["resources"], {})
         self.assertEqual(lora_count, 0)
         self.assertEqual(registry_summary, "No LoRAs configured")
@@ -959,9 +959,19 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(publication["source"], {"node_id": "8:12", "kind": "regional-prompt-canvas"})
         self.assertNotIn("images", projected["ui"])
 
-    def test_image_sender_rejects_an_empty_target(self):
-        with self.assertRaisesRegex(ValueError, "document_id is required"):
-            self.module.BVRegionalImageSendNode().send(object(), "  ")
+    def test_image_sender_without_a_target_falls_back_to_a_normal_preview(self):
+        sender = self.module.BVRegionalImageSendNode()
+        images = object()
+        sender.save_images = lambda received, prefix, *_args: {
+            "ui": {"images": [{"filename": "preview.png", "subfolder": "", "type": "temp"}]}
+        }
+
+        output = sender.send(images, "  ")
+
+        self.assertEqual(output["ui"]["images"][0]["filename"], "preview.png")
+        self.assertNotIn("bv_regional_canvas_images", output["ui"])
+        self.assertNotIn("bv_regional_background", output["ui"])
+        self.assertIs(output["result"][0], images)
 
     def test_image_save_is_registered_and_broadcasts_the_saved_result(self):
         saver = self.module.BVRegionalImageSaveNode()

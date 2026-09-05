@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeChangedInitialGeometry, resizeFloatingWindow, windowShelfPosition } from "../ui/src/ui/workspaceGeometry.ts";
+import fs from "node:fs";
+
+const managedWindow=fs.readFileSync(new URL("../ui/src/ui/window.tsx",import.meta.url),"utf8");
 
 const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
 
@@ -38,4 +41,13 @@ test("persisting a moved left edge does not restore the initial window width", (
     const previousInitial={x:1187,y:84,width:520,height:640};
     const nextInitial={x:1087,y:84,width:520,height:640};
     assert.deepEqual(mergeChangedInitialGeometry(resized,previousInitial,nextInitial),resized);
+});
+
+test("managed window context menu snapshots selected text before native-context exemptions",()=>{
+    assert.match(managedWindow,/onContextMenuCapture=\{event=>\{const selectedText=selectedTextWithin\(shell\.current,window\.getSelection\(\)\);if\(!selectedText\)return;event\.preventDefault\(\);event\.stopPropagation\(\);setCaptureMenu/);
+    assert.match(managedWindow,/onContextMenu=\{event=>\{if\(event\.defaultPrevented\)\{event\.stopPropagation\(\);setCaptureMenu\(null\);return\}/);
+    assert.match(managedWindow,/event\.preventDefault\(\);event\.stopPropagation\(\);setCaptureMenu/);
+    assert.match(managedWindow,/id:"copy-selected-text",label:"Copy selected text"/);
+    assert.match(managedWindow,/id:"export-bv-ui",label:"Export BV UI Image…"/);
+    assert.match(managedWindow,/writeText\(captureMenu\.selectedText as string\)\.catch/);
 });

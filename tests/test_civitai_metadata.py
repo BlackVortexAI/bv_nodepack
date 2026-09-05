@@ -44,6 +44,22 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
         self.assertEqual(metadata["schema"], "bv.regional-generation")
         self.assertEqual(metadata["context"]["version"], 3)
 
+    def test_resolves_seed_from_bv_seed_link_for_a1111_parameters(self):
+        graph = {
+            "90": {"class_type": "BV Regional Image Save", "inputs": {"images": ["30", 0]}},
+            "30": {"class_type": "KSampler", "inputs": {
+                "model": ["10", 0], "steps": 30, "cfg": 3.0, "seed": ["7", 0],
+                "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0,
+            }},
+            "10": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "model.safetensors"}},
+            "7": {"class_type": "BV Seed", "inputs": {"seed_bv": -1, "seed": 2314237723733183}},
+        }
+        parameters, _metadata = build_regional_metadata(
+            self.fixture(), prompt=graph, unique_id="90", width=1024, height=1024
+        )
+        self.assertIn("Seed: 2314237723733183", parameters)
+        self.assertNotIn("Seed: [", parameters)
+
     def test_omits_civitai_parameters_when_sampler_is_ambiguous_or_missing(self):
         parameters, metadata = build_regional_metadata(self.fixture(), prompt={}, unique_id="90")
         self.assertIsNone(parameters)
@@ -71,7 +87,7 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
             hasher=lambda _path: "a" * 64,
         )
 
-        self.assertIn("Lora hashes: test_civitai_metadata: aaaaaaaaaa", parameters)
+        self.assertIn('Lora hashes: "test_civitai_metadata: aaaaaaaaaa"', parameters)
         self.assertEqual(metadata["loras"][0]["path"], "turbo.safetensors")
         self.assertEqual(metadata["loras"][0]["scopes"], [
             {"scope": "global", "model_strength": 0.8, "clip_strength": 0.8}

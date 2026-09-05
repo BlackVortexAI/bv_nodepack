@@ -11,8 +11,17 @@ function isCatalog(value:unknown):value is LoraCatalog{
 }
 
 export function createLoraCatalogClient(fetcher:FetchLike=(input)=>fetch(input)){
-    let cached:LoraCatalog|undefined,inFlight:Promise<LoraCatalog>|undefined;
+    let cached:LoraCatalog|undefined,inFlight:Promise<LoraCatalog>|undefined,reloadFlight:Promise<LoraCatalog>|undefined,generation=0;
     const listeners=new Set<()=>void>(),getSnapshot=()=>cached??EMPTY_CATALOG,notify=()=>{for(const listener of[...listeners])listener()};
+    const fetchCatalog=async(api:ApiLike,requestGeneration:number)=>{
+        const response=await fetcher(api.apiURL("/bv_nodepack/loras/catalog"));
+        if(!response.ok)throw new Error(`LoRA catalog failed: ${response.status??"unknown"}`);
+        const value=await response.json();
+        if(!isCatalog(value))throw new Error("LoRA catalog response is invalid");
+        const next=Object.freeze({...value,items:Object.freeze([...value.items])})as unknown as LoraCatalog;
+        if(requestGeneration===generation||!cached){cached=next;notify();return next}
+        return cached??next;
+    };
     return{
         peek:()=>cached,
         getSnapshot,
@@ -22,16 +31,15 @@ export function createLoraCatalogClient(fetcher:FetchLike=(input)=>fetch(input))
         load(api:ApiLike){
             if(cached)return Promise.resolve(cached);
             if(inFlight)return inFlight;
-            inFlight=(async()=>{
-                const response=await fetcher(api.apiURL("/bv_nodepack/loras/catalog"));
-                if(!response.ok)throw new Error(`LoRA catalog failed: ${response.status??"unknown"}`);
-                const value=await response.json();
-                if(!isCatalog(value))throw new Error("LoRA catalog response is invalid");
-                cached=Object.freeze({...value,items:Object.freeze([...value.items])})as unknown as LoraCatalog;
-                notify();
-                return cached;
-            })().finally(()=>{inFlight=undefined});
+            const requestGeneration=generation;
+            inFlight=fetchCatalog(api,requestGeneration).finally(()=>{inFlight=undefined});
             return inFlight;
+        },
+        reload(api:ApiLike){
+            if(reloadFlight)return reloadFlight;
+            const requestGeneration=++generation;
+            reloadFlight=fetchCatalog(api,requestGeneration).finally(()=>{reloadFlight=undefined});
+            return reloadFlight;
         },
     };
 }
