@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from threading import Lock
 
 from .context import normalize_context
 from .lora_v3 import LORA_CAPABILITY_REGISTRY, materialized_lora_scopes
@@ -15,6 +17,16 @@ from ..prompt.category import ast_to_plain_text, parse_prompt_to_ast
 
 SAMPLER_TYPES = {"KSampler", "KSamplerAdvanced"}
 CORE_LORA_TYPES = {"LoraLoader", "LoraLoaderModelOnly"}
+# Only verified MODEL output 0 contracts; unknown wrappers/merges stay unknown.
+MODEL_LOADERS = {"CheckpointLoaderSimple": "ckpt_name", "CheckpointLoader": "ckpt_name", "UNETLoader": "unet_name"}
+MODEL_WRAPPERS = {
+    "BV Regional SDXL Attention", "BV Regional Z-Image Attention",
+    "BV Regional FLUX.2 Klein 9B Attention", "BV Regional Krea 2 Attention",
+    "BV Regional Anima Conditioning", "BV Regional Anima LLLite",
+}
+HASH_CACHE_MAX_ENTRIES = 128
+_HASH_CACHE: OrderedDict[tuple[str, int, int], str] = OrderedDict()
+_HASH_CACHE_LOCK = Lock()
 
 
 def _text(value: Any) -> str:
@@ -81,6 +93,41 @@ def _linked_scalar(prompt: dict[str, Any], value: Any) -> Any:
     return value
 
 
+def _model_provenance(prompt: dict[str, Any], link: Any) -> tuple[str | None, str | None, list[list[Any]]]:
+    """Trace MODEL ownership; strengths are loader settings, not CLIP reachability."""
+    loras: list[list[Any]] = []
+    seen: set[str] = set()
+    while isinstance(link, list) and len(link) == 2 and type(link[1]) is int and link[1] == 0:
+        node_id = str(link[0])
+        if node_id in seen:
+            break
+        seen.add(node_id)
+        node = prompt.get(node_id)
+        if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):
+            break
+        kind, inputs = node.get("class_type"), node["inputs"]
+        if kind in MODEL_LOADERS:
+            name = inputs.get(MODEL_LOADERS[kind])
+            if isinstance(name, str) and name.strip():
+                category = "diffusion_models" if kind == "UNETLoader" else "checkpoints"
+                return name.strip(), category, list(reversed(loras))
+            break
+        if kind in CORE_LORA_TYPES:
+            name = inputs.get("lora_name")
+            model_strength = inputs.get("strength_model", 1.0)
+            clip_strength = inputs.get("strength_clip", 1.0) if kind == "LoraLoader" else 0.0
+            if not isinstance(name, str) or not name.strip() or not all(
+                isinstance(value, (int, float)) for value in (model_strength, clip_strength)
+            ):
+                break
+            loras.append([name.strip(), model_strength, clip_strength])
+        elif kind not in MODEL_WRAPPERS:
+            break
+        link = inputs.get("model")
+    # Do not present partial chains as complete provenance.
+    return None, None, []
+
+
 def _sampler_info(prompt: Any, unique_id: Any) -> dict[str, Any] | None:
     if not isinstance(prompt, dict) or unique_id is None:
         return None
@@ -92,20 +139,7 @@ def _sampler_info(prompt: Any, unique_id: Any) -> dict[str, Any] | None:
     steps = inputs.get("steps")
     if steps is None:
         return None
-    model = next((node for _, node in ancestors if any(key in node.get("inputs", {}) for key in ("ckpt_name", "unet_name", "model_name"))), None)
-    model_inputs = model.get("inputs", {}) if model else {}
-    model_name = next((_text(model_inputs.get(key)) for key in ("ckpt_name", "unet_name", "model_name") if _text(model_inputs.get(key))), None)
-    global_loras: list[list[Any]] = []
-    for _, node in ancestors:
-        if node.get("class_type") not in CORE_LORA_TYPES:
-            continue
-        lora_inputs = node.get("inputs", {})
-        lora_name = _text(lora_inputs.get("lora_name"))
-        if not lora_name:
-            continue
-        model_strength = lora_inputs.get("strength_model", 1.0)
-        clip_strength = lora_inputs.get("strength_clip", model_strength)
-        global_loras.append([lora_name, model_strength, clip_strength])
+    model_name, model_category, global_loras = _model_provenance(prompt, inputs.get("model"))
     return {
         "steps": steps,
         "sampler": _text(inputs.get("sampler_name")) or None,
@@ -114,32 +148,74 @@ def _sampler_info(prompt: Any, unique_id: Any) -> dict[str, Any] | None:
         "seed": _linked_scalar(prompt, inputs.get("seed", inputs.get("noise_seed"))),
         "denoise": inputs.get("denoise"),
         "model": model_name,
+        "model_category": model_category,
         "global_loras": global_loras,
     }
 
 
+def _canonical_path(path: str) -> str:
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+
+def _file_identity(stat: os.stat_result) -> tuple[int, int, int, int]:
+    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
+
+
 def _sha256(path: str) -> str:
+    """Bounded RAM cache; same-size edits preserving mtime cannot be detected.
+
+    This is change detection for metadata, not a tamper-proof integrity check.
+    No persistent cache and no file handles or model data are retained.
+    """
+    canonical = _canonical_path(path)
+    before = os.stat(canonical)
+    key = (canonical, before.st_size, before.st_mtime_ns)
+    with _HASH_CACHE_LOCK:
+        cached = _HASH_CACHE.get(key)
+        if cached is not None:
+            _HASH_CACHE.move_to_end(key)
+    if cached is not None:
+        if _file_identity(os.stat(canonical)) != _file_identity(before):
+            raise OSError("Resource changed while checking cached SHA-256")
+        return cached
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with open(canonical, "rb") as handle:
+        if _file_identity(os.fstat(handle.fileno())) != _file_identity(before):
+            raise OSError("Resource changed before hashing")
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    return digest.hexdigest()
+        after = os.fstat(handle.fileno())
+    if _file_identity(after) != _file_identity(before) or _file_identity(os.stat(canonical)) != _file_identity(before):
+        raise OSError("Resource changed during hashing")
+    result = digest.hexdigest()
+    with _HASH_CACHE_LOCK:
+        _HASH_CACHE[key] = result
+        _HASH_CACHE.move_to_end(key)
+        while len(_HASH_CACHE) > HASH_CACHE_MAX_ENTRIES:
+            _HASH_CACHE.popitem(last=False)
+    return result
 
 
 def _resolved_resources(scopes: dict[str, list[list[Any]]], resolver: Callable[[str], str | None], hasher: Callable[[str], str]) -> list[dict[str, Any]]:
     resources: dict[str, dict[str, Any]] = {}
+    attempted: set[str] = set()
     for scope, entries in scopes.items():
         for name, model_strength, clip_strength in entries:
             source = str(name)
             path = source if Path(source).is_file() else resolver(source)
             if not path or not Path(path).is_file():
                 continue
-            canonical = os.path.normcase(os.path.abspath(path))
-            try:
-                digest = hasher(path)
-            except OSError:
+            canonical = _canonical_path(path)
+            if canonical not in attempted:
+                attempted.add(canonical)
+                try:
+                    digest = hasher(canonical)
+                except OSError:
+                    continue
+                resources[canonical] = {"name": Path(path).stem, "path": source, "sha256": digest, "scopes": []}
+            item = resources.get(canonical)
+            if item is None:
                 continue
-            item = resources.setdefault(canonical, {"name": Path(path).stem, "path": source, "sha256": digest, "scopes": []})
             item["scopes"].append({"scope": scope, "model_strength": float(model_strength), "clip_strength": float(clip_strength)})
     return list(resources.values())
 
@@ -158,21 +234,37 @@ def build_regional_metadata(
     context = normalize_context(regional, registry=REGIONAL_V3_CAPABILITY_REGISTRY)
     core = context.core
     scopes = materialized_lora_scopes(context, registry=LORA_CAPABILITY_REGISTRY)
-    if lora_resolver is None:
+    sampler = _sampler_info(prompt, unique_id)
+    if lora_resolver is None or model_resolver is None:
         try:
             import folder_paths
-            lora_resolver = lambda name: folder_paths.get_full_path("loras", name)
-            model_resolver = model_resolver or (lambda name: next((folder_paths.get_full_path(kind, name) for kind in ("checkpoints", "diffusion_models", "unet") if folder_paths.get_full_path(kind, name)), None))
+            lora_resolver = lora_resolver or (lambda name: folder_paths.get_full_path("loras", name))
+            model_resolver = model_resolver or (lambda name: folder_paths.get_full_path(sampler["model_category"], name) if sampler and sampler["model_category"] else None)
         except Exception:
-            lora_resolver = lambda _name: None
+            lora_resolver = lora_resolver or (lambda _name: None)
             model_resolver = model_resolver or (lambda _name: None)
     if model_resolver is None:
         model_resolver = lambda _name: None
-    sampler = _sampler_info(prompt, unique_id)
     if sampler is not None and sampler["global_loras"]:
         scopes = dict(scopes)
         scopes.setdefault("global", []).extend(sampler["global_loras"])
-    resources = _resolved_resources(scopes, lora_resolver, hasher)
+    # Deduplicate across both resource categories for this metadata operation,
+    # including failed reads; injected hashers receive the same guarantee.
+    hashes: dict[str, str | OSError] = {}
+
+    def hash_once(path: str) -> str:
+        canonical = _canonical_path(path)
+        if canonical not in hashes:
+            try:
+                hashes[canonical] = hasher(canonical)
+            except OSError as error:
+                hashes[canonical] = error
+        value = hashes[canonical]
+        if isinstance(value, OSError):
+            raise value
+        return value
+
+    resources = _resolved_resources(scopes, lora_resolver, hash_once)
     positive = _prompt_sections(core, "positive")
     negative = _prompt_sections(core, "negative")
     parameters = None
@@ -182,7 +274,7 @@ def build_regional_metadata(
         model_metadata = {"name": Path(str(sampler["model"])).stem, "path": sampler["model"], "sha256": None}
         if model_path and Path(model_path).is_file():
             try:
-                model_metadata["sha256"] = hasher(model_path)
+                model_metadata["sha256"] = hash_once(model_path)
             except OSError:
                 pass
     if sampler is not None:
@@ -220,6 +312,11 @@ def build_regional_metadata(
         "model": model_metadata,
         "loras": resources,
     }
+    if sampler is not None and sampler["global_loras"]:
+        metadata["global_lora_strength_semantics"] = (
+            "Core MODEL-chain LoRA strengths are configured loader values; "
+            "CLIP-output use by sampler conditioning is not inferred."
+        )
     return parameters, metadata
 
 
