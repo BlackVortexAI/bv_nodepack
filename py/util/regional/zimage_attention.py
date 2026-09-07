@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
+
+from .dense_attention import check_dense_mask_budget
 import torch.nn.functional as F
 
 from .context import context_document
@@ -97,9 +99,6 @@ def compile_zimage_attention(document: Any, clip: Any) -> tuple[list, list, list
         if pos["source"].strip() or neg["source"].strip():
             specifications.append((region["name"], mask, max(0.0, float(region["strength"])), pos, neg))
 
-    if len(specifications) == 1:
-        raise ValueError("Z-Image attention routing requires at least one prompted background or region mask")
-
     attention_masks_positive: list[torch.Tensor] = []
     attention_masks_negative: list[torch.Tensor] = []
     for name, mask, strength, positive_prompt, negative_prompt in specifications:
@@ -154,6 +153,7 @@ def build_joint_attention_bias(
         raise RuntimeError(f"Z-Image sequence has {image_tokens} image tokens, expected at least {raw_image_tokens}")
 
     total = text_tokens + image_tokens
+    check_dense_mask_budget(total, batch, dtype, "Z-Image")
     bias = torch.zeros((batch, 1, total, total), device=device, dtype=dtype)
     image_rows = slice(text_tokens, text_tokens + raw_image_tokens)
     offset = 0

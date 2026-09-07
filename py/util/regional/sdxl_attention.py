@@ -140,9 +140,6 @@ def compile_sdxl_attention(
             )
         )
 
-    if len(slots) == 1:
-        raise ValueError("SDXL attention routing requires at least one prompted background or region mask")
-
     positive = torch.cat([slot.positive for slot in slots], dim=1)
     negative = torch.cat([slot.negative for slot in slots], dim=1)
     positive_metadata["bv_regional_backend"] = BACKEND_ID

@@ -16,20 +16,21 @@ const anchorBindings=new WeakMap<object,AnchorBinding>();
 const layoutScheduleTokens=new WeakMap<object,object>();
 const widgetBacked=(slot:any)=>Boolean(slot?.widget&&typeof slot.widget==="object");
 const providerAnchor=(slot:any)=>slot?.__bvPresentationRole===undefined?internal(slot):slot.__bvPresentationRole==="provider";
+const hiddenLegacy=(slot:any)=>slot?.__bvPresentationRole==="legacy"&&slot.__bvM0VisualHidden===true;
 const classicSurface=(node:any)=>(globalThis as any).LiteGraph?.vueNodesMode!==true&&node?.__bvNodes2PresentationActive!==true;
 const dirty=(node:any)=>{node?.setDirtyCanvas?.(true,true);node?.graph?.setDirtyCanvas?.(true,true)};
-const anchorEntries=(node:any)=>[
+const anchorEntries=(node:any,enabled:boolean)=>[
     ...(node?.inputs??[]).map((slot:any,index:number)=>({slot,index,direction:"input" as const})),
     ...(node?.outputs??[]).map((slot:any,index:number)=>({slot,index,direction:"output" as const})),
-].filter(({slot,direction})=>providerAnchor(slot)&&(direction==="output"||!widgetBacked(slot)));
+].filter(({slot,direction})=>(hiddenLegacy(slot)||(enabled&&providerAnchor(slot)))&&(direction==="output"||!widgetBacked(slot)));
 const capturePosition=(slot:any):PositionOrigin=>{const descriptor=Object.getOwnPropertyDescriptor(slot,"pos");if(descriptor)return{kind:"own",descriptor};return"pos"in slot?{kind:"inherited"}:{kind:"absent"}};
 const restorePosition=(slot:any)=>{const origin=positionOrigins.get(slot);if(!origin)return;if(origin.kind==="own")Object.defineProperty(slot,"pos",origin.descriptor);else delete slot.pos;positionOrigins.delete(slot)};
 
 export function refreshProjectedProviderAnchors(node:any,enabled=legacyDebugVisible()){
     const binding=anchorBindings.get(node);if(binding)binding.enabled=Boolean(enabled);
     const previous=projectedByNode.get(node)??new Set<object>();
-    if(!enabled||!classicSurface(node)){for(const slot of previous)restorePosition(slot);projectedByNode.delete(node);dirty(node);return{enabled:false,projected:0,blocked:0}}
-    const entries=anchorEntries(node),current=new Set<object>(entries.map(({slot})=>slot));
+    if(!classicSurface(node)){for(const slot of previous)restorePosition(slot);projectedByNode.delete(node);dirty(node);return{enabled:false,projected:0,blocked:0}}
+    const entries=anchorEntries(node,enabled),current=new Set<object>(entries.map(({slot})=>slot));
     for(const slot of previous)if(!current.has(slot))restorePosition(slot);
     let projected=0,blocked=0;
     for(const{slot,direction}of entries){
@@ -42,7 +43,17 @@ export function refreshProjectedProviderAnchors(node:any,enabled=legacyDebugVisi
     }
     if(current.size)projectedByNode.set(node,current);else projectedByNode.delete(node);
     dirty(node);
-    return{enabled:true,projected,blocked};
+    return{enabled:Boolean(enabled),projected,blocked};
+}
+
+/** Native slot serialization may explicitly read pos even when non-enumerable. */
+export function serializeProjectedPortPositions(node:any,data:any){
+    for(const field of ["inputs","outputs"])for(const [index,slot]of (node[field]??[]).entries()){
+        const origin=positionOrigins.get(slot),serialized=data[field]?.[index];
+        if(!origin||!serialized)continue;
+        const value=origin.kind==="own"?(origin.descriptor.get?origin.descriptor.get.call(slot):origin.descriptor.value):origin.kind==="inherited"?Reflect.get(Object.getPrototypeOf(slot),"pos",slot):undefined;
+        if(value===undefined)delete serialized.pos;else serialized.pos=value;
+    }
 }
 
 export function installProjectedProviderAnchors(node:any,enabled=legacyDebugVisible()){

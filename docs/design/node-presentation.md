@@ -13,6 +13,15 @@ The machine-readable exception registry is `PRESENTATION_EXCEPTIONS` in
    delegate hiding, projection, ordering, measurement, compaction and resizing.
 4. Classic, Node Library Ghost and Nodes 2.0 consume the same semantic policy.
 5. A connected Legacy port stays visible even when Legacy Debug is disabled.
+
+Unused, hidden Classic Legacy ports do not reserve vertical rows. The shared
+port-position projection gives them a temporary finite titlebar position because
+native slot ranking excludes explicit `pos`, not `hidden`. Connected ports and
+Legacy Debug restore their original positions. The shared interaction boundary
+makes hidden Legacy ports transparent to hit tests and composes with later DG
+ownership. Serialization restores the original `pos` or omits it, preserving
+canonical input/output indices and existing links. No Krea-specific slot offsets
+or input reordering are involved.
 6. Automatically reconciled internal provider plumbing remains serialized and
    executable while hidden. Provider ports that form the explicit interface of
    optional manual chains remain visible and direction-aware.
@@ -376,3 +385,50 @@ and the actual target backlink agree. Existing IDs/order are retained; no link i
 created. Pre-Unpack repairs are restored exactly if native execution throws.
 Copy identity replacements are retained for the complete traversal, so every
 concrete instance of a shared parent receives its own remapped registry prefix.
+
+## Interactive media fan-in
+
+Internal-state widget policies also classify converted input sockets on Classic
+and Nodes 2.0. Such inputs never expose anchors, including in legacy debug mode.
+The shared interaction boundary makes these slots transparent during synchronous
+native hit tests: temporary position/rectangle exclusion is restored in `finally`.
+Public overlapping sockets remain reachable, with original slot identities,
+indices, links, and persistent geometry unchanged.
+
+The central `fanIn` role projects native Autogrow inputs onto one visible input
+without merging their dependency slots. `interactiveFanIn.ts` routes hit tests to
+the first unoccupied native input, rejects occupied destinations, and aligns media
+links with the shared visible anchor. Classic and Nodes2 adapters use the same
+role; Nodes2 derives its anchor from the rendered native socket. Removal restores
+wrapped methods and slot descriptors. Serialization strips transient projected
+positions while retaining pre-existing native position data.
+
+`nodePresentationLifecycle.ts` preserves `socketless` only for widgets whose
+backend schema explicitly declares it. This compensates for native STRING widget
+factories which otherwise discard the flag before creating an input socket. It
+does not make ordinary widgets socketless.
+
+The Reference Registry's identity-only Autogrow lifecycle exception is documented
+in [Reference Registry](reference-registry.md). It captures serialized identity
+before deferred widget hydration can overwrite the live value during native
+Undo/Redo. Routing remains in the existing Registry DG implementation.
+
+### Stable native fan-in places
+
+The registered `fan-in-stable-native-places` exception lives in
+`ui/src/regional/interactiveFanIn.ts`. For optional native Autogrow inputs with
+the central `fanIn` role, a scoped `min` getter returns the highest existing
+group ordinal plus two. Native disconnect compaction therefore exits before
+moving links, including the last slot when other inputs follow it. The native
+maximum remains unchanged. Initial slot creation uses the schema minimum;
+`comfyDynamic` is not serialized. The getter follows group object replacement
+and restores its original descriptor on cleanup only while still owned by BV.
+Callbacks and links remain native. Replace this seam with a supported native
+preserve-empty-slots option. See [Reference Registry](reference-registry.md).
+Nodes 2.0 removes native hit-test layouts for `display:none` slots without a
+visibility-change resync. `ui/src/regional/nodes2NodePresentation.ts` therefore
+keeps inactive fan-in rows measurable at the active row's position. They remain
+invisible, non-interactive and `aria-hidden`; only one Media port is presented.
+The native renderer retains its canonical slot keys and layouts. Shadow classes
+and scoped CSS variables are removed on ownership cleanup. Replace this bridge
+with native slot-layout invalidation when an official API becomes available.

@@ -180,7 +180,7 @@ def _validate_core_shape(core: Any) -> dict[str, Any]:
     if not isinstance(clean, dict):
         raise RegionalContextError("core must be an object")
     core_keys = {"version", "document_id", "title", "canvas", "prompts", "negative_mode", "overlap", "regions"}
-    _only_keys(clean, core_keys, "core")
+    _only_keys(clean, core_keys | {"tool_settings", "reference_images"}, "core")
     missing = sorted(core_keys - set(clean))
     if missing:
         raise RegionalContextError(f"core is missing required fields: {missing}")
@@ -193,11 +193,11 @@ def _validate_core_shape(core: Any) -> dict[str, Any]:
     prompts = clean.get("prompts")
     if isinstance(prompts, dict):
         for scope in ("global", "background"):
-            _only_keys(prompts.get(scope), {"positive_source", "negative_source"}, f"core.prompts.{scope}")
+            _only_keys(prompts.get(scope), {"positive_source", "negative_source", "reference_editor", "references"}, f"core.prompts.{scope}")
     _only_keys(clean.get("overlap"), {"mode"}, "core.overlap")
     regions = clean.get("regions")
     if isinstance(regions, list):
-        region_keys = {"id", "name", "parent_region_id", "enabled", "usage", "strength", "priority", "prompts", "mask", "geometry", "authoring"}
+        region_keys = {"tool_settings", "id", "name", "parent_region_id", "enabled", "usage", "strength", "priority", "prompts", "mask", "geometry", "authoring"}
         geometry_common = {"id", "layer_id", "mask_group_id", "type", "operation", "enabled", "authoring"}
         geometry_specific = {
             "rect": {"x", "y", "width", "height"}, "ellipse": {"x", "y", "width", "height"},
@@ -209,7 +209,7 @@ def _validate_core_shape(core: Any) -> dict[str, Any]:
             _only_keys(region, region_keys, path)
             if not isinstance(region, dict):
                 continue
-            _only_keys(region.get("prompts"), {"positive_source", "negative_source"}, f"{path}.prompts")
+            _only_keys(region.get("prompts"), {"positive_source", "negative_source", "reference_editor", "references"}, f"{path}.prompts")
             _only_keys(region.get("mask"), {"feather"}, f"{path}.mask")
             _only_keys(region.get("authoring"), {"visible", "locked", "color"}, f"{path}.authoring")
             geometry = region.get("geometry")

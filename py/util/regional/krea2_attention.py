@@ -9,13 +9,13 @@ import torch.nn.functional as F
 
 from .clip_hooks import clip_with_hooks
 from .context import context_document
+from .dense_attention import check_dense_mask_budget
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 from .prompt_policy import use_negative_prompts, zero_encoded, mask_cfg_padding
 
 
 BACKEND_ID = "krea2_joint_attention_experimental"
-MAX_DENSE_MASK_ENTRIES = 96_000_000
 CONDITIONING_WIDTH = 12 * 2560
 
 
@@ -136,9 +136,6 @@ def compile_krea2_attention(
                 (region["name"], region["id"], mask, max(0.0, float(region["strength"])),
                  positive_prompt, negative_prompt)
             )
-    if len(specifications) == 1:
-        raise ValueError("Krea 2 attention routing requires a prompted background or region mask")
-
     positive_values: list[torch.Tensor] = []
     negative_values: list[torch.Tensor] = []
     positive_masks: list[torch.Tensor] = []
@@ -214,13 +211,7 @@ def build_krea2_joint_attention_bias(
     if text_tokens < raw_text_tokens:
         raise RuntimeError(f"Krea 2 context has {text_tokens} tokens, expected at least {raw_text_tokens}")
     total = text_tokens + target_image_tokens + reference_image_tokens
-    entries = total * total
-    if entries > MAX_DENSE_MASK_ENTRIES:
-        gib = entries * torch.empty((), dtype=dtype).element_size() / (1024 ** 3)
-        raise RuntimeError(
-            f"Krea 2 regional attention mask would allocate at least {gib:.2f} GiB at this resolution; "
-            "reduce the canvas size or use BV Regional Native Conditioning"
-        )
+    check_dense_mask_budget(total, batch, dtype, "Krea 2")
     grid_h, grid_w = _grid_for_tokens(target_image_tokens, aspect_ratio)
     bias = torch.zeros((batch, 1, total, total), device=device, dtype=dtype)
     prefix_padding = text_tokens - raw_text_tokens

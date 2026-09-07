@@ -6,7 +6,7 @@ import {prepareDgClipboard} from '../ui/src/regional/dgRouting.ts';
 import {installRegistryDgLifecycle} from '../ui/src/regional/registryDgLifecycle.ts';
 
 test('fresh family defaults never leak into legacy/V1 snapshots',()=>{
- for(const [type,families] of [['BV Regional Prompt',['lut','detailer']],['BV Regional LoRA',[]],['BV Regional LUT Plan',['lut']],['BV Regional Detailer Plan',['detailer']],['BV LUT Loop Start',['lut']]]){
+ for(const [type,families] of [['BV Regional Prompt',['lut','detailer','reference']],['BV Regional LoRA',[]],['BV Regional LUT Plan',['lut']],['BV Regional Detailer Plan',['detailer']],['BV LUT Loop Start',['lut']]]){
   const node={type,properties:{kept:1}};activateNewRegistryDgConsumer(node);
   assert.deepEqual(node.properties.bvRegistryDgFamilies??[],families);
   const snapshot=structuredClone(node.properties);

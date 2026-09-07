@@ -1142,6 +1142,9 @@ class ApplyAnimaRegionalConditioningPatch:
         background_conditioning=None,
     ):
         _validate_anima_model(model)
+        if regions is None:
+            # Global-only conditioning needs no regional diffusion wrapper.
+            return (model,)
         model_sampling = model.get_model_object("model_sampling")
         start_sigma = float(model_sampling.percent_to_sigma(start_percent))
         end_sigma = float(model_sampling.percent_to_sigma(end_percent))

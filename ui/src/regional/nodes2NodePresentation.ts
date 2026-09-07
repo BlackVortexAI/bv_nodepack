@@ -10,6 +10,9 @@ type ManagedPresentation={node:any;nodeType:string;documentLike:Nodes2Document;c
 
 const managed=new Map<any,ManagedPresentation>();
 const interactionRows=new WeakMap<object,Set<any>>();
+const fanInShadows=new WeakMap<object,Set<any>>();
+function clearFanInShadow(row:any){if(!row?.classList?.contains("bv-fan-in-shadow"))return;row.classList.remove("bv-fan-in-shadow");row.removeAttribute?.("aria-hidden");for(const key of ["--bv-fan-in-top","--bv-fan-in-left","--bv-fan-in-width"])row.style?.removeProperty?.(key)}
+function clearFanInShadows(node:any){for(const row of fanInShadows.get(node)??[])clearFanInShadow(row);fanInShadows.delete(node)}
 const clearInteractionRows=(node:any)=>{for(const row of interactionRows.get(node)??[])removeProjectedPortElementInteraction(row,node);interactionRows.delete(node)};
 type LegacyColorBinding={variable:string;value:string;priority:string};
 type HeightBinding={value:string;priority:string;applied:string};
@@ -60,6 +63,7 @@ const ensureProjectionStyle=()=>{
         '.lg-node .lg-slot[data-bv-presentation-provider-visible="false"]{visibility:hidden!important;pointer-events:none!important}',
         '.lg-node .lg-slot[data-bv-presentation-provider-visible="true"]{visibility:visible!important}',
         '.lg-slot--input[data-bv-presentation-provider-anchor]>:last-child,.lg-slot--output[data-bv-presentation-provider-anchor]>:first-child{display:none!important}',
+        '.lg-slot.bv-fan-in-shadow{display:flex!important;visibility:hidden!important;pointer-events:none!important;position:absolute!important;top:var(--bv-fan-in-top)!important;left:var(--bv-fan-in-left)!important;width:var(--bv-fan-in-width)!important}',
     ].join("");
     document.head.append(style);
 };
@@ -172,7 +176,7 @@ const connected=(slot:any,direction:"input"|"output")=>direction==="input"?slot?
 export function projectNodes2NodePresentation(node:any,nodeType:string,documentLike?:Nodes2Document,options:Nodes2PresentationOptions={}){
     if(!documentLike)return false;
     const element=documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(node?.id)}"]`) as HTMLElement|null;
-    if(!element){clearInteractionRows(node);disconnectGeometryObservation(node);return false;}
+    if(!element){clearFanInShadows(node);clearInteractionRows(node);disconnectGeometryObservation(node);return false;}
     installPresentationSizeLifecycle(node);
     node.__bvNodes2PresentationActive=true;
     refreshProjectedProviderAnchors(node,false);
@@ -192,6 +196,7 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
     for(const port of plan.ports){
         const index=port.direction==="input"?inputIndex++:outputIndex++,indexed=port.direction==="input"?inputRowsByIndex:outputRowsByIndex,ordered=port.direction==="input"?inputRows:outputRows,row=indexed.size?indexed.get(index):ordered[index];
         if(row){syncProjectedPortElementInteraction(row,node,port.direction,index);currentInteractionRows.add(row)}
+        if(port.role==="fanIn"){const label=row?.querySelector?.(".text-node-component-slot-text");if(label&&label.textContent!=="Media")label.textContent="Media"}
         if(port.role!=="provider"&&(port.visible||port.role==="legacy")){
             const rowHeight=Number(row?.offsetHeight??0);
             if(port.direction==="input"){reservedInputs++;if(rowHeight>0){measuredInputs++;measuredRowHeights.push(rowHeight)}}
@@ -210,8 +215,20 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
             currentLegacyRows.add(row);
             const slot=(port.direction==="input"?node.inputs:node.outputs)?.[index];
             projectLegacyColor(row,node,slot,port.direction);
-        }else setVisible(target,port.visible);
+        }else if(port.role!=="fanIn"||port.visible){clearFanInShadow(row);setVisible(target,port.visible)}
     }
+    // Native Vue drops layouts for display:none slots and does not resync when
+    // another slot becomes visible. Keep fan-in slots measurable at the same
+    // anchor, while only the active input is visible and pointer-interactive.
+    const fanPorts=plan.ports.filter(port=>port.direction==="input"&&port.role==="fanIn");
+    const anchorPort=fanPorts.find(port=>port.visible);
+    const anchorIndex=(node.inputs??[]).findIndex((slot:any)=>slot.name===anchorPort?.name);
+    const anchorRow=inputRowsByIndex.size?inputRowsByIndex.get(anchorIndex):inputRows[anchorIndex];
+    const shadows=new Set<any>();if(anchorRow){for(const port of fanPorts.filter(port=>!port.visible)){
+        const index=(node.inputs??[]).findIndex((slot:any)=>slot.name===port.name),row=inputRowsByIndex.size?inputRowsByIndex.get(index):inputRows[index];if(!row)continue;
+        if(row.hidden)row.hidden=false;if(!row.classList?.contains("bv-fan-in-shadow"))row.classList?.add("bv-fan-in-shadow");if(row.getAttribute?.("aria-hidden")!=="true")row.setAttribute?.("aria-hidden","true");
+        for(const [key,value]of [["--bv-fan-in-top",anchorRow.offsetTop??0],["--bv-fan-in-left",anchorRow.offsetLeft??0],["--bv-fan-in-width",anchorRow.offsetWidth??0]] as const){const px=`${value}px`;if(row.style?.getPropertyValue?.(key)!==px)row.style?.setProperty?.(key,px)}shadows.add(row);
+    }}for(const row of fanInShadows.get(node)??[])if(!shadows.has(row))clearFanInShadow(row);fanInShadows.set(node,shadows);
     for(const row of previousLegacyRows)if(!currentLegacyRows.has(row))restoreLegacyColor(row);
     for(const row of previousInteractionRows)if(!currentInteractionRows.has(row))removeProjectedPortElementInteraction(row,node);
     interactionRows.set(node,currentInteractionRows);
@@ -246,7 +263,7 @@ export function projectNodes2NodePresentation(node:any,nodeType:string,documentL
 
 const projectManaged=()=>{
     for(const[node,entry]of managed){
-        if(entry.node?.graph==null){clearInteractionRows(node);const element=entry.documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(entry.node?.id)}"]`);restoreElementHeight(element);disconnectGeometryObservation(node);managed.delete(node);settleTokens.delete(node);delete entry.node?.__bvApplyNodes2Presentation;continue}
+        if(entry.node?.graph==null){clearFanInShadows(node);clearInteractionRows(node);const element=entry.documentLike.querySelector?.(`.lg-node[data-node-id="${escaped(entry.node?.id)}"]`);restoreElementHeight(element);disconnectGeometryObservation(node);managed.delete(node);settleTokens.delete(node);delete entry.node?.__bvApplyNodes2Presentation;continue}
         const projected=projectNodes2NodePresentation(entry.node,entry.nodeType,entry.documentLike);
         if(projected){entry.classicRestored=false;continue}
         if(!entry.classicRestored){entry.classicRestored=true;entry.node.__bvNodes2PresentationActive=false;entry.node.__bvApplyPresentation?.()}
@@ -285,6 +302,7 @@ export function installNodes2NodePresentation(node:any,nodeType:string,documentL
 }
 
 export function removeNodes2NodePresentation(node:any){
+    clearFanInShadows(node);
     clearInteractionRows(node);
     for(const row of legacyRowsByNode.get(node)??[])restoreLegacyColor(row);
     legacyRowsByNode.delete(node);

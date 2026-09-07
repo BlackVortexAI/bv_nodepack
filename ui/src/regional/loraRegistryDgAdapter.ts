@@ -34,7 +34,7 @@ const readComposite=(node:any,channel="")=>compositeOwns(node,channel)?composite
 const writeComposite=(node:any,id:string,channel="")=>{if(registryChannelFamily(node,channel)){node.properties??={};node.properties.bvRegistryDgSelections??={};node.properties.bvRegistryDgSelections[channel]=id}else write(node,id,channel)};
 
 const configKey=(node:any)=>nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json";
-const configIndex=(node:any)=>isLoraRegistry(node)?0:nodeClass(node)==="BV Regional Prompt"?2:1;
+const configIndex=(node:any)=>["BV LoRA Registry","BV Model Patcher"].includes(nodeClass(node))?0:nodeClass(node)==="BV Regional Prompt"?2:1;
 const copiedConfig=(node:any)=>node.widgets_values_named?.[configKey(node)]??(Array.isArray(node.widgets_values)?node.widgets_values[configIndex(node)]:node.widgets_values?.[configKey(node)]);
 function writeCopiedConfig(node:any,value:string){
     if(Array.isArray(node.widgets_values))node.widgets_values[configIndex(node)]=value;
@@ -43,7 +43,7 @@ function writeCopiedConfig(node:any,value:string){
 }
 function prepareRegistryClipboard(nodes:any[]){
     const references=new Set(nodes.filter(node=>isConsumer(node)&&isRegistryDgPilot(node)).flatMap(node=>Object.values(selections(node))));
-    const copied=nodes.filter(node=>isLoraRegistry(node)&&(node.properties?.bvRegistryDgPilotSource===true||references.has(node.properties?.bvDgSenderId)));
+    const copied=nodes.filter(node=>isLoraRegistry(node)&&(node.properties?.bvRegistryDgPilotSource===true||node.properties?.bvRegistryDgSource===true||references.has(node.properties?.bvDgSenderId)));
     const remap=new Map<string,{id:string;resources:Map<string,string>}>();
     for(const node of copied){
         const previous=strictLoraRegistryConfig(copiedConfig(node));if(!previous)throw new Error("DG Registry clipboard: invalid copied Registry config");
@@ -53,9 +53,10 @@ function prepareRegistryClipboard(nodes:any[]){
         writeCopiedConfig(node,JSON.stringify(next));
     }
     if(!remap.size)return;
-    for(const node of nodes.filter(isConsumer)){
+    for(const node of nodes.filter(node=>isConsumer(node)||nodeClass(node)==="BV Model Patcher")){
         const raw=copiedConfig(node);if(raw==null)continue;
         const config=typeof raw==="string"?JSON.parse(raw):structuredClone(raw);let changed=false;
+        if(nodeClass(node)==="BV Model Patcher"){config.collector_ids=config.collector_ids.map((id:string)=>{const next=remap.get(id);if(next)changed=true;return next?.id??id});}
         for(const entry of [...(config.entries??[]),...(config.steps??[]).flatMap((step:any)=>step.entries??[])]){
             if(entry?.source?.kind!=="external")continue;
             const next=remap.get(entry.source.collector_id);if(!next)continue;

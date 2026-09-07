@@ -1,0 +1,12 @@
+.bv-reference-search-toggle{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:11px;cursor:pointer}
+.bv-reference-search-toggle input{accent-color:var(--bv-ui-accent,#5e81ac)}
+.bv-reference-popup{max-height:260px;overflow:auto;min-width:220px}
+.bv-reference-popup.bv-completion-popup button{display:flex;width:100%;align-items:center;gap:8px;text-align:left}
+.bv-reference-popup img,.bv-reference-placeholder{width:48px;height:40px;object-fit:contain;flex-shrink:0;border-radius:3px}
+.bv-reference-popup button>span:last-child{display:grid;gap:2px}.bv-reference-popup small{opacity:.7}
+.bv-reference-marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.bv-reference-mark{position:relative;font-size:11px;border-bottom:1px dotted var(--bv-ui-accent,#5e81ac)}
+.bv-reference-mark.missing{color:var(--bv-ui-danger,#e88)}
+.bv-reference-mark img{display:none;position:absolute;bottom:100%;left:0;max-width:180px;max-height:140px;z-index:2;background:var(--bv-ui-surface,#242933)}
+.bv-reference-mark:hover img,.bv-reference-mark:focus img{display:block}
+.bv-reference-status{opacity:.7;font-size:11px}

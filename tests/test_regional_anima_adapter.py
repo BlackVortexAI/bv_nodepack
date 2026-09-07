@@ -35,6 +35,20 @@ class FakeClip:
 
 
 class RegionalAnimaAdapterTests(unittest.TestCase):
+    def test_without_regions_combines_global_and_background_native_prompts(self):
+        document = fixture()
+        document["regions"] = []
+        clip = FakeClip()
+        positive, negative, chain, _ = compile_anima_adapter(document, clip)
+        self.assertIsNone(chain)
+        for polarity in ("positive", "negative"):
+            expected = ", ".join(document["prompts"][scope][f"{polarity}_source"]
+                                 for scope in ("global", "background")
+                                 if document["prompts"][scope][f"{polarity}_source"].strip())
+            self.assertIn(expected, clip.encoded)
+        self.assertTrue(positive)
+        self.assertTrue(negative)
+
     def test_v3_context_compiles_through_existing_consumer(self):
         positive, negative, chain, background = compile_anima_adapter(normalize_context(fixture()), FakeClip())
         self.assertTrue(positive)
@@ -70,12 +84,26 @@ class RegionalAnimaAdapterTests(unittest.TestCase):
         self.assertEqual(len(positive), len(negative))
         self.assertTrue(all(torch.count_nonzero(item[0]) == 0 for item in negative))
 
-    def test_rejects_document_without_usable_regions(self):
-        document = copy.deepcopy(fixture())
-        for region in document["regions"]:
-            region["enabled"] = False
-        with self.assertRaisesRegex(ValueError, "at least one enabled region"):
-            compile_anima_adapter(document, FakeClip())
+    def test_global_only_without_usable_regions(self):
+        for mode in ("prompt", "auto", "zero_out"):
+            for state in ("empty", "disabled", "detailer"):
+                with self.subTest(mode=mode, state=state):
+                    document = fixture()
+                    document["version"] = 2
+                    document["negative_mode"] = mode
+                    document["prompts"]["background"] = {"positive_source": "", "negative_source": ""}
+                    if state == "empty":
+                        document["regions"] = []
+                    else:
+                        for region in document["regions"]:
+                            region["enabled"] = state != "disabled"
+                            region["usage"] = "detailer" if state == "detailer" else "generation"
+                    clip = FakeClip()
+                    positive, negative, chain, _ = compile_anima_adapter(document, clip)
+                    self.assertIsNone(chain)
+                    self.assertEqual(clip.encoded[0], document["prompts"]["global"]["positive_source"])
+                    self.assertGreater(torch.count_nonzero(positive[0][0]), 0)
+                    self.assertEqual(bool(torch.count_nonzero(negative[0][0])), mode != "zero_out")
 
     @patch("util.regional.anima_adapter.clip_with_hooks", side_effect=lambda clip, hooks: clip)
     def test_encodes_each_scope_with_its_hook_group(self, clip_with_hooks):

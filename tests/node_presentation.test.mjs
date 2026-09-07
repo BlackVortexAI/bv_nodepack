@@ -11,7 +11,7 @@ import { configureNodes2NodePresentation, installNodes2NodePresentation, project
 import { installLutNodePresentation } from "../ui/src/regional/lutNodePresentation.ts";
 import { installNodePresentationLifecycle } from "../ui/src/regional/nodePresentationLifecycle.ts";
 import { lutLibrary } from "../ui/src/regional/lutLibrary.ts";
-import { installProjectedPortInteraction } from "../ui/src/regional/projectedPortInteraction.ts";
+import { installProjectedPortInteraction, installProjectedPortCanvasInteraction } from "../ui/src/regional/projectedPortInteraction.ts";
 import { configurePresentationSizeLifecycle, installPresentationSizeLifecycle, isPresentationUserResizing, presentationSize, removePresentationSizeLifecycle, setAutomaticPresentationSize } from "../ui/src/regional/presentationSize.ts";
 
 const indexSource=readFileSync(new URL("../ui/src/index.tsx",import.meta.url),"utf8");
@@ -497,13 +497,13 @@ test("Detector Registry hides external reserves only in Ghost and always hides p
   }
 });
 
-test("Regional Native Conditioning Classic reserves both legacy rows without resizing",()=>{
+test("Regional Native Conditioning Classic hides unused legacy rows and preserves debug access",()=>{
   const sizes=[];
   const node={size:[300,260],properties:{},inputs:nativeConditioningInventory.ports.filter(port=>port.direction==="input").map(port=>({name:port.name,link:null})),outputs:nativeConditioningInventory.ports.filter(port=>port.direction==="output").map(port=>({name:port.name,links:null})),widgets:nativeConditioningInventory.widgets.map(({name})=>({name,computeSize:()=>[0,20]})),computeSize(){return[280,180]},setSize(size){sizes.push([...size]);this.size=[...size]},setDirtyCanvas(){},graph:{setDirtyCanvas(){}}};
   applyClassicNodePresentation(node,"BV Regional Native Conditioning",{legacyDebug:false});
   assert.deepEqual(node.size,[300,180]);
   assert.equal(sizes.length,1);
-  for(const name of["lora_registry","lora_bindings"]){const port=node.inputs.find(item=>item.name===name);assert.equal(port.hidden,false);assert.equal(port.__bvM0VisualHidden,true)}
+  for(const name of["lora_registry","lora_bindings"]){const port=node.inputs.find(item=>item.name===name);assert.equal(port.hidden,true);assert.equal(port.__bvM0VisualHidden,true)}
   applyClassicNodePresentation(node,"BV Regional Native Conditioning",{legacyDebug:true});
   for(const name of["lora_registry","lora_bindings"])assert.equal(node.inputs.find(item=>item.name===name).__bvM0VisualHidden,false);
   applyClassicNodePresentation(node,"BV Regional Native Conditioning",{legacyDebug:false});
@@ -654,9 +654,9 @@ function regionalPromptNode(){
 test("Regional Prompt Classic reconciliation is reversible and publishes one final height",()=>{
   const{node,sizes}=regionalPromptNode();
   applyClassicNodePresentation(node,"BV Regional Prompt",{legacyDebug:false});
-  assert.deepEqual(node.size,[300,120]);
+  assert.deepEqual(node.size,[300,100]);
   assert.equal(sizes.length,1);
-  assert.equal(node.outputs.find(port=>port.name==="lora_bindings").hidden,false);
+  assert.equal(node.outputs.find(port=>port.name==="lora_bindings").hidden,true);
   assert.equal(node.outputs.find(port=>port.name==="lora_bindings").__bvM0VisualHidden,true);
   assert.equal(node.inputs[0].hidden,true);
   assert.equal(node.inputs[1].hidden,false);
@@ -665,17 +665,17 @@ test("Regional Prompt Classic reconciliation is reversible and publishes one fin
 
   applyClassicNodePresentation(node,"BV Regional Prompt",{legacyDebug:true});
   assert.deepEqual(node.size,[300,120]);
-  assert.equal(sizes.length,1);
+  assert.equal(sizes.length,2);
   assert.equal(node.outputs.find(port=>port.name==="lora_bindings").hidden,false);
   assert.equal(node.inputs[0].hidden,true);
   assert.equal(node.inputs[1].hidden,false);
   assert.equal(node.inputs[1].link,81);
 
   applyClassicNodePresentation(node,"BV Regional Prompt",{legacyDebug:false});
-  assert.deepEqual(node.size,[300,120]);
-  assert.equal(sizes.length,1);
+  assert.deepEqual(node.size,[300,100]);
+  assert.equal(sizes.length,3);
   applyClassicNodePresentation(node,"BV Regional Prompt",{legacyDebug:false});
-  assert.equal(sizes.length,1);
+  assert.equal(sizes.length,3);
   assert.equal(node.properties.bvPresentationUserHeight,undefined);
 });
 
@@ -685,7 +685,7 @@ test("Regional Prompt publishes a semantic Nodes 2 height even when host compute
     {name:"open_regional_editor",computeSize:()=>[0,20]},{name:"quick_edit_regional_prompts",computeSize:()=>[0,20]},
   ],computeSize(){return[420,330]},setSize(size){this.size=[...size]},setDirtyCanvas(){},graph:{setDirtyCanvas(){}}};
   applyClassicNodePresentation(node,"BV Regional Prompt",{legacyDebug:false});
-  assert.equal(node.__bvPresentationAutoHeight,120);
+  assert.equal(node.__bvPresentationAutoHeight,100);
   assert.ok(node.widgets.slice(0,5).every(widget=>widget.options.hidden===true));
 });
 
@@ -1683,4 +1683,33 @@ test("removing presentation cancels pending projected-port layout callbacks",asy
   assert.equal(node.__bvProjectedPortLayoutScheduled,undefined);
   assert.equal(node.__bvRefreshProviderAnchors,undefined);
   assert.equal(Object.hasOwn(provider,"pos"),false);
+});
+
+test('internal state widget inputs never become visible public anchors',()=>{
+ for(const surface of ['classic','nodes2','ghost']){
+ const result=resolveNodePresentation('BV Regional Prompt',{ports:[{direction:'input',name:'regional_json',type:'STRING'},{direction:'input',name:'canvas_image',type:'IMAGE'},{direction:'output',name:'regional_json',type:'STRING'}],widgets:[{name:'regional_json'}]},{surface,legacyDebug:true});
+ assert.equal(result.ports[0].role,'internalState');assert.equal(result.ports[0].visible,false);assert.equal(result.ports[1].visible,true);assert.equal(result.ports[2].visible,true);
+ }
+});
+test('internal state input hitboxes are gated even when provider predicate does not own them',()=>{
+ const slot={__bvPresentationRole:'internalState'},node={getSlotInPosition(){return{input:slot}}};
+ installProjectedPortInteraction(node,()=>false);assert.equal(node.getSlotInPosition(10,10),undefined);
+ slot.__bvPresentationRole='public';assert.equal(node.getSlotInPosition(10,10).input,slot);
+});
+
+test('overlapping internal inputs are transparent to native picking and restore geometry even on failure',()=>{
+ const internal={__bvPresentationRole:'internalState',boundingRect:[840,190,20,20]},image={name:'canvas_image',boundingRect:[840,194,20,20]};
+ const inputs=[internal,image];
+ const node={inputs,outputs:[],getInputPos(i){return[850,i?204:200]},getSlotInPosition(x,y){for(const [i,input]of this.inputs.entries()){const p=this.getInputPos(i);if(Math.abs(x-p[0])<=10&&Math.abs(y-p[1])<=10)return{input,slot:i}}}};
+ const getPos=node.getInputPos;
+ installProjectedPortInteraction(node,()=>false);
+ assert.equal(node.getSlotInPosition(850,200).input,image);
+ assert.equal(node.getSlotInPosition(850,200).slot,1);
+ assert.equal(node.getSlotInPosition(850,191),undefined);
+ let selected;
+ const canvas={pointer:{},_processNodeClick(e,_ctrl,node){selected=node.inputs.find(s=>e.canvasX>=s.boundingRect[0]&&e.canvasX<=s.boundingRect[0]+20&&e.canvasY>=s.boundingRect[1]&&e.canvasY<=s.boundingRect[1]+20);if(e.fail)throw Error('native failure')}};
+ installProjectedPortCanvasInteraction(canvas);
+ canvas._processNodeClick({canvasX:850,canvasY:200},false,node);assert.equal(selected,image);
+ assert.throws(()=>canvas._processNodeClick({canvasX:850,canvasY:200,fail:true},false,node),/native failure/);
+ assert.equal(node.inputs,inputs);assert.equal(node.getInputPos,getPos);assert.deepEqual(internal.boundingRect,[840,190,20,20]);assert.deepEqual(image.boundingRect,[840,194,20,20]);
 });

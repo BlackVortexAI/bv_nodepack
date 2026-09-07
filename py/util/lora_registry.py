@@ -58,8 +58,10 @@ def parse_lora_registry_config(value: Any) -> dict[str, Any]:
     for stack_index, source_stack in enumerate(source_stacks):
         if not isinstance(source_stack, dict):
             raise ValueError(f"stacks[{stack_index}] must be an object")
-        if set(source_stack).difference({"id", "name", "enabled", "entries"}):
+        if set(source_stack).difference({"id", "name", "enabled", "entries", "role"}):
             raise ValueError(f"stacks[{stack_index}] contains unsupported fields")
+        if source_stack.get("role", "normal") not in ("normal", "basis"):
+            raise ValueError(f"stacks[{stack_index}].role must be normal or basis")
         if not isinstance(source_stack.get("id"), str) or not isinstance(source_stack.get("name"), str):
             raise ValueError(f"stacks[{stack_index}] id and name must be strings")
         if "enabled" in source_stack and not isinstance(source_stack["enabled"], bool):
@@ -110,6 +112,7 @@ def parse_lora_registry_config(value: Any) -> dict[str, Any]:
             })
         stacks.append({
             "id": stack_id,
+            **({"role": "basis"} if source_stack.get("role") == "basis" else {}),
             "name": name,
             "enabled": source_stack.get("enabled", True) is not False,
             "entries": entries,
@@ -159,7 +162,8 @@ def materialize_lora_registry(value: Any, folder_paths_module=None) -> tuple[dic
                     continue
                 logical, _path = resolve_lora_path(entry["lora_name"], folder_paths_module)
                 active.append((logical, entry["model_strength"], entry["clip_strength"]))
-        stacks[stack["id"]] = {"id": stack["id"], "name": stack["name"], "stack": active}
+        stacks[stack["id"]] = {"id": stack["id"], "name": stack["name"], "stack": active,
+                               **({"role": "basis"} if stack.get("role") == "basis" else {})}
     return {"schema": "bv.lora_stack_registry", "version": 1, "stacks": stacks}, config["registry_id"]
 
 

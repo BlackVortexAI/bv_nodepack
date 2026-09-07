@@ -47,6 +47,39 @@ def _slot(name, mask, strength=1.0, tokens=2):
 
 
 class RegionalSDXLAttentionTests(unittest.TestCase):
+    def test_global_only_without_generation_regions(self):
+        for mode in ("prompt", "auto", "zero_out"):
+            for region_mode in ("empty", "disabled", "detailer"):
+                with self.subTest(mode=mode, regions=region_mode):
+                    document = fixture()
+                    document["version"] = 2
+                    document["negative_mode"] = mode
+                    document["prompts"]["background"] = {"positive_source": "", "negative_source": ""}
+                    if region_mode == "empty":
+                        document["regions"] = []
+                    else:
+                        for region in document["regions"]:
+                            region["enabled"] = region_mode != "disabled"
+                            region["usage"] = "detailer" if region_mode == "detailer" else "generation"
+                    clip = FakeClip()
+                    positive, negative, slots, _ = compile_sdxl_attention(document, clip)
+                    self.assertEqual([slot.name for slot in slots], ["global"])
+                    self.assertIsNone(slots[0].mask)
+                    self.assertEqual(clip.encoded[0], document["prompts"]["global"]["positive_source"])
+                    self.assertGreater(torch.count_nonzero(positive[0][0]), 0)
+                    if mode == "zero_out":
+                        self.assertEqual(torch.count_nonzero(negative[0][0]), 0)
+                    else:
+                        self.assertGreater(torch.count_nonzero(negative[0][0]), 0)
+
+    def test_global_only_attention_bias_keeps_entire_image_open(self):
+        document = fixture()
+        document["regions"] = []
+        document["prompts"]["background"] = {"positive_source": "", "negative_source": ""}
+        positive, _, slots, _ = compile_sdxl_attention(document, FakeClip())
+        bias = build_cross_attention_bias(slots, 4, positive[0][0].shape[1], 1., 1., torch.device("cpu"), torch.float32, batch=2)
+        self.assertTrue(torch.all(bias == 0))
+
     def test_v3_context_compiles_through_existing_consumer(self):
         _, _, slots, aspect = compile_sdxl_attention(normalize_context(fixture()), FakeClip())
         _, _, legacy_slots, legacy_aspect = compile_sdxl_attention(fixture(), FakeClip())

@@ -1,4 +1,5 @@
 export * from "./actions";
+export * from "./SegmentedToggleGroup";
 export * from "./content";
 export * from "./compactInteractions";
 export * from "./data";

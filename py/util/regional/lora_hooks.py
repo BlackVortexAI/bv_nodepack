@@ -102,7 +102,10 @@ def parse_registry(value: Any) -> dict[str, Any]:
         if folded in names:
             raise ValueError(f"Duplicate LoRA stack name: {name}")
         names.add(folded)
-        stacks[key] = {"id": identifier, "name": name, "stack": _normalize_stack(item.get("stack"), f"LoRA stack {name}")}
+        if item.get("role", "normal") not in ("normal", "basis"):
+            raise ValueError("LoRA stack role must be normal or basis")
+        stacks[key] = {"id": identifier, "name": name, "stack": _normalize_stack(item.get("stack"), f"LoRA stack {name}"),
+                       **({"role": "basis"} if item.get("role") == "basis" else {})}
     return {"schema": "bv.lora_stack_registry", "version": 1, "stacks": stacks}
 
 
@@ -137,6 +140,8 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
         return {}
     stacks = parse_registry(registry)["stacks"]
     requested = {stack_id for stack_id in active_assignments if stack_id}
+    if any(stacks.get(stack_id, {}).get("role") == "basis" for stack_id in requested):
+        raise ValueError("Basis LoRA stacks belong in BV Model Patcher; remove their global/regional assignments")
     missing = requested.difference(stacks)
     if missing:
         raise ValueError(f"Assigned LoRA stack is missing: {', '.join(sorted(missing))}")
@@ -207,6 +212,25 @@ def resolve_stack_paths(
             resolved_entries.append((canonical, float(model_strength), float(clip_strength)))
         resolved_stacks[scope] = resolved_entries
     return resolved_stacks
+
+
+def apply_static_lora_stack(model: Any, clip: Any, resolved_entries: Any) -> tuple[Any, Any]:
+    """Apply an already resolved, constant stack through native MODEL/CLIP patches.
+
+    For consumers with one global stack, no conditional weight switching is needed.
+    Native loading returns clones; an empty stack preserves the supplied objects.
+    """
+    if not resolved_entries:
+        return model, clip
+    import comfy.sd
+    import comfy.utils
+
+    for path, model_strength, clip_strength in resolved_entries:
+        if model_strength == 0 and clip_strength == 0:
+            continue
+        weights = comfy.utils.load_torch_file(path, safe_load=True)
+        model, clip = comfy.sd.load_lora_for_models(model, clip, weights, model_strength, clip_strength)
+    return model, clip
 
 
 def create_hook_groups(scope_stacks: dict[str, Any]) -> dict[str, Any]:

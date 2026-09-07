@@ -9,7 +9,7 @@ import { numberScrubValue } from "./compactInteractions";
 const CodeEditor=EditorModule;
 
 export type FieldStatus = "default" | "error" | "success" | "warning";
-export type FieldFrameProps = { label:string; help?:ReactNode; error?:ReactNode; required?:boolean; icon?:ReactNode; className?:string; children:ReactNode };
+export type FieldFrameProps = { label:string; help?:ReactNode; error?:ReactNode; required?:boolean; icon?:ReactNode; className?:string; children:ReactNode; as?:"label"|"div" };
 
 export function FieldGrid({children,minimum=165,className=""}:{children:ReactNode;minimum?:number;className?:string}) {
     return <div className={`bv-field-grid ${className}`.trim()} style={{"--bv-field-grid-min":`${minimum}px`} as React.CSSProperties}>{children}</div>;
@@ -19,8 +19,8 @@ export function ChoiceGrid({children,minimum=145,className=""}:{children:ReactNo
     return <div className={`bv-choice-grid ${className}`.trim()} style={{"--bv-choice-grid-min":`${minimum}px`} as React.CSSProperties}>{children}</div>;
 }
 
-export function FieldFrame({ label, help, error, required, icon, className="", children }:FieldFrameProps) {
-    return <label className={`bv-control-field ${error ? "is-error" : ""} ${className}`.trim()}><span className="bv-control-label">{icon && <span className="bv-field-icon">{icon}</span>}<span>{label}</span>{required && <span aria-hidden="true"> *</span>}</span>{children}{error ? <small className="bv-control-message is-error">{error}</small> : help && <small className="bv-control-help bv-control-help-overlay">{help}</small>}</label>;
+export function FieldFrame({ label, help, error, required, icon, className="", children, as:Container="label" }:FieldFrameProps) {
+    return <Container className={`bv-control-field ${error ? "is-error" : ""} ${className}`.trim()}><span className="bv-control-label">{icon && <span className="bv-field-icon">{icon}</span>}<span>{label}</span>{required && <span aria-hidden="true"> *</span>}</span>{children}{error ? <small className="bv-control-message is-error">{error}</small> : help && <small className="bv-control-help bv-control-help-overlay">{help}</small>}</Container>;
 }
 
 export type TextFieldProps = Omit<React.InputHTMLAttributes<HTMLInputElement>,"onChange"> & { label:string; help?:ReactNode; error?:ReactNode; icon?:ReactNode; suffix?:ReactNode; onValue?:(value:string)=>void };

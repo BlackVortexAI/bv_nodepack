@@ -8,6 +8,7 @@ import math
 import uuid
 from typing import Any
 
+from .reference_mentions import validate_prompt_references, require_reference_application
 from ..prompt.category import ast_to_plain_text, parse_prompt_to_ast
 
 
@@ -45,10 +46,18 @@ def _finite_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _check_tool_settings(value, path, issues):
+    if value is None:
+        return
+    if not isinstance(value, dict) or set(value) - {"lora", "lut", "references"} or any(not isinstance(flag, bool) for flag in value.values()):
+        issues.append(f"{path} must contain only boolean lora/lut/references switches")
+
+
 def _check_prompt_pair(value: Any, path: str, issues: list[str]) -> None:
     if not isinstance(value, dict):
         issues.append(f"{path} must be an object")
         return
+    validate_prompt_references(value, path, issues)
     for key in ("positive_source", "negative_source"):
         source = value.get(key)
         if not isinstance(source, str):
@@ -82,6 +91,9 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 issues.append(f"canvas.{key} must be a positive integer")
 
+    _check_tool_settings(document.get("tool_settings"), "tool_settings", issues)
+    from .reference_images import validate_reference_images
+    validate_reference_images(document.get("reference_images"), issues)
     prompts = document.get("prompts")
     if not isinstance(prompts, dict):
         issues.append("prompts must be an object")
@@ -134,6 +146,7 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
         priority = region.get("priority")
         if not isinstance(priority, int) or isinstance(priority, bool):
             issues.append(f"{path}.priority must be an integer")
+        _check_tool_settings(region.get("tool_settings"), f"{path}.tool_settings", issues)
         _check_prompt_pair(region.get("prompts"), f"{path}.prompts", issues)
         mask = region.get("mask")
         if not isinstance(mask, dict) or not _finite_number(mask.get("feather")) or not 0 <= mask.get("feather", -1) <= 0.5:
@@ -308,6 +321,7 @@ def selection_prompts(selection: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         prompt_pair = next(region["prompts"] for region in document["regions"] if region["id"] == selection["region_id"])
     else:
         prompt_pair = document["prompts"][selection["scope"]]
+    require_reference_application(prompt_pair)
     positive_ast = parse_prompt_to_ast(prompt_pair["positive_source"])
     negative_ast = parse_prompt_to_ast(prompt_pair["negative_source"])
     return (

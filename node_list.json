@@ -1,4 +1,7 @@
 {
+  "BV Model Patcher": "Prepare MODEL and optional CLIP with basis LoRAs from selected Registries.",
+  "BV Image Dimensions": "Read an image's exact aspect ratio and square-area resolution for BV Empty Latent Random Ratio.",
+  "BV Reference Registry": "Collect native images, audio and video with stable identities for BV Regional Prompt reference catalogs.",
   "BV LUT Registry": "Configure and load several named LUTs in one Regional V3 registry node.",
   "BV Regional LUT Plan": "Build an ordered LUT plan from BV Regional v3 regions and same-graph resources.",
   "BV Apply Regional Enhancement": "Apply a verified prompt-only enhancement to its matching BV Regional source document.",

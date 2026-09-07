@@ -112,3 +112,15 @@ for(const consumer of regionalConsumers)for(const direction of ['root-deep','dee
  else{f.connect(f.deep,p,0,f.deep.outputNode,0);f.connect(f.a,f.hd,0,f.a.outputNode,0);f.connect(f.root,f.ha,0,f.hb,0);f.connect(f.b,f.b.inputNode,0,sink,0)}
  const before=JSON.stringify(sink.inputs);assert.equal(sourceRegionalDocument(sink)?.document_id,'source');assert.equal(JSON.stringify(sink.inputs),before);
 });
+
+import {inputImagePreview} from '../ui/src/regional/inputImagePreview.ts';
+test('canvas input preview resolves nested native boundaries and clears disconnected source',()=>{
+ const f=regionalHierarchy(),source=f.node(f.root,1,'LoadImage'),sink=f.node(f.deep,2,'BV Regional Prompt');
+ source.widgets=[{name:'image',value:'nested.png'}];sink.inputs[0].name='canvas_image';
+ f.connect(f.root,source,0,f.ha,0);f.connect(f.a,f.a.inputNode,0,f.hd,0);f.connect(f.deep,f.deep.inputNode,0,sink,0);
+ for(const graph of [f.root,f.a,f.deep,f.b]){for(const n of graph._nodes){for(const slot of [...n.inputs,...n.outputs])slot.type='IMAGE'}for(const slot of [...graph.inputs,...graph.outputs])slot.type='IMAGE';for(const link of graph.links.values())link.type='IMAGE'}
+ const before=[f.root,f.a,f.deep].map(g=>JSON.stringify([...g.links]));
+ assert.equal(inputImagePreview(sink,'canvas_image',p=>p).src,'/view?filename=nested.png&subfolder=&type=input');
+ assert.deepEqual([f.root,f.a,f.deep].map(g=>JSON.stringify([...g.links])),before);
+ f.ha.inputs[0].link=null;assert.equal(inputImagePreview(sink,'canvas_image',p=>p),null);
+});

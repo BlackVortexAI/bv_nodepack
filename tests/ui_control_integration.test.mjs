@@ -37,7 +37,7 @@ const remoteLlm = readFileSync(new URL("../ui/src/remoteLLM.ts", import.meta.url
 const lutDownload = readFileSync(new URL("../ui/src/regional/lutDownloadDialog.tsx", import.meta.url), "utf8");
 
 test("regional inspector composes shared production controls instead of restyling raw widgets", () => {
-    for (const component of ["BvSelect", "BvNumberField", "FieldFrame", "PromptTextarea"]) assert.match(options, new RegExp(`<${component}\\b`));
+    for (const component of ["BvSelect", "BvNumberField", "FieldFrame", "PromptPairFields", "ToolTabs", "SegmentedToggleGroup"]) assert.match(options, new RegExp(`<${component}\\b`));
     assert.doesNotMatch(options, /<select\b|<input\s+type="number"|<textarea\b/);
     assert.doesNotMatch(options, /className="option-section"/);
 });
@@ -387,7 +387,7 @@ test("prompt editors compose only canonical BV UI controls", () => {
     const promptEditorStart = options.indexOf("const PromptEditor");
     const promptEditorEnd = options.indexOf("export default", promptEditorStart);
     assert.doesNotMatch(options.slice(promptEditorStart, promptEditorEnd), /<(?:details|summary|button|input|select|textarea)\b/);
-    for (const component of ["BvManagedWindow", "SelectField", "FieldFrame", "Callout", "Badge", "Button"]) assert.match(quickPromptEditor, new RegExp(`<${component}\\b`));
+    for (const component of ["BvManagedWindow", "SelectField", "PromptPairFields", "Callout", "Badge", "Button"]) assert.match(quickPromptEditor, new RegExp(`<${component}\\b`));
     assert.doesNotMatch(quickPromptEditor, /<(?:button|input|select|textarea|details|summary)\b/);
     assert.match(quickPromptEditor, /bv-density-compact/);
     assert.match(quickPromptEditor, /<BvManagedWindow[\s\S]*?allowWorkspace=\{false\}/);
@@ -526,9 +526,9 @@ test("regional LUT planner uses the shared sortable job contract", () => {
 });
 
 test("regional easy mode renders global LUT settings in the Global panel", () => {
-    assert.match(regionalEditor, /<OptionsPanel mode=\{mode\} lutEasyGlobalEditor=\{globalLutSettings\}/);
+    assert.match(regionalEditor, /<OptionsPanel mode=\{mode\}[^\n]*lutEasyGlobalEditor=\{globalLutSettings\}/);
     assert.match(regionalEditor, /title:"Global"[^\n]+content:optionsPanel\("document"\)/);
-    assert.match(options, /<h3>Document Prompts<\/h3>[^\n]+\{props\.lutEasyGlobalEditor\}<BvSelect label="Negative Mode"/);
+    assert.match(options, /<ToolTabs label="Global tools"[^\n]+content:props\.lutEasyGlobalEditor/);
 });
 
 test("LUT Registry opens the shared download manager and adopts downloaded LUTs", () => {

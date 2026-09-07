@@ -127,7 +127,7 @@ test("Regional Prompt easy mode renders every stack assigned to its scope",()=>{
 test("Regional Prompt easy mode changes scope immediately when the selected region changes",()=>{
  assert.match(regionalEditorSource,/regionalLoraScopeViewProps\(node,loraV3Config,setLoraV3Config\)/);
  assert.doesNotMatch(pickerSource,/\[enabled,setEnabled\]=useState/);
- assert.match(regionalEditorSource,/OptionalLoraV3ScopePicker key=\{selectedRegion\.id\}/);
+ assert.match(regionalEditorSource,/LoraV3ScopePicker key=\{selectedRegion\.id\}/);
  const config=parseLoraV3Config({version:1,collector_id:"collector",entries:[{id:"left-entry",source:{kind:"external",resource_id:"skin"},targets:[{scope:"region",document_id:"doc",region_id:"left"}]}]});
  const right=renderToStaticMarkup(React.createElement(OptionalLoraV3ScopePicker,{collectors,config,target:{scope:"region",document_id:"doc",region_id:"right"},resolved:true,onSelection(){},onAdd(){},onRemove(){},onClear(){}}));
  assert.match(right,/LoRA disabled/);assert.doesNotMatch(right,/LoRA Stack 1/);
@@ -168,7 +168,7 @@ test("Quick Prompt Editor uses the canonical V3 LoRA scope instead of the legacy
  assert.match(quickEditorSource,/hasRegionalLoraV3\(node\)/);
  assert.match(quickEditorSource,/readNodeLoraV3Config\(node\)/);
  assert.match(quickEditorSource,/LORA_V3_INVENTORY_CHANGED_EVENT/);
- assert.match(quickEditorSource,/OptionalLoraV3ScopePicker/);
+ assert.match(quickEditorSource,/LoraV3ScopePicker/);
  assert.match(quickEditorSource,/regionalLoraScopeViewProps\(node,loraV3Config,setLoraV3Config\)/);
  assert.match(quickEditorSource,/quickLoraV3Target\(documentValue\.document_id,target\)/);
  assert.match(quickEditorSource,/export function loadQuickLoraState/);

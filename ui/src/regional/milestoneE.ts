@@ -87,6 +87,16 @@ export function applyRegionalPrimitiveDraft(
     return { canonical, draft: { schema: "bv.regional.editor-draft", version: 1, raw: structuredClone(raw), issues } };
 }
 
+// Explicit canvas actions commit dimensions, not text-field drafts. Remove their
+// stale overrides so Undo/Redo displays the restored canonical dimensions.
+export function applyRegionalCanvasSize(document:RegionalDocument,canvas:RegionalDocument["canvas"],draft:RegionalEditorDraft|null){
+    const result=applyRegionalPrimitiveDraft(document,{"canvas.width":canvas.width,"canvas.height":canvas.height});
+    if(result.draft.issues.length)throw new Error("Invalid canvas dimensions");
+    const remaining=draft?structuredClone(draft):null;
+    if(remaining){delete remaining.raw["canvas.width"];delete remaining.raw["canvas.height"];remaining.issues=remaining.issues.filter(issue=>issue.field!=="canvas.width"&&issue.field!=="canvas.height")}
+    return{canonical:result.canonical,draft:remaining};
+}
+
 // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Workflow-load migration coordinator.
 // Remove with document v1 and LoRA config v1/v2 parsers once old workflow loading is unsupported.
 export function migrateRegionalNode(node: NodeLike): RegionalMigrationResult {

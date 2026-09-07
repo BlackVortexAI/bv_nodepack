@@ -1,5 +1,7 @@
 export * from "./components";
 export * from "./mount";
+export * from "./AdaptiveImageCanvas";
+export * from "./viewportImage";
 export * from "./preferences";
 export * from "./theme";
 export * from "./window";

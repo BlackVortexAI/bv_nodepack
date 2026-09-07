@@ -26,7 +26,7 @@ export function loraProviderIdentity(node:any):string{
 }
 export function loraRegistryResources(node:any):Array<{id:string;label:string;node:any}>|null{
     if(String(node?.comfyClass??node?.type)!==LORA_REGISTRY_NODE)return null;
-    return(registryConfig(node)?.stacks??[]).map(stack=>({id:stack.id,label:stack.name,node}));
+    return(registryConfig(node)?.stacks??[]).filter(stack=>stack.role!=="basis").map(stack=>({id:stack.id,label:stack.name,node}));
 }
 export function loraProviderResources(node:any):Array<{id:string;label:string;node:any}>{
     const registry=loraRegistryResources(node);if(registry!==null)return registry;

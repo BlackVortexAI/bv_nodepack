@@ -429,6 +429,8 @@ def resolve_lora_capability(value: Any, provider: Any = None, *, registry: Capab
                 raise RegionalContextError(
                     f"LoRA resource is unresolved: {source['resource_id']!r} in collector {collector_id!r}"
                 )
+            if resource.get("role") == "basis":
+                raise RegionalContextError("Basis LoRA stacks belong in BV Model Patcher; remove their global/regional assignments")
             stack = parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {source["resource_id"]: resource}})["stacks"][source["resource_id"]]["stack"]
         for target in entry["targets"]:
             key = "global" if target["scope"] == "global" else target["region_id"]

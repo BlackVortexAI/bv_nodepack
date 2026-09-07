@@ -5,51 +5,304 @@
   "description": "BV Regional authoring contract with per-region consumer usage.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "version", "document_id", "title", "canvas", "prompts", "negative_mode", "overlap", "regions"],
+  "required": [
+    "schema",
+    "version",
+    "document_id",
+    "title",
+    "canvas",
+    "prompts",
+    "negative_mode",
+    "overlap",
+    "regions"
+  ],
   "properties": {
-    "schema": { "const": "bv.regional" },
-    "version": { "const": 2 },
-    "document_id": { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
-    "title": { "type": "string", "minLength": 1, "maxLength": 256 },
-    "canvas": { "$ref": "bv_regional_v1.schema.json#/$defs/canvas" },
-    "prompts": { "$ref": "bv_regional_v1.schema.json#/$defs/documentPrompts" },
-    "negative_mode": { "enum": ["auto", "prompt", "zero_out"] },
-    "overlap": { "$ref": "bv_regional_v1.schema.json#/$defs/overlap" },
-    "regions": { "type": "array", "items": { "$ref": "#/$defs/region" } }
+    "schema": {
+      "const": "bv.regional"
+    },
+    "version": {
+      "const": 2
+    },
+    "document_id": {
+      "$ref": "bv_regional_v1.schema.json#/$defs/id"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "canvas": {
+      "$ref": "bv_regional_v1.schema.json#/$defs/canvas"
+    },
+    "prompts": {
+      "$ref": "#/$defs/documentPrompts"
+    },
+    "negative_mode": {
+      "enum": [
+        "auto",
+        "prompt",
+        "zero_out"
+      ]
+    },
+    "overlap": {
+      "$ref": "bv_regional_v1.schema.json#/$defs/overlap"
+    },
+    "regions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/region"
+      }
+    },
+    "tool_settings": {
+      "$ref": "#/$defs/toolSettings"
+    },
+    "reference_images": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collector_id",
+          "resource_id",
+          "role"
+        ],
+        "properties": {
+          "collector_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "const": "source"
+          }
+        }
+      }
+    }
   },
   "$defs": {
     "region": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "parent_region_id", "enabled", "usage", "strength", "priority", "prompts", "mask", "geometry", "authoring"],
+      "required": [
+        "id",
+        "name",
+        "parent_region_id",
+        "enabled",
+        "usage",
+        "strength",
+        "priority",
+        "prompts",
+        "mask",
+        "geometry",
+        "authoring"
+      ],
       "properties": {
-        "id": { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
-        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "id": {
+          "$ref": "bv_regional_v1.schema.json#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
         "parent_region_id": {
           "oneOf": [
-            { "$ref": "bv_regional_v1.schema.json#/$defs/id" },
-            { "type": "null" }
+            {
+              "$ref": "bv_regional_v1.schema.json#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "enabled": { "type": "boolean" },
-        "usage": { "enum": ["generation", "detailer", "both"] },
-        "strength": { "type": "number", "minimum": 0, "maximum": 10 },
-        "priority": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
-        "prompts": { "$ref": "bv_regional_v1.schema.json#/$defs/promptPair" },
-        "mask": { "$ref": "bv_regional_v1.schema.json#/$defs/regionMask" },
+        "enabled": {
+          "type": "boolean"
+        },
+        "usage": {
+          "enum": [
+            "generation",
+            "detailer",
+            "both"
+          ]
+        },
+        "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "prompts": {
+          "$ref": "#/$defs/promptPair"
+        },
+        "mask": {
+          "$ref": "bv_regional_v1.schema.json#/$defs/regionMask"
+        },
         "geometry": {
           "type": "array",
           "items": {
             "oneOf": [
-              { "$ref": "bv_regional_v1.schema.json#/$defs/rectangle" },
-              { "$ref": "bv_regional_v1.schema.json#/$defs/ellipse" },
-              { "$ref": "bv_regional_v1.schema.json#/$defs/polygon" },
-              { "$ref": "bv_regional_v1.schema.json#/$defs/brushStroke" },
-              { "$ref": "bv_regional_v1.schema.json#/$defs/rasterMask" }
+              {
+                "$ref": "bv_regional_v1.schema.json#/$defs/rectangle"
+              },
+              {
+                "$ref": "bv_regional_v1.schema.json#/$defs/ellipse"
+              },
+              {
+                "$ref": "bv_regional_v1.schema.json#/$defs/polygon"
+              },
+              {
+                "$ref": "bv_regional_v1.schema.json#/$defs/brushStroke"
+              },
+              {
+                "$ref": "bv_regional_v1.schema.json#/$defs/rasterMask"
+              }
             ]
           }
         },
-        "authoring": { "$ref": "bv_regional_v1.schema.json#/$defs/regionAuthoring" }
+        "authoring": {
+          "$ref": "bv_regional_v1.schema.json#/$defs/regionAuthoring"
+        },
+        "tool_settings": {
+          "$ref": "#/$defs/toolSettings"
+        }
+      }
+    },
+    "toolSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lora": {
+          "type": "boolean"
+        },
+        "lut": {
+          "type": "boolean"
+        },
+        "references": {
+          "type": "boolean"
+        }
+      }
+    },
+    "promptPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "positive_source",
+        "negative_source"
+      ],
+      "properties": {
+        "positive_source": {
+          "type": "string"
+        },
+        "negative_source": {
+          "type": "string"
+        },
+        "reference_editor": {
+          "type": "boolean"
+        },
+        "references": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "positive": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "start",
+                  "end",
+                  "label",
+                  "collector_id",
+                  "resource_id"
+                ],
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "pattern": "^@"
+                  },
+                  "collector_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "resource_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            },
+            "negative": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "start",
+                  "end",
+                  "label",
+                  "collector_id",
+                  "resource_id"
+                ],
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "pattern": "^@"
+                  },
+                  "collector_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "resource_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "documentPrompts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "global",
+        "background"
+      ],
+      "properties": {
+        "global": {
+          "$ref": "#/$defs/promptPair"
+        },
+        "background": {
+          "$ref": "#/$defs/promptPair"
+        }
       }
     }
   }

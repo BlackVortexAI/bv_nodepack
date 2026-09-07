@@ -8,13 +8,13 @@ import torch
 import torch.nn.functional as F
 
 from .context import context_document
+from .dense_attention import check_dense_mask_budget
 from .document import region_used_for, selection_prompts
 from .mask_renderer import render_selection
 from .prompt_policy import use_negative_prompts, zero_encoded, mask_cfg_padding
 
 
 BACKEND_ID = "flux2_klein_9b_joint_attention"
-MAX_DENSE_MASK_ENTRIES = 96_000_000
 
 
 @dataclass(frozen=True)
@@ -104,9 +104,6 @@ def compile_flux2_klein_attention(
             specifications.append(
                 (region["name"], mask, max(0.0, float(region["strength"])), *prompts)
             )
-    if len(specifications) == 1:
-        raise ValueError("FLUX.2 Klein attention routing requires a prompted background or region mask")
-
     positive_values, negative_values = [], []
     positive_masks, negative_masks = [], []
     slots: list[Flux2KleinRegionalSlot] = []
@@ -178,13 +175,7 @@ def build_flux2_joint_attention_bias(
             f"FLUX.2 context has {text_tokens} tokens, expected at least {raw_text_tokens}"
         )
     total = text_tokens + target_image_tokens + reference_image_tokens
-    entries = total * total
-    if entries > MAX_DENSE_MASK_ENTRIES:
-        gib = entries * torch.empty((), dtype=dtype).element_size() / (1024 ** 3)
-        raise RuntimeError(
-            f"FLUX.2 regional attention mask would allocate at least {gib:.2f} GiB at this resolution; "
-            "reduce the canvas size or use BV Regional Native Conditioning"
-        )
+    check_dense_mask_budget(total, batch, dtype, "FLUX.2")
     grid_h, grid_w = _grid_for_tokens(target_image_tokens, aspect_ratio)
     bias = torch.zeros((batch, 1, total, total), device=device, dtype=dtype)
     prefix_padding = text_tokens - raw_text_tokens

@@ -43,6 +43,23 @@ from util.regional.prompt_policy import ANIMA_SCOPED_NEGATIVE
 
 
 class RegionalAnimaPatcherTests(unittest.TestCase):
+    def test_global_only_validates_model_without_installing_a_regional_patch(self):
+        from unittest.mock import Mock, patch
+        from util.regional.anima_patcher import ApplyAnimaRegionalConditioningPatch
+        model = Mock()
+        arguments = dict(model=model, regions=None, base_mode="disabled", base_strength=.2,
+                         end_percent=.35, cross_mask_strength=1., self_mask_strength=0.,
+                         base_ratio=.1, cross_inject_every_n_blocks=1, self_inject_every_n_blocks=1)
+        with patch("util.regional.anima_patcher._validate_anima_model") as validate:
+            self.assertEqual(ApplyAnimaRegionalConditioningPatch().apply(**arguments), (model,))
+            validate.assert_called_once_with(model)
+            model.clone.assert_not_called()
+            model.get_model_object.assert_not_called()
+        with patch("util.regional.anima_patcher._validate_anima_model", side_effect=RuntimeError("wrong model")):
+            with self.assertRaisesRegex(RuntimeError, "wrong model"):
+                ApplyAnimaRegionalConditioningPatch().apply(**arguments)
+
+
     def test_scoped_negative_wrapper_preserves_global_routing_padding_and_lora(self):
         def conditioning(value, length):
             return [[torch.full((1, length, 8), value), {}]]

@@ -1,4 +1,5 @@
 import test from "node:test";
+import {applyRegionalCanvasSize} from "../ui/src/regional/milestoneE.ts";
 import assert from "node:assert/strict";
 import { applyRegionalPrimitiveDraft, migrateRegionalNode, migrationReportMessage, parseRegionalEditorDraft, persistRegionalEditorDraft, regionalEditorDraft } from "../ui/src/regional/milestoneE.ts";
 import { layoutPanelIds, missingLayoutPanels } from "../ui/src/ui/layoutProfiles.ts";
@@ -6,6 +7,17 @@ import { clearSessionLayoutDraft, getSessionLayoutRevision, setSessionLayoutDraf
 import { canvasLegacyDragType, clearLegacyPortSticky, installLegacyPorts, legacyDebugVisible, legacyPortDescriptors, legacyPortShouldShow, refreshLegacyDragPorts, refreshLegacyPorts, setLegacyDebugVisible, setLegacyPortsVisible, toggleLegacyDebugVisible } from "../ui/src/regional/legacyPorts.ts";
 
 const document = {schema:"bv.regional",version:2,document_id:"doc",title:"Original",canvas:{width:1024,height:1024},prompts:{global:{positive_source:"",negative_source:""},background:{positive_source:"",negative_source:""}},negative_mode:"auto",overlap:{mode:"joint"},regions:[]};
+
+test('explicit canvas size preserves regions and unrelated drafts without masking undo dimensions',()=>{
+ const source={...document,regions:[{id:'r',geometry:[{x:.1,y:.2,width:.3,height:.4}]}]};
+ const draft=applyRegionalPrimitiveDraft(source,{title:'','canvas.width':'bad','canvas.height':'512'}).draft;
+ const result=applyRegionalCanvasSize(source,{width:736,height:920},draft);
+ assert.deepEqual(result.canonical.canvas,{width:736,height:920});assert.deepEqual(result.canonical.regions,source.regions);
+ assert.deepEqual(result.draft.raw,{title:''});assert.deepEqual(result.draft.issues.map(i=>i.field),['title']);
+ assert.equal(result.draft.raw['canvas.width']??source.canvas.width,1024);
+ assert.deepEqual(source.canvas,{width:1024,height:1024});assert.equal(draft.raw['canvas.width'],'bad');
+ assert.throws(()=>applyRegionalCanvasSize(source,{width:0,height:920},draft),/Invalid/);
+});
 
 test("Regional drafts preserve invalid raw values while canonical execution uses explicit fallbacks",()=>{
   const result=applyRegionalPrimitiveDraft(document,{title:"", "canvas.width":"oops", "canvas.height":"2048"});

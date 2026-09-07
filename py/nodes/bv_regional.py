@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ..util.regional.tool_settings import filter_tool_config, filter_legacy_bindings
 
 import hashlib
 import json
@@ -49,6 +50,7 @@ from ..util.lora_registry import lora_registry_diagnostics, materialize_lora_reg
 from ..util.regional.detailer_v3 import transform_detailer_capability
 from ..util.regional.lut_v3 import MAX_LUT_RESOURCE_PROVIDERS, transform_lut_capability
 from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
+from ..util.regional.reference_registry import materialize_reference_catalog
 from ..util.regional.sdxl_attention import compile_sdxl_attention, apply_sdxl_attention_patch
 from ..util.regional.zimage_attention import compile_zimage_attention, apply_zimage_attention_patch
 from ..util.regional.flux2_klein_attention import (
@@ -197,6 +199,8 @@ class BVRegionalPromptNode:
                     for index in range(1, MAX_LUT_RESOURCE_PROVIDERS + 1)
                 },
                 "canvas_image": ("IMAGE", {}),
+                "reference_v3_config_json": ("STRING", {"default": '{"version":1,"collector_ids":[]}', "multiline": True, "dynamicPrompts": False, "socketless": True}),
+                **{f"reference_resource_provider_{index}": (RUNTIME_PROVIDER, {"forceInput": True}) for index in range(1, 21)},
             },
             "hidden": {"unique_id": "UNIQUE_ID"},
         }
@@ -210,9 +214,9 @@ class BVRegionalPromptNode:
     # are intentionally not wired into an execution branch.
     OUTPUT_NODE = True
 
-    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, canvas_image=None, unique_id=None, **providers):
+    def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, canvas_image=None, unique_id=None, reference_v3_config_json=None, **providers):
         document = parse_document(regional_json)
-        payload = json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON)
+        payload = filter_tool_config(document, json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON), "lora")
         regional = document
         if payload.get("entries"):
             regional = transform_lora_capability(
@@ -226,12 +230,13 @@ class BVRegionalPromptNode:
             regional = transform_detailer_capability(
                 regional, detailer_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             ).to_dict()
-        lut_payload = json.loads(lut_v3_config_json or DEFAULT_LUT_V3_JSON)
+        lut_payload = filter_tool_config(document, json.loads(lut_v3_config_json or DEFAULT_LUT_V3_JSON), "lut")
         if lut_payload.get("jobs"):
             regional = transform_lut_capability(
                 regional, lut_payload, registry=REGIONAL_V3_CAPABILITY_REGISTRY,
             ).to_dict()
-        result = (regional, reconcile_bindings(lora_bindings_json, document))
+        regional = materialize_reference_catalog(regional, reference_v3_config_json or '{"version":1,"collector_ids":[]}', providers, registry=REGIONAL_V3_CAPABILITY_REGISTRY)
+        result = (regional, filter_legacy_bindings(document, reconcile_bindings(lora_bindings_json, document)))
         if canvas_image is None:
             return result
         preview = _preview_regional_canvas_images(canvas_image)
@@ -799,7 +804,14 @@ class BVRegionalKrea2AttentionNode:
                 }),
             },
             # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
-            "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
+            "optional": {
+                "lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {}),
+                "mode": (["generation", "identity_edit"], {"default": "generation"}),
+                "vae": ("VAE", {}), "target_latent": ("LATENT", {}),
+                "edit_fit": (["fit", "crop"], {"default": "fit", "tooltip": "Fit for Identity Edit v1.2; crop for older weights."}),
+                "reference_boost": ("FLOAT", {"default": 1.0, "min": 0.01, "max": 100.0, "step": 0.1}),
+                **{f"reference_resource_provider_{index}": ("BV_RUNTIME_RESOURCE_PROVIDER", {"forceInput": True}) for index in range(1, 21)},
+            },
         }
 
     RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING")
@@ -812,7 +824,9 @@ class BVRegionalKrea2AttentionNode:
         "Routes the 28 main DiT blocks with a standard KSampler; Krea's four upstream "
         "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch. "
         "Regional LoRAs default to token-gated single-pass; the previous multi-pass "
-        "execution remains available as multipass_legacy."
+        "execution remains available as multipass_legacy. Identity Edit mode uses one "
+        "global Registry image, compatible VAE and the sampler's target latent; "
+        "load edit weights separately. Regional routing controls apply only in generation mode."
     )
 
     def apply(
@@ -826,10 +840,32 @@ class BVRegionalKrea2AttentionNode:
         regional_lora_mode="token_gated_singlepass",
         lora_registry=None,
         lora_bindings=None,
+        mode="generation",
+        vae=None,
+        target_latent=None,
+        edit_fit="fit",
+        reference_boost=1.0,
+        **providers,
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
         document = context_document(regional)
+        if mode not in {"generation", "identity_edit"}:
+            raise ValueError("Krea mode must be generation or identity_edit")
+        if mode == "identity_edit":
+            from ..util.regional.reference_images import resolve_source_image
+            from ..util.regional.edit_lora_passes import EditLoRAPasses
+            from ..util.regional.krea2_identity_edit import edit_prompts, validate_inputs, apply_identity_edit
+            from ..util.regional.krea2_edit_regions import compile_edit_regions
+            image = resolve_source_image(regional, document, providers)
+            validate_inputs(image, target_latent, vae, model=model)
+            edit_prompts(document)
+            stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
+            passes = EditLoRAPasses(model, clip, stacks, image)
+            positive, negative = compile_edit_regions(document, clip, image, scope_encoder=passes.encode, lora_scopes=stacks)
+            prepared_model = passes.prepare_model()
+            patched = apply_identity_edit(prepared_model, image, vae, target_latent, fit_mode=edit_fit, ref_boost=reference_boost)
+            return passes.install(patched, positive, negative), positive, negative
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
@@ -939,8 +975,17 @@ class BVRegionalAnimaConditioningNode:
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, regions, background = compile_anima_adapter(document, clip, hook_groups)
+        if regions is None:
+            # Global model LoRAs use native conditioning hooks in either mode;
+            # token-gated LoRAs require a regional patch that is unnecessary here.
+            global_document = {**document, "regions": []}
+            positive, negative = apply_attention_hook_passes(
+                positive, negative, global_document,
+                {key: value for key, value in scope_stacks.items() if key == "global"},
+                {key: value for key, value in hook_groups.items() if key == "global"},
+            )
         # BV-LEGACY(marked=2026-08-25, review-after=2026-10-25): See the INPUT_TYPES removal gate above.
-        if regional_lora_mode == "multipass_legacy":
+        if regional_lora_mode == "multipass_legacy" and regions is not None:
             positive, negative = apply_attention_hook_passes(
                 positive, negative, document, scope_stacks, hook_groups
             )
@@ -958,7 +1003,7 @@ class BVRegionalAnimaConditioningNode:
             self_inject_every_n_blocks=self_inject_every_n_blocks,
             background_conditioning=background,
         )[0]
-        if regional_lora_mode == "token_gated_singlepass":
+        if regional_lora_mode == "token_gated_singlepass" and regions is not None:
             patched_model = apply_anima_token_lora_patch(patched_model, scope_stacks)
         return patched_model, positive, negative
 
@@ -1112,13 +1157,14 @@ class BVRegionalImageSaveNode(_BVRegionalImageTargetMixin, SaveImage):
         full_output_folder, filename, counter, subfolder, _ = folder_paths.get_save_image_path(
             filename_prefix, self.output_dir, width, height
         )
-        try:
-            parameters, bv_metadata = build_regional_metadata(
-                regional, prompt=prompt, unique_id=unique_id, width=width, height=height
-            )
-        except Exception as error:
-            print(f"BV Node Pack: Civitai metadata unavailable; saving native metadata only: {error}")
-            parameters, bv_metadata = None, None
+        parameters, bv_metadata = None, None
+        if not args.disable_metadata:
+            try:
+                parameters, bv_metadata = build_regional_metadata(
+                    regional, prompt=prompt, unique_id=unique_id, width=width, height=height
+                )
+            except Exception as error:
+                print(f"BV Node Pack: Civitai metadata unavailable; saving native metadata only: {error}")
         results = []
         for batch_number, image in enumerate(images):
             pixels = 255.0 * image.cpu().numpy()

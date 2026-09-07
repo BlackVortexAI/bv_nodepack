@@ -42,36 +42,36 @@ test("canvas selector renders Last Sent Image and a fail-closed unavailable sele
   const options=regionalCanvasImageOptions(images,missing,apiURL);
   assert.match(normal,/Last Sent Image/);assert.match(normal,/src="\/api\/view\?filename=a.png/);
   assert.match(unavailable,/Source unavailable/);assert.doesNotMatch(unavailable,/<img/);
-  assert.equal(options[0].src,"/api/view?filename=a.png&type=temp&subfolder=");
-  assert.equal(options[1].disabled,true);assert.equal(options[1].src,undefined);
-  assert.equal(options[2].thumbnail,"/api/view?filename=a.png&type=temp&subfolder=");
+  assert.equal(options[1].src,"/api/view?filename=a.png&type=temp&subfolder=");
+  assert.equal(options[2].disabled,true);assert.equal(options[2].src,undefined);
+  assert.equal(options[3].thumbnail,"/api/view?filename=a.png&type=temp&subfolder=");
 });
 
 test("Last Sent Image remains selectable without a published image",()=>{
   const options=regionalCanvasImageOptions([],LAST_SENT_IMAGE_SELECTION,path=>path);
-  assert.deepEqual(options,[{id:LAST_SENT_IMAGE_SELECTION,name:"Last Sent Image"}]);
+  assert.deepEqual(options,[{id:"connected-input-image",name:"Input image · Unavailable"},{id:LAST_SENT_IMAGE_SELECTION,name:"Last Sent Image"}]);
   const markup=renderToStaticMarkup(React.createElement(RegionalCanvasImageSelect,{images:[],selection:LAST_SENT_IMAGE_SELECTION,onSelection(){},apiURL:path=>path}));
   assert.match(markup,/Last Sent Image/);assert.match(markup,/bv-image-picker-placeholder/);assert.doesNotMatch(markup,/<img/);
 });
 
 test("canvas selector hides technical filenames and labels multi-image batches semantically",()=>{
   const scope={};let catalog=emptyRegionalCanvasImageCatalog();catalog=ingestRegionalCanvasImagePublication(catalog,scope,publication("doc","7","regional-image-send","batch",["bv_regional_canvas_temp_first.png","bv_regional_canvas_temp_second.png"]),"7");
-  const images=regionalCanvasImagesForDocument(catalog,scope,"doc"),options=regionalCanvasImageOptions(images,images[1].id,path=>path).slice(1);
+  const images=regionalCanvasImagesForDocument(catalog,scope,"doc"),options=regionalCanvasImageOptions(images,images[1].id,path=>path).slice(2);
   assert.deepEqual(options.map(option=>option.name),["Send #7 · Image 1","Send #7 · Image 2"]);
   options.forEach((option,index)=>{assert.equal(Object.hasOwn(option,"meta"),false);assert.equal(option.id,images[index].id);assert.match(option.src,new RegExp(escapeRegExp(images[index].filename)));assert.equal(option.thumbnail,option.src)});
   const markup=renderToStaticMarkup(React.createElement(RegionalCanvasImageSelect,{images,selection:images[1].id,onSelection(){},apiURL:path=>path}));
   assert.match(markup,/Send #7 · Image 2/);assert.doesNotMatch(markup,/<small/);
 });
 
-test("canvas selector width is stable across option contents",()=>{
+test("canvas selector has bounded flexible width and footer groups wrap in narrow panels",()=>{
   const picker=ruleBody('.bv-canvas-image-select');
   hasDeclaration(picker,"box-sizing","border-box");
   hasDeclaration(picker,"display","flex");
   hasDeclaration(picker,"align-items","center");
-  hasDeclaration(picker,"flex","0 0 min(300px,40vw)");
-  hasDeclaration(picker,"inline-size","min(300px,40vw)");
-  hasDeclaration(picker,"min-inline-size","min(220px,40vw)");
-  hasDeclaration(picker,"max-inline-size","min(300px,40vw)");
+  hasDeclaration(picker,"flex","1 1 160px");
+  hasDeclaration(picker,"min-inline-size","120px");
+  hasDeclaration(picker,"max-inline-size","300px");
+  hasDeclaration(ruleBody('.artboard-bottom-controls'),"flex-wrap","wrap");
   const control=ruleBody('.bv-canvas-image-select .bv-image-picker-control');
   hasDeclaration(control,"box-sizing","border-box");
   hasDeclaration(control,"width","100%");

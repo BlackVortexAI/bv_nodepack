@@ -301,7 +301,7 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in inputs["optional"].values()})
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
-    def test_only_regional_context_writers_expose_typed_provider_inputs(self):
+    def test_lora_providers_stay_on_context_writers_reference_providers_on_edit_consumer(self):
         prompt_optional = self.module.BVRegionalPromptNode.INPUT_TYPES()["optional"]
         self.assertIn("resource_provider", prompt_optional)
         lora_optional = self.module.BVRegionalLoraNode.INPUT_TYPES()["optional"]
@@ -314,12 +314,15 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalSDXLAttentionNode,
             self.module.BVRegionalZImageAttentionNode,
             self.module.BVRegionalFlux2KleinAttentionNode,
-            self.module.BVRegionalKrea2AttentionNode,
             self.module.BVRegionalAnimaConditioningNode,
         ):
             optional = node_type.INPUT_TYPES()["optional"]
             self.assertEqual(set(optional), {"lora_registry", "lora_bindings"})
             self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in optional.values()})
+        edit_optional = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]
+        self.assertNotIn("resource_provider_1", edit_optional)
+        self.assertEqual(edit_optional["mode"][1]["default"], "generation")
+        self.assertEqual(edit_optional["reference_resource_provider_1"][0], self.module.RUNTIME_PROVIDER)
 
     def test_named_lora_stack_node_builds_a_chainable_registry(self):
         output = self.module.BVNamedLoraStackNode().register(
@@ -725,7 +728,8 @@ class RegionalNodeTests(unittest.TestCase):
         )
         self.assertEqual(
             set(self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]),
-            {"lora_registry", "lora_bindings"},
+            {"lora_registry", "lora_bindings", "mode", "vae", "target_latent", "edit_fit", "reference_boost",
+             *(f"reference_resource_provider_{index}" for index in range(1,21))},
         )
         mode = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["required"]["regional_lora_mode"]
         self.assertEqual(mode[0], ["multipass_legacy", "token_gated_singlepass"])
@@ -753,6 +757,37 @@ class RegionalNodeTests(unittest.TestCase):
         legacy.assert_not_called()
         singlepass.assert_called_once()
         self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+
+    def test_krea_identity_edit_uses_static_global_loras_and_registry_image(self):
+        import importlib
+        edit = importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_identity_edit")
+        references = importlib.import_module(f"{PACKAGE}.py.util.regional.reference_images")
+        edit_regions = importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_edit_regions")
+        loras = importlib.import_module(f"{PACKAGE}.py.util.regional.edit_lora_passes")
+        node = self.module.BVRegionalKrea2AttentionNode()
+        document = fixture(); document["regions"] = []
+        image = torch.zeros(1,16,16,3)
+        with (
+            mock.patch.object(references,"resolve_source_image",return_value=image) as source,
+            mock.patch.object(edit,"validate_inputs"),
+            mock.patch.object(edit,"edit_prompts",return_value=("edit it","")),
+            mock.patch.object(edit_regions,"compile_edit_regions",return_value=([["positive",{}]],[["negative",{}]])) as encode,
+            mock.patch.object(edit,"apply_identity_edit",return_value="edit-model") as patch_model,
+            mock.patch.object(self.module,"resolve_stack_paths",return_value={"global":[("stack",1.,0.)],"unused-region":[("other",1.,0.)]}),
+            mock.patch.object(self.module,"create_hook_groups",return_value={"global":"hooks"}) as hooks,
+            mock.patch.object(loras,"apply_static_lora_stack",create=True,return_value=("lora-model","lora-clip")) as static,
+            mock.patch.object(self.module,"apply_attention_hook_passes",return_value=(["hooked-pos"],["hooked-neg"])) as passes,
+            mock.patch.object(self.module,"compile_krea2_attention",side_effect=AssertionError("regional compiler used")),
+            mock.patch.object(self.module,"apply_krea2_token_lora_patch",side_effect=AssertionError("token gating used")),
+        ):
+            result=node.apply("model","clip",document,1.,0.,.5,mode="identity_edit",vae="vae",target_latent="latent",reference_resource_provider_1="provider")
+            self.assertEqual(result,("edit-model",[["positive",{}]],[["negative",{}]]))
+            hooks.assert_not_called()
+            passes.assert_not_called()
+            static.assert_called_once_with("model","clip",[("stack",1.,0.)])
+            self.assertEqual(encode.call_args.args,(self.module.context_document(document),"clip",image))
+            patch_model.assert_called_once_with("lora-model",image,"vae","latent",fit_mode="fit",ref_boost=1.)
+            self.assertEqual(source.call_args.args[2],{"reference_resource_provider_1":"provider"})
 
     def test_krea2_singlepass_skips_model_hook_passes(self):
         node = self.module.BVRegionalKrea2AttentionNode()
@@ -837,6 +872,34 @@ class RegionalNodeTests(unittest.TestCase):
         legacy.assert_not_called()
         singlepass.assert_called_once_with("attention-model", {"region-a": []})
         self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+
+    def test_anima_global_only_preserves_global_hooks_in_both_modes(self):
+        class FakeApply:
+            def apply(self, **kwargs):
+                self_regions = kwargs["regions"]
+                assert self_regions is None
+                return (kwargs["model"],)
+
+        fake_patcher = types.ModuleType(f"{PACKAGE}.py.util.regional.anima_patcher")
+        fake_patcher.ApplyAnimaRegionalConditioningPatch = FakeApply
+        for mode in ("multipass_legacy", "token_gated_singlepass"):
+            with (
+                self.subTest(mode=mode),
+                mock.patch.dict(sys.modules, {fake_patcher.__name__: fake_patcher}),
+                mock.patch.object(self.module, "resolve_stack_paths", return_value={"global": ["global-lora"], "region-a": ["unused"]}),
+                mock.patch.object(self.module, "create_hook_groups", return_value={"global": "global-hook", "region-a": "unused-hook"}),
+                mock.patch.object(self.module, "compile_anima_adapter", return_value=(["positive"], ["negative"], None, ["background"])),
+                mock.patch.object(self.module, "apply_attention_hook_passes", return_value=(["hooked-positive"], ["hooked-negative"])) as hooks,
+                mock.patch.object(self.module, "apply_anima_token_lora_patch") as token_patch,
+            ):
+                result = self.module.BVRegionalAnimaConditioningNode().apply(
+                    "model", "clip", fixture(), "disabled", 0.2, 0.0, 0.35,
+                    1.0, 0.2, 0.1, 1, 1, regional_lora_mode=mode)
+                self.assertEqual(result, ("model", ["hooked-positive"], ["hooked-negative"]))
+                self.assertEqual(hooks.call_args.args[2]["regions"], [])
+                self.assertEqual(hooks.call_args.args[3], {"global": ["global-lora"]})
+                self.assertEqual(hooks.call_args.args[4], {"global": "global-hook"})
+                token_patch.assert_not_called()
 
     def test_anima_call_without_mode_preserves_legacy_hook_passes(self):
         node = self.module.BVRegionalAnimaConditioningNode()
@@ -939,7 +1002,8 @@ class RegionalNodeTests(unittest.TestCase):
         inputs = self.module.BVRegionalPromptNode.INPUT_TYPES()
         optional_names = list(inputs["optional"])
         self.assertIs(self.module.BVRegionalPromptNode.OUTPUT_NODE, True)
-        self.assertEqual(optional_names[-1], "canvas_image")
+        self.assertIn("canvas_image", optional_names)
+        self.assertNotIn("reference_provider", optional_names)
         self.assertEqual(inputs["hidden"]["unique_id"], "UNIQUE_ID")
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES, (self.module.REGIONAL, self.module.BINDINGS))
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_NAMES, ("regional", "lora_bindings"))
@@ -1047,6 +1111,15 @@ class RegionalNodeTests(unittest.TestCase):
             self.assertEqual(json.loads(text["prompt"])["20"]["class_type"], "KSampler")
             self.assertEqual(json.loads(text["workflow"]), {"nodes": []})
             self.assertEqual(json.loads(text["bv_regional"])["schema"], "bv.regional-generation")
+
+            fake_cli.args.disable_metadata = True
+            with mock.patch.dict(sys.modules, {"folder_paths": fake_paths, "comfy": fake_comfy, "comfy.cli_args": fake_cli}), mock.patch.object(
+                self.module, "build_regional_metadata", side_effect=AssertionError("metadata builder must be skipped")
+            ) as builder:
+                output = saver.save(torch.zeros((1, 4, 5, 3)), "disabled", target, graph, {"workflow": {}}, "90", regional)
+            builder.assert_not_called()
+            with Image.open(Path(directory, output["ui"]["images"][0]["filename"])) as image:
+                self.assertEqual(image.text, {})
 
 
 if __name__ == "__main__":

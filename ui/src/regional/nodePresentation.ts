@@ -1,5 +1,5 @@
 export type PresentationSurface="classic"|"ghost"|"nodes2";
-export type PresentationRole="public"|"legacy"|"internalState"|"provider"|"dynamicReserve"|"nativeAction";
+export type PresentationRole="public"|"legacy"|"internalState"|"provider"|"dynamicReserve"|"nativeAction"|"fanIn";
 
 /**
  * Central contract for every BV node/widget presentation mutation.
@@ -21,6 +21,18 @@ export type PresentationException=Readonly<{
 }>;
 
 export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
+    {
+        id:"reference-autogrow-identity-lifecycle",
+        implementation:["ui/src/regional/referenceRegistryLifecycle.ts"],
+        reason:"Native Autogrow reconstructs slots during configure. Logical reference place UUIDs must persist through workflow serialization and source changes.",
+        centralizationPath:"The adapter owns identity only, never slot geometry or topology. Replace its callback seam with an official persistent Autogrow entry identity when available. See docs/design/reference-registry.md.",
+    },
+    {
+        id:"fan-in-stable-native-places",
+        implementation:["ui/src/regional/interactiveFanIn.ts"],
+        reason:"Native Autogrow compacts disconnected slots. The shared fanIn role retains vacant logical places so changing one source cannot retarget saved references.",
+        centralizationPath:"Replace the scoped native minimum getter with a supported native preserve-empty-slots option when available. See docs/design/node-presentation.md.",
+    },
     {
         id:"react-node-dom-widget-host",
         implementation:["ui/src/regional/reactNodeWidgetHost.tsx"],
@@ -116,6 +128,10 @@ const REGIONAL_LORA_CONSUMER_POLICY:NodePresentationPolicy={
 
 const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     ...Object.fromEntries(REGIONAL_LORA_CONSUMER_NODE_TYPES.map(nodeType=>[nodeType,REGIONAL_LORA_CONSUMER_POLICY])),
+    "BV Regional Krea 2 Attention":{
+        ...REGIONAL_LORA_CONSUMER_POLICY,
+        ports:[...(REGIONAL_LORA_CONSUMER_POLICY.ports??[]),{role:"provider",prefixes:["reference_resource_provider_"]}],
+    },
     "BV Control Center":{
         widgets:[
             {role:"internalState",names:["bv_control_config_json"]},
@@ -126,10 +142,10 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
     "BV Regional Prompt":{
         ports:[
             {role:"legacy",names:["lora_bindings"]},
-            {role:"provider",names:["resource_provider"],prefixes:["resource_provider_","detailer_resource_provider_","lut_resource_provider_"]},
+            {role:"provider",names:["resource_provider"],prefixes:["resource_provider_","detailer_resource_provider_","lut_resource_provider_","reference_resource_provider_"]},
         ],
         widgets:[
-            {role:"internalState",names:["regional_json","lora_bindings_json","lora_v3_config_json","detailer_v3_config_json","lut_v3_config_json"]},
+            {role:"internalState",names:["regional_json","lora_bindings_json","lora_v3_config_json","detailer_v3_config_json","lut_v3_config_json","reference_v3_config_json"]},
         ],
         actions:["Open Regional Editor","Quick Edit Prompts"],
     },
@@ -165,6 +181,14 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
         ports:[{role:"provider",names:["resource_provider"]}],
         widgets:[{role:"internalState",names:["config_json"]}],
         actions:["Configure LUT Registry"],
+    },
+    "BV Reference Registry":{
+        ports:[{role:"fanIn",prefixes:["media."],directions:["input"]},{role:"provider",names:["resource_provider"]}],
+        widgets:[{role:"internalState",names:["config_json"]}],
+    },
+    "BV Model Patcher":{
+        ports:[{role:"provider",prefixes:["base_resource_provider_"]}],
+        widgets:[{role:"internalState",names:["config_json"]}],
     },
     "BV LoRA Registry":{
         ports:[{role:"provider",names:["resource_provider"]}],
@@ -236,9 +260,11 @@ const visible=(role:PresentationRole,item:PresentationPort|PresentationWidget,co
 
 export function resolveNodePresentation(nodeType:string,inventory:PresentationInventory,context:PresentationContext){
     const policy=POLICIES[nodeType]??{};
-    const portMatchers=context.surface==="ghost"?[...(policy.ports??[]),...(policy.widgets??[])]:policy.ports;
+    const portMatchers=[...(policy.ports??[]),...(policy.widgets??[]).filter(rule=>context.surface==="ghost"||rule.role==="internalState").map(rule=>({...rule,directions:["input" as const]}))];
+    const fanInputs=inventory.ports.filter(port=>port.direction==="input"&&roleOf(port,portMatchers)==="fanIn");
+    const anchor=fanInputs.find(port=>!port.connected)??fanInputs[0];
     return{
-        ports:inventory.ports.map(port=>{const role=roleOf(port,portMatchers);return{...port,role,visible:visible(role,port,context)}}),
+        ports:inventory.ports.map(port=>{const role=roleOf(port,portMatchers);return{...port,role,visible:role==="fanIn"?port===anchor:visible(role,port,context)}}),
         widgets:inventory.widgets.map(widget=>{const role=roleOf(widget,policy.widgets);return{...widget,role,visible:visible(role,widget,context)}}),
         actions:[...(policy.actions??[])],
     };

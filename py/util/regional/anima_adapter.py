@@ -72,7 +72,7 @@ def compile_anima_adapter(
     document: Any,
     clip: Any,
     hooks_by_scope: dict[str, Any] | None = None,
-) -> tuple[list, list, AnimaRegionChain, list]:
+) -> tuple[list, list, AnimaRegionChain | None, list]:
     """Compile BV_REGIONAL into the Sen-sou Anima patcher's public node contract."""
 
     clean = context_document(document)
@@ -111,9 +111,21 @@ def compile_anima_adapter(
         )
 
     if chain is None:
-        raise ValueError("Anima regional conditioning requires at least one enabled region with a prompt and a non-empty mask")
+        # Without local routing both scopes cover the whole image. Compile one
+        # native prompt rather than inventing a full-frame conditioning region.
+        combined = ", ".join(text for source, text in (
+            (global_positive_source, global_positive_text),
+            (background_positive_source, background_positive_text),
+        ) if source.strip())
+        if combined != base_text:
+            positive = _encode(clip, combined, scoped_hooks.get("global"))
 
     _, global_negative_text = _prompt_text(clean, "global", "negative")
+    if chain is None:
+        global_negative_text = ", ".join(text for source, text in (
+            _prompt_text(clean, "global", "negative"),
+            _prompt_text(clean, "background", "negative"),
+        ) if source.strip())
     if not use_negative:
         negative = _zero_out(positive)
     else:
@@ -126,7 +138,7 @@ def compile_anima_adapter(
         if background_source.strip():
             background[0][1][ANIMA_SCOPED_NEGATIVE] = _encode(
                 clip, background_text, scoped_hooks.get("background"))
-        for entry in chain.flatten():
+        for entry in chain.flatten() if chain is not None else []:
             prompts = selection_prompts(_selection(clean, "region", entry.scope))
             if prompts[1]["source"].strip():
                 entry.conditioning[0][1][ANIMA_SCOPED_NEGATIVE] = _encode(

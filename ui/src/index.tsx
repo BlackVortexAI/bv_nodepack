@@ -31,12 +31,15 @@ import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetailerPromptV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { prepareLutV3 } from "./regional/lutV3Catalog";
 import { enableRegistryFamily } from "./regional/registryDgFamilies";
+import { installModelPatcherUi } from "./regional/modelPatcherUi";
 import { installRegistryDgLifecycle } from "./regional/registryDgLifecycle";
 import { openLutDownloadDialog } from "./regional/lutDownloadDialog";
 import { openLutPlanDialog } from "./regional/lutPlanDialog";
 import { openLutRegistryDialog } from "./regional/lutRegistryDialog";
 import { installLutNodePresentation } from "./regional/lutNodePresentation";
 import { installNodePresentationLifecycle } from "./regional/nodePresentationLifecycle";
+import { installReferenceRegistryLifecycle } from "./regional/referenceRegistryLifecycle";
+import { prepareReferenceConsumer, publishReferenceRegistry } from "./regional/referenceRegistryGraph";
 import { upgradeRemoteLLMProvider } from "./remoteLLM";
 import { prepareDgClipboard } from "./regional/dgRouting";
 import { installProjectedClipboard } from "./regional/projectedPortInteraction";
@@ -764,6 +767,7 @@ comfyApp.registerExtension({
             installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
             return;
         }
+        if(nodeData.name==="BV Reference Registry"){installReferenceRegistryLifecycle(nodeType,publishReferenceRegistry);return}
         if(nodeData.name==="BV Regional Prompt")suppressInitialProjectedProviderDefinitions(nodeData,["canvas_image"]);
         if(nodeData.name==="BV LoRA Registry"){installLoraRegistryUi(nodeType,nodeData,comfyApi,detailerGraphOwner);return}
         const legacyDescriptors=legacyPortDescriptors(nodeData.name);
@@ -776,6 +780,8 @@ comfyApp.registerExtension({
             nodeType.prototype.onDeselected=function(){const result=deselected?.apply(this,arguments);clearLegacyPortSticky(this);return result};
             nodeType.prototype.onRemoved=function(){removeNodePresentation(this);return removed?.apply(this,arguments)};
         }
+        if (nodeData.name === "BV Regional Krea 2 Attention") installRegistryDgLifecycle(nodeType,prepareReferenceConsumer);
+        if(nodeData.name === "BV Model Patcher"){installModelPatcherUi(nodeType,nodeData,detailerGraphOwner);return;}
         const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData, detailerGraphOwner);
         if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
         if(installLutNodePresentation(nodeType,nodeData,{api:comfyApi,graphOwner:detailerGraphOwner,scopedNodeKey,workflowNodesOfType,windowMenuVisible,switchView:switchBvView,sourceDocument:sourceRegionalDocument,detectorCollectors:detectorCollectorsForPlan,openRegistry:openLutRegistryDialog,openPlan:openLutPlanDialog,openDownload:openLutDownloadDialog}))return;
@@ -927,6 +933,7 @@ comfyApp.registerExtension({
             return;
         }
         if (nodeData.name !== "BV Regional Prompt") return;
+        installRegistryDgLifecycle(nodeType,prepareReferenceConsumer);
         const original = nodeType.prototype.onNodeCreated;
         const originalConfigure = nodeType.prototype.onConfigure;
         const originalConnectionsChange = nodeType.prototype.onConnectionsChange;

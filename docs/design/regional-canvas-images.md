@@ -56,7 +56,9 @@ removes deleted, disconnected, or retargeted sources.
 
 ## Selection semantics
 
-`Last Sent Image` is the default follow-mode sentinel. It resolves to the final
+Previously unselected documents start with `Input image`, which follows the
+connected preview when available and otherwise displays an empty canvas.
+`Last Sent Image` remains an explicit follow-mode option. It resolves to the final
 image of the latest accepted publication across all three source kinds. An
 explicit selection uses source identity plus batch index; it remains selected
 when other sources publish and follows a rerun of the same source/index. If that
@@ -75,3 +77,33 @@ uses the central idempotent deferred-public-input reconciler only after provider
 reconciliation. Existing provider slot objects, links, and target indices are
 never rebuilt or reordered. The lifecycle seam is registered in
 `PRESENTATION_EXCEPTIONS`.
+
+## Explicit image dimensions
+
+`Match image size`, beside the image chooser, applies the selected image's
+natural pixel width and height through the existing canvas validation and one
+editor history entry. It is disabled while the image is unavailable/loading or
+outside the supported 64–16384 pixel bounds. No workflow execution is triggered.
+Normalized region geometry is preserved. Undo/Redo restores the canvas dimensions;
+stale width/height text drafts are cleared while unrelated drafts remain intact.
+The shared `useImageDimensions` observer discards callbacks from previous images
+or closed/switched editors. Footer controls wrap as groups in narrow panels.
+
+## Adaptive editor display
+
+The shared `AdaptiveImageCanvas` retains the decoded original and paints only the
+visible source crop at the viewport's current zoom and device pixel ratio. Its
+paint buffer is limited to 8 million pixels and 4096 pixels per side. This limit
+does not include the browser's decoded original image memory. Source mapping
+preserves the previous top-left `cover` behavior, including differing canvas and
+image aspect ratios. Pending image callbacks and animation frames are cancelled
+on source changes or unmount.
+
+The artboard uses viewport-sized SVGs with world-coordinate view boxes instead
+of shrinking a document-sized SVG with a CSS scale. Mask/filter bounds include
+a softness halo; selection handles may extend beyond the image edge and remain
+clipped by the outer viewport. The full scaled pointer target preserves existing
+normalized region coordinates. Original images, document dimensions, backend
+generation and serialization are unaffected. Geometry tests cover large images,
+zoom/pan, high DPR, buffer budgets, cover mapping and offscreen views; actual
+interactive performance still requires a live editor check.

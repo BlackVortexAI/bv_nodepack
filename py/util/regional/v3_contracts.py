@@ -4,10 +4,12 @@ from .context import CapabilityRegistry
 from .detailer_v3 import DETAILER_CAPABILITY, DETAILER_CAPABILITY_REGISTRY
 from .lora_v3 import LORA_CAPABILITY, LORA_CAPABILITY_REGISTRY
 from .lut_v3 import LUT_CAPABILITY, LUT_CAPABILITY_REGISTRY
+from .reference_registry import REFERENCE_REGISTRATION
 
 
 def regional_v3_capability_registry() -> CapabilityRegistry:
     registry = CapabilityRegistry()
+    registry.register("bv-nodepack", "references", REFERENCE_REGISTRATION, source=__name__)
     registry.register(
         "bv-nodepack", "lora", LORA_CAPABILITY_REGISTRY.get(LORA_CAPABILITY), source=__name__,
     )

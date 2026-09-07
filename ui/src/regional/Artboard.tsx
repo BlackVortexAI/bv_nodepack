@@ -1,9 +1,11 @@
-import React, { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import React, { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/components";
 import { Bounds, Handle } from "./geometry";
 import { Geometry, geometryAuthoring, geometryLayerId, geometryMaskGroups, Point, RegionalDocument, Region } from "./model";
 import { regionsInPaintOrder } from "./interaction";
 import { RegionalToolPalette, type BrushSettings, type Tool } from "../ui/components";
+import {AdaptiveImageCanvas} from "../ui/AdaptiveImageCanvas";
+import {visibleImageViewport,paddedViewport} from "../ui/viewportImage";
 import type { ArtboardView } from "./editorState";
 
 type Props = {
@@ -36,12 +38,12 @@ type Props = {
 
 const HANDLES: Array<{ id: Handle; x: number; y: number }> = [{ id: "nw", x: 0, y: 0 }, { id: "n", x: .5, y: 0 }, { id: "ne", x: 1, y: 0 }, { id: "e", x: 1, y: .5 }, { id: "se", x: 1, y: 1 }, { id: "s", x: .5, y: 1 }, { id: "sw", x: 0, y: 1 }, { id: "w", x: 0, y: .5 }];
 
-function MaskShape({ geometry, canvas }: { geometry: Geometry; canvas: RegionalDocument["canvas"] }) {
+function MaskShape({ geometry, canvas, bounds }: { geometry: Geometry; canvas: RegionalDocument["canvas"]; bounds: {x:number;y:number;width:number;height:number} }) {
     const color = geometry.operation === "add" ? "white" : "black";
     if (geometry.type === "rect") return <rect x={geometry.x * canvas.width} y={geometry.y * canvas.height} width={geometry.width * canvas.width} height={geometry.height * canvas.height} fill={color}/>;
     if (geometry.type === "ellipse") return <ellipse cx={(geometry.x + geometry.width / 2) * canvas.width} cy={(geometry.y + geometry.height / 2) * canvas.height} rx={geometry.width * canvas.width / 2} ry={geometry.height * canvas.height / 2} fill={color}/>;
     if (geometry.type === "polygon") return <polygon points={geometry.points.map(point => `${point.x * canvas.width},${point.y * canvas.height}`).join(" ")} fill={color}/>;
-    if (geometry.type === "raster_mask") { const id = `raster-${geometry.id}`; return <><defs><mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><image href={geometry.data_url} x={geometry.x * canvas.width} y={geometry.y * canvas.height} width={geometry.width * canvas.width} height={geometry.height * canvas.height} preserveAspectRatio="none"/></mask></defs><rect width={canvas.width} height={canvas.height} fill={color} mask={`url(#${id})`}/></>; }
+    if (geometry.type === "raster_mask") { const id = `raster-${geometry.id}`; return <><defs><mask id={id} maskUnits="userSpaceOnUse" {...bounds}><image href={geometry.data_url} x={geometry.x * canvas.width} y={geometry.y * canvas.height} width={geometry.width * canvas.width} height={geometry.height * canvas.height} preserveAspectRatio="none"/></mask></defs><rect width={canvas.width} height={canvas.height} fill={color} mask={`url(#${id})`}/></>; }
     const cap = geometry.shape === "square" ? "square" : "round", size = geometry.size * Math.min(canvas.width, canvas.height), blurId = `bv-brush-soft-${geometry.id}`;
     const softness = (1 - geometry.hardness) * size / 6;
     const softFilter = softness > .05 ? `url(#${blurId})` : undefined;
@@ -49,11 +51,11 @@ function MaskShape({ geometry, canvas }: { geometry: Geometry; canvas: RegionalD
         const point = geometry.points[0], diameter = size * point.pressure;
         const outer = geometry.shape === "square" ? <rect x={point.x * canvas.width - diameter / 2} y={point.y * canvas.height - diameter / 2} width={diameter} height={diameter} fill={color} fillOpacity={geometry.opacity} filter={softFilter}/> : <circle cx={point.x * canvas.width} cy={point.y * canvas.height} r={diameter / 2} fill={color} fillOpacity={geometry.opacity} filter={softFilter}/>;
         const core = diameter * geometry.hardness;
-        return <><defs>{softFilter && <filter id={blurId} filterUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><feGaussianBlur stdDeviation={softness}/></filter>}</defs>{outer}{core > 0 && (geometry.shape === "square" ? <rect x={point.x * canvas.width - core / 2} y={point.y * canvas.height - core / 2} width={core} height={core} fill={color} fillOpacity={geometry.opacity}/> : <circle cx={point.x * canvas.width} cy={point.y * canvas.height} r={core / 2} fill={color} fillOpacity={geometry.opacity}/>)}</>;
+        return <><defs>{softFilter && <filter id={blurId} filterUnits="userSpaceOnUse" {...bounds}><feGaussianBlur stdDeviation={softness}/></filter>}</defs>{outer}{core > 0 && (geometry.shape === "square" ? <rect x={point.x * canvas.width - core / 2} y={point.y * canvas.height - core / 2} width={core} height={core} fill={color} fillOpacity={geometry.opacity}/> : <circle cx={point.x * canvas.width} cy={point.y * canvas.height} r={core / 2} fill={color} fillOpacity={geometry.opacity}/>)}</>;
     }
     if ((geometry.pressure_mode ?? "constant") === "constant") {
         const path = geometry.points.map((point, index) => `${index ? "L" : "M"}${point.x * canvas.width},${point.y * canvas.height}`).join(" ");
-        return <><defs>{softFilter && <filter id={blurId} filterUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><feGaussianBlur stdDeviation={softness}/></filter>}</defs><path d={path} fill="none" stroke={color} strokeOpacity={geometry.opacity} strokeWidth={size} strokeLinecap={cap} strokeLinejoin={cap === "round" ? "round" : "miter"} filter={softFilter}/>{geometry.hardness > 0 && <path d={path} fill="none" stroke={color} strokeOpacity={geometry.opacity} strokeWidth={size * geometry.hardness} strokeLinecap={cap} strokeLinejoin={cap === "round" ? "round" : "miter"}/>}</>;
+        return <><defs>{softFilter && <filter id={blurId} filterUnits="userSpaceOnUse" {...bounds}><feGaussianBlur stdDeviation={softness}/></filter>}</defs><path d={path} fill="none" stroke={color} strokeOpacity={geometry.opacity} strokeWidth={size} strokeLinecap={cap} strokeLinejoin={cap === "round" ? "round" : "miter"} filter={softFilter}/>{geometry.hardness > 0 && <path d={path} fill="none" stroke={color} strokeOpacity={geometry.opacity} strokeWidth={size * geometry.hardness} strokeLinecap={cap} strokeLinejoin={cap === "round" ? "round" : "miter"}/>}</>;
     }
     return <>{geometry.points.slice(1).map((end, index) => { const start = geometry.points[index], pressure = (start.pressure + end.pressure) / 2; return <line key={index} x1={start.x * canvas.width} y1={start.y * canvas.height} x2={end.x * canvas.width} y2={end.y * canvas.height} stroke={color} strokeOpacity={geometry.opacity} strokeWidth={size * pressure} strokeLinecap={cap}/>; })}</>;
 }
@@ -71,14 +73,16 @@ function PreviewShape({ geometry, canvas, cursor, activePolygon }: { geometry: G
     return <path className={className} d={path} strokeWidth={geometry.size * Math.min(canvas.width, canvas.height)} strokeLinecap={geometry.shape === "square" ? "square" : "round"}/>;
 }
 
-function RegionMask({ region, geometries, canvas, opacity, resolved }: { region: Region; geometries: Geometry[]; canvas: RegionalDocument["canvas"]; opacity: number; resolved?: boolean }) {
+const RegionMask=React.memo(function RegionMask({ region, geometries, canvas, opacity, resolved, view }: { region: Region; geometries: Geometry[]; canvas: RegionalDocument["canvas"]; opacity: number; resolved?: boolean; view: ReturnType<typeof visibleImageViewport> }) {
+    const padding=Math.max(64,...geometries.map(geometry=>geometry.type==="brush_stroke"?(1-geometry.hardness)*geometry.size*Math.min(canvas.width,canvas.height)/2:0));
+    const bounds=paddedViewport(view,canvas.width,canvas.height,padding);
     const layers = geometryMaskGroups(geometries).filter(layer => layer.enabled && (resolved || layer.geometries.some((geometry, index) => geometryAuthoring(geometry, index).visible)));
     const filterId = `bv-feather-${region.id}`, radius = Math.min(64, Math.round(region.mask.feather * Math.min(canvas.width, canvas.height))), deviation = radius / 3;
-    return <g opacity={opacity}>{resolved && radius > 0 && <defs><filter id={filterId} filterUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><feGaussianBlur stdDeviation={deviation}/></filter></defs>}<g filter={resolved && radius > 0 ? `url(#${filterId})` : undefined}>{layers.map(layer => {
+    return <g opacity={opacity}>{resolved && radius > 0 && <defs><filter id={filterId} filterUnits="userSpaceOnUse" {...bounds}><feGaussianBlur stdDeviation={deviation}/></filter></defs>}<g filter={resolved && radius > 0 ? `url(#${filterId})` : undefined}>{layers.map(layer => {
         const id = `bv-mask-${region.id}-${layer.id}`;
-        return <g key={layer.id}><defs><mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width={canvas.width} height={canvas.height}><rect width={canvas.width} height={canvas.height} fill="black"/>{layer.geometries.filter((geometry, index) => geometry.enabled !== false && (resolved || geometryAuthoring(geometry, index).visible)).map(geometry => <MaskShape key={geometry.id} geometry={geometry} canvas={canvas}/>)}</mask></defs><rect width={canvas.width} height={canvas.height} fill={region.authoring.color} mask={`url(#${id})`}/></g>;
+        return <g key={layer.id}><defs><mask id={id} maskUnits="userSpaceOnUse" {...bounds}><rect width={canvas.width} height={canvas.height} fill="black"/>{layer.geometries.filter((geometry, index) => geometry.enabled !== false && (resolved || geometryAuthoring(geometry, index).visible)).map(geometry => <MaskShape key={geometry.id} geometry={geometry} canvas={canvas} bounds={bounds}/>)}</mask></defs><rect width={canvas.width} height={canvas.height} fill={region.authoring.color} mask={`url(#${id})`}/></g>;
     })}</g></g>;
-}
+});
 
 export default function Artboard(props: Props) {
     const { document, selectedLayerId, selectedRegionId } = props;
@@ -98,7 +102,7 @@ export default function Artboard(props: Props) {
         window.addEventListener("keydown", down, true); window.addEventListener("keyup", up, true); return () => { window.removeEventListener("keydown", down, true); window.removeEventListener("keyup", up, true); };
     }, []);
     const geometriesFor = (region: Region) => {
-        let geometries = [...region.geometry];
+        let geometries = region.geometry;
         if (props.draft && region.id === selectedRegionId) {
             const ids = new Set(props.draft.map(item => item.id));
             geometries = geometries.map(item => ids.has(item.id) ? props.draft!.find(draft => draft.id === item.id)! : item);
@@ -122,25 +126,20 @@ export default function Artboard(props: Props) {
     const endPan = (event: React.PointerEvent<HTMLDivElement>) => { if (!panGesture.current) return; event.preventDefault(); event.stopPropagation(); panGesture.current = null; };
     const stageLeft = viewportSize.width / 2 - document.canvas.width * zoom / 2 + pan.x, stageTop = viewportSize.height / 2 - document.canvas.height * zoom / 2 + pan.y;
     const handleSize = 10 / zoom, handleHitSize = 24 / zoom;
+    const visible=useMemo(()=>visibleImageViewport(document.canvas.width,document.canvas.height,zoom,stageLeft,stageTop,viewportSize.width,viewportSize.height),[document.canvas.width,document.canvas.height,zoom,stageLeft,stageTop,viewportSize.width,viewportSize.height]);
+    const svgViewBox=`${visible.x} ${visible.y} ${visible.width || 1} ${visible.height || 1}`;
+    const svgStyle={left:visible.left,top:visible.top,width:visible.cssWidth,height:visible.cssHeight,right:"auto",bottom:"auto",overflow:"hidden"};
     return <section className="bv-regional-work"><div ref={viewport} className={`artboard-viewport ${spacePressed ? "pan-ready" : ""}`} onWheel={onWheel} onPointerDownCapture={beginPan} onPointerMoveCapture={movePan} onPointerUpCapture={endPan} onPointerCancelCapture={endPan}>
         <RegionalToolPalette tool={props.tool} brush={props.brush} canSubtract={props.canSubtract} canvas={document.canvas} onTool={props.onTool} onBrush={props.onBrush}/>
-        <div className="artboard-stage" style={{ width: document.canvas.width, height: document.canvas.height, transform: `translate(${stageLeft}px, ${stageTop}px) scale(${zoom})` }}><div
+        <div className="artboard-stage" style={{ width: document.canvas.width*zoom, height: document.canvas.height*zoom, transform: `translate(${stageLeft}px, ${stageTop}px)` }}><div
         className={`bv-regional-canvas tool-${props.tool}`}
-        style={{ width: document.canvas.width, height: document.canvas.height }}
+        style={{ width: document.canvas.width*zoom, height: document.canvas.height*zoom }}
         onPointerDown={props.binaryMaskPreview ? undefined : props.onPointerDown} onPointerMove={props.binaryMaskPreview ? undefined : props.onPointerMove} onPointerUp={props.binaryMaskPreview ? undefined : props.onPointerUp} onPointerCancel={props.binaryMaskPreview ? undefined : props.onPointerCancel} onPointerLeave={props.onPointerLeave} onDoubleClick={props.binaryMaskPreview ? undefined : props.onDoubleClick}
     >
-        {props.background && !props.binaryMaskPreview && (
-          <div
-            className="bv-background-image"
-            style={{
-              backgroundImage: `linear-gradient(#0002,#0002), url(${JSON.stringify(props.background)})`,
-              opacity: props.backgroundOpacity,
-            }}
-          />
-        )}
-        <svg className="bv-composition" style={props.binaryMaskPreview ? { background: "black" } : undefined} viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">{regionsInPaintOrder(document.regions.filter(region => region.enabled && (props.binaryMaskPreview || region.authoring.visible))).map(region => <RegionMask key={region.id} region={props.binaryMaskPreview ? { ...region, authoring: { ...region.authoring, color: "#FFFFFF" } } : region} geometries={geometriesFor(region)} canvas={document.canvas} opacity={props.binaryMaskPreview ? 1 : props.displayOpacity} resolved={props.binaryMaskPreview}/>)}</svg>
-        {!props.binaryMaskPreview && props.draft && <svg className="bv-tool-preview" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">{props.draft.map(geometry => <PreviewShape key={geometry.id} geometry={geometry} canvas={document.canvas} cursor={props.cursor} activePolygon={props.tool.startsWith("polygon")}/>)}</svg>}
-        {!props.binaryMaskPreview && props.selectionBounds && <svg className="bv-selection-overlay" viewBox={`0 0 ${document.canvas.width} ${document.canvas.height}`} preserveAspectRatio="none">
+        {props.background && !props.binaryMaskPreview && <AdaptiveImageCanvas src={props.background} width={document.canvas.width} height={document.canvas.height} view={visible} opacity={props.backgroundOpacity}/>}
+        <svg className="bv-composition" style={{...svgStyle,background:props.binaryMaskPreview?"black":undefined}} viewBox={svgViewBox} preserveAspectRatio="none">{regionsInPaintOrder(document.regions.filter(region => region.enabled && (props.binaryMaskPreview || region.authoring.visible))).map(region => <RegionMask key={region.id} region={props.binaryMaskPreview ? { ...region, authoring: { ...region.authoring, color: "#FFFFFF" } } : region} geometries={geometriesFor(region)} canvas={document.canvas} view={visible} opacity={props.binaryMaskPreview ? 1 : props.displayOpacity} resolved={props.binaryMaskPreview}/>)}</svg>
+        {!props.binaryMaskPreview && props.draft && <svg style={{...svgStyle,overflow:"visible"}} className="bv-tool-preview" viewBox={svgViewBox} preserveAspectRatio="none">{props.draft.map(geometry => <PreviewShape key={geometry.id} geometry={geometry} canvas={document.canvas} cursor={props.cursor} activePolygon={props.tool.startsWith("polygon")}/>)}</svg>}
+        {!props.binaryMaskPreview && props.selectionBounds && <svg style={{...svgStyle,overflow:"visible"}} className="bv-selection-overlay" viewBox={svgViewBox} preserveAspectRatio="none">
             <rect className="brush-bounds" x={props.selectionBounds.x * document.canvas.width} y={props.selectionBounds.y * document.canvas.height} width={props.selectionBounds.width * document.canvas.width} height={props.selectionBounds.height * document.canvas.height}/>
             {HANDLES.map(handle => { const x = (props.selectionBounds!.x + props.selectionBounds!.width * handle.x) * document.canvas.width, y = (props.selectionBounds!.y + props.selectionBounds!.height * handle.y) * document.canvas.height; return <g key={handle.id} data-handle={handle.id} className={`resize-handle resize-handle-${handle.id}`}><rect className="resize-handle-hit" x={x - handleHitSize / 2} y={y - handleHitSize / 2} width={handleHitSize} height={handleHitSize}/><rect className="resize-handle-visible" x={x - handleSize / 2} y={y - handleSize / 2} width={handleSize} height={handleSize} rx={2 / zoom}/></g>; })}
             {props.draft && <text className="tool-preview-size" style={{ fontSize: 12 / zoom }} x={(props.selectionBounds.x + props.selectionBounds.width) * document.canvas.width - 4 / zoom} y={(props.selectionBounds.y + props.selectionBounds.height) * document.canvas.height - 7 / zoom}>{Math.round(props.selectionBounds.width * document.canvas.width)} × {Math.round(props.selectionBounds.height * document.canvas.height)} px</text>}

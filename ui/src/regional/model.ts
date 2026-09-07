@@ -1,4 +1,6 @@
-export type PromptPair = { positive_source: string; negative_source: string };
+export type ToolSettings = { lora?: boolean; lut?: boolean; references?: boolean };
+import type { ReferencePromptPair } from "../completion/referenceFields";
+export type PromptPair = ReferencePromptPair;
 export type Point = { x: number; y: number; pressure: number };
 export type Geometry =
     | { id: string; layer_id?: string; mask_group_id?: string; type: "rect"; operation: "add" | "subtract"; enabled?: boolean; authoring?: GeometryAuthoring; x: number; y: number; width: number; height: number }
@@ -11,11 +13,12 @@ export type GeometryLayer = { id: string; geometries: Geometry[]; authoring: Geo
 export type RegionUsage = "generation" | "detailer" | "both";
 export type Region = {
     id: string; name: string; parent_region_id: string | null; enabled: boolean; usage: RegionUsage; strength: number; priority: number;
-    prompts: PromptPair; mask: { feather: number }; geometry: Geometry[];
+    tool_settings?: ToolSettings; prompts: PromptPair; mask: { feather: number }; geometry: Geometry[];
     authoring: { visible: boolean; locked: boolean; color: string };
 };
 export type RegionalDocument = {
-    schema: "bv.regional"; version: 2; document_id: string; title: string;
+    reference_images?: {collector_id:string;resource_id:string;role:"source"}[];
+    tool_settings?: ToolSettings; schema: "bv.regional"; version: 2; document_id: string; title: string;
     canvas: { width: number; height: number };
     prompts: { global: PromptPair; background: PromptPair };
     negative_mode: "auto" | "prompt" | "zero_out";

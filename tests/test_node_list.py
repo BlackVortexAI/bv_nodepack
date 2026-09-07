@@ -19,6 +19,7 @@ EXPECTED_NODE_NAMES_BY_CATEGORY = {
     },
     "🌀 BV Node Pack/advanced/integrations": {"BV Detector Binding"},
     "🌀 BV Node Pack/control": {"BV Control Center"},
+    "🌀 BV Node Pack/image": {"BV Image Dimensions"},
     "🌀 BV Node Pack/latent": {
         "BV Empty Latent Random Ratio",
         "BV Latent Random Rotate 90",
@@ -56,7 +57,7 @@ EXPECTED_NODE_NAMES_BY_CATEGORY = {
         "BV Detailer Loop Detect to SEGS (Impact)",
         "BV Regional Detailer Mask",
     },
-    "🌀 BV Node Pack/regional/LoRA": {"BV LoRA Registry", "BV Regional LoRA"},
+    "🌀 BV Node Pack/regional/LoRA": {"BV LoRA Registry", "BV Regional LoRA", "BV Model Patcher"},
     "🌀 BV Node Pack/regional/LoRA/Manual Chains (Optional)": {
         "BV LoRA Stack Collector",
         "BV Named LoRA Stack",

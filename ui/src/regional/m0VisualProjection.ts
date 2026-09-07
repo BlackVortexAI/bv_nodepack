@@ -222,7 +222,7 @@ export function installM0CanvasVisibility(canvas: any) {
         if(virtualIo)suppressVirtualIoSlots(this.graph,restores);
         for(const slot of presentationSlots){
             if((slot as any).__bvLegacyPort&&dragType&&slot.type===dragType)continue;
-            if(!providerType(slot.type)&&!slot.__bvM0PortHidden)continue;
+            if(!providerType(slot.type)&&!slot.__bvM0PortHidden&&!((slot as any).__bvPresentationRole==="fanIn"&&slot.hidden))continue;
             for(const field of ["name","label","localized_name"] as const){
                 const own=Object.prototype.hasOwnProperty.call(slot,field),value=slot[field];
                 Object.defineProperty(slot,field,{configurable:true,writable:true,value:""});

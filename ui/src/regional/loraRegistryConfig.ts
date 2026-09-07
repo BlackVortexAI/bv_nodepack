@@ -16,7 +16,7 @@ export type LoraCatalogItem={
 };
 export type LoraCatalog={schema:"bv.lora_catalog";version:1;items:LoraCatalogItem[]};
 export type LoraRegistryEntry={id:string;lora_name:string;enabled:boolean;model_strength:number;clip_strength:number};
-export type LoraRegistryStack={id:string;name:string;enabled:boolean;entries:LoraRegistryEntry[]};
+export type LoraRegistryStack={id:string;name:string;enabled:boolean;role?:"normal"|"basis";entries:LoraRegistryEntry[]};
 export type LoraRegistryConfig={schema:"bv.lora_registry_config";version:1;registry_id:string;stacks:LoraRegistryStack[]};
 
 const freshId=()=>crypto.randomUUID();
@@ -34,7 +34,7 @@ const exactKeys=(value:Record<string,unknown>,allowed:string[])=>Object.keys(val
 const optionalBoolean=(value:Record<string,unknown>,key:string)=>!(key in value)||typeof value[key]==="boolean";
 const optionalFiniteNumber=(value:Record<string,unknown>,key:string)=>!(key in value)||(typeof value[key]==="number"&&Number.isFinite(value[key]));
 const rawEntryShape=(entry:unknown)=>record(entry)&&exactKeys(entry,["id","lora_name","enabled","model_strength","clip_strength"])&&typeof entry.id==="string"&&typeof entry.lora_name==="string"&&optionalBoolean(entry,"enabled")&&optionalFiniteNumber(entry,"model_strength")&&optionalFiniteNumber(entry,"clip_strength");
-const rawStackShape=(stack:unknown)=>record(stack)&&exactKeys(stack,["id","name","enabled","entries"])&&typeof stack.id==="string"&&typeof stack.name==="string"&&optionalBoolean(stack,"enabled")&&Array.isArray(stack.entries)&&stack.entries.every(rawEntryShape);
+const rawStackShape=(stack:unknown)=>record(stack)&&exactKeys(stack,["id","name","enabled","entries","role"])&&(!("role" in stack)||stack.role==="normal"||stack.role==="basis")&&typeof stack.id==="string"&&typeof stack.name==="string"&&optionalBoolean(stack,"enabled")&&Array.isArray(stack.entries)&&stack.entries.every(rawEntryShape);
 const rawConfigShape=(value:unknown):value is Record<string,unknown>=>record(value)&&exactKeys(value,["schema","version","registry_id","stacks"])&&value.schema==="bv.lora_registry_config"&&value.version===1&&typeof value.registry_id==="string"&&Array.isArray(value.stacks)&&value.stacks.every(rawStackShape);
 const safeLoraName=(value:string)=>{
     const name=logicalName(value),parts=name.split("/");
@@ -86,7 +86,7 @@ export function parseLoraRegistryConfig(value:unknown):LoraRegistryConfig{
         const parsed=typeof value==="string"?JSON.parse(value):structuredClone(value);
         if(!rawConfigShape(parsed))return{schema:"bv.lora_registry_config",version:1,registry_id:"",stacks:[]};
         const stacks:LoraRegistryStack[]=(parsed.stacks as any[]).map((source:any)=>({
-            id:normalizedUuid(source.id),name:String(source.name??"").trim(),enabled:source.enabled!==false,
+            id:normalizedUuid(source.id),name:String(source.name??"").trim(),enabled:source.enabled!==false,...(source.role==="basis"?{role:"basis" as const}:{}),
             entries:source.entries.map((item:any)=>({id:normalizedUuid(item.id),lora_name:logicalName(item.lora_name),enabled:item.enabled!==false,model_strength:finite(item.model_strength,1),clip_strength:finite(item.clip_strength,1)})),
         }));
         return{schema:"bv.lora_registry_config",version:1,registry_id:normalizedUuid(parsed.registry_id),stacks};
