@@ -48,11 +48,17 @@ class ReleasePathBoundaryTests(unittest.TestCase):
             root = Path(directory)
             outside = root / "outside"
             outside.mkdir()
-            self._symlink(root / "bv_logs", outside, True)
-            for mode in ("append", "overwrite", "timestamped"):
-                with self.subTest(mode=mode), self.assertRaises(ValueError):
-                    write_text_log(root, "mutation", "log.txt", mode)
-            self.assertEqual(list(outside.iterdir()), [])
+            link = root / "bv_logs"
+            self._symlink(link, outside, True)
+            try:
+                for mode in ("append", "overwrite", "timestamped"):
+                    with self.subTest(mode=mode), self.assertRaises(ValueError):
+                        write_text_log(root, "mutation", "log.txt", mode)
+                self.assertEqual(list(outside.iterdir()), [])
+            finally:
+                # Remove only our link before Windows cleans the temporary tree.
+                if link.is_symlink():
+                    link.unlink()
 
     def test_default_lora_resolver_preserves_configured_absolute_and_named_paths(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -101,8 +107,12 @@ class ReleasePathBoundaryTests(unittest.TestCase):
             model.write_text("dummy")
             link = root / "configured"
             self._symlink(link, external, True)
-            result = resolve_stack_paths({"a": [(str(link / model.name), 1, 0)]}, lambda name: None, allowed_roots=[link])
-            self.assertEqual(result["a"][0][0], str(model.resolve()))
+            try:
+                result = resolve_stack_paths({"a": [(str(link / model.name), 1, 0)]}, lambda name: None, allowed_roots=[link])
+                self.assertEqual(result["a"][0][0], str(model.resolve()))
+            finally:
+                if link.is_symlink():
+                    link.unlink()
 
 
 if __name__ == "__main__":
