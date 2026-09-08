@@ -152,7 +152,7 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "verification failed"):
                 user_storage._publish_exclusive(target, b"payload")
         self.assertFalse(target.exists())
-        self.assertEqual(list(self.private.glob(f".*{user_storage.STAGING_MARKER}*")), [], "staging file cleaned")
+        self.assertEqual(list(self.private.glob(f".*{user_storage.STAGING_MARKER}*")), [], "own staging file cleaned")
 
     def test_final_name_only_appears_complete_and_is_never_removed_after_publication(self):
         target = self.private / "remote_llm_secrets.json"
@@ -213,14 +213,18 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(report_a["migrated"], [], "everything else was already migrated by B")
         self.assertEqual(list(self.private.glob(f"*{user_storage.RECOVERY_SUFFIX}")), [], "no recovery file needed")
 
-    def test_stale_staging_files_from_a_crash_are_cleaned_and_never_promoted(self):
+    def test_foreign_staging_files_are_neither_promoted_nor_removed(self):
+        # A stage left by a crash looks exactly like the stage of a process that is still
+        # writing, so another migration must leave it alone; it is never loaded either.
         self.private.mkdir(parents=True)
-        stale = self.private / f".remote_llm_secrets.json{user_storage.STAGING_MARKER}deadbeef"
-        stale.write_bytes(b"partial")
+        foreign = self.private / f".remote_llm_secrets.json{user_storage.STAGING_MARKER}deadbeef"
+        foreign.write_bytes(b"partial")
         report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
-        self.assertFalse(stale.exists())
+        self.assertEqual(foreign.read_bytes(), b"partial", "active or orphaned stage of another process untouched")
         self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), self.files["remote_llm_secrets.json"])
         self.assertIn("remote_llm_secrets.json", report["migrated"])
+        own = [p for p in self.private.glob(f".*{user_storage.STAGING_MARKER}*") if p != foreign]
+        self.assertEqual(own, [], "the migration removed only its own staging files")
 
     def test_symbolic_link_in_public_tree_is_left_alone(self):
         target = self.root / "outside.json"

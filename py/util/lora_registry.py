@@ -171,14 +171,15 @@ def resolve_lora_path(logical_name: Any, folder_paths_module=None) -> tuple[str,
     resolved = folder_paths_module.get_full_path("loras", logical)
     if not resolved:
         raise ValueError(f"LoRA file not found through ComfyUI: {logical}")
-    path = Path(resolved)
-    if not path.is_file() or path.suffix.casefold() != ".safetensors":
-        raise ValueError(f"LoRA file not found through ComfyUI: {logical}")
     roots = lora_roots(folder_paths_module)
     if roots is None:
         raise ValueError("LoRA folders are unknown; ComfyUI folder registry unavailable")
-    # Links inside a LoRA folder must not lead outside it (same rule as loading).
-    return logical, resolve_within_roots(path, roots, "LoRA path")
+    # Containment first (links inside a LoRA folder must not lead outside it), then
+    # the file itself: same order as loading.
+    path = resolve_within_roots(Path(resolved), roots, "LoRA path")
+    if not path.is_file() or path.suffix.casefold() != ".safetensors":
+        raise ValueError(f"LoRA file not found through ComfyUI: {logical}")
+    return logical, path
 
 
 def materialize_lora_registry(value: Any, folder_paths_module=None) -> tuple[dict[str, Any], str]:

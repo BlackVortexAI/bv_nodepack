@@ -119,19 +119,13 @@ def _publish_exclusive(target: Path, payload: bytes) -> None:
             raise OSError(f"verification failed for {staging}")
         os.link(staging, target)  # FileExistsError when the name is taken; no replace
     finally:
+        # Only this call's own staging file is removed. Staging files left by a crashed
+        # process stay where they are: they are never loaded and another process cannot
+        # tell them apart from a stage that is still being written.
         try:
             staging.unlink(missing_ok=True)
         except OSError:
             pass
-
-
-def _clean_stale_staging(private: Path) -> None:
-    try:
-        for stale in private.rglob(f".*{STAGING_MARKER}*"):
-            if stale.is_file() and not stale.is_symlink():
-                stale.unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 def _recovery_path(target: Path) -> Path:
@@ -176,8 +170,8 @@ def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None =
     new private file, as an identical existing private file, or as a uniquely
     named recovery file that is never loaded automatically. Regenerable caches are
     deleted, not copied. Symbolic links are left alone and reported. A failure
-    leaves the public file in place; at most a staging file (never loaded) remains
-    and is cleaned on the next run. Never raises.
+    leaves the public file in place; at most a staging file (never loaded, never
+    promoted, never removed by another process) remains. Never raises.
     """
     report: dict[str, list[str]] = {"migrated": [], "removed": [], "recovered": [], "kept": [], "failed": []}
     legacy = legacy if legacy is not None else legacy_root()
@@ -189,8 +183,6 @@ def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None =
             return report
     except OSError:
         return report
-    if private.is_dir():
-        _clean_stale_staging(private)
     for relative in LEGACY_FILES:
         source = legacy / relative
         target = private / relative

@@ -2,9 +2,11 @@
 
 One implementation for LoRA loading, LoRA previews and sidecars, model hashes and
 the LUT install directory: the candidate must lie inside a configured root both
-lexically (before touching the filesystem, which also rejects unrelated UNC paths)
-and after symbolic links are resolved. Format rules (which suffixes are allowed)
-stay with the caller because they differ per consumer.
+lexically and after symbolic links are resolved. The lexical check runs before
+any filesystem access of the candidate itself, so unrelated absolute paths (UNC
+included) are refused without being touched; the real-path check then needs
+``resolve()`` on the candidate. Format rules (which suffixes are allowed) stay
+with the caller because they differ per consumer.
 """
 from __future__ import annotations
 
@@ -30,12 +32,10 @@ def contained_file(candidate: Path, allowed_roots: Iterable[Any] | None) -> Path
     if allowed_roots is None:
         return None
     try:
-        if not candidate.is_file():
-            return None
         resolved = resolve_within_roots(candidate, allowed_roots)
+        return resolved if resolved.is_file() else None
     except (OSError, ValueError):
         return None
-    return resolved if resolved.is_file() else None
 
 
 def configured_roots(folder_paths_module: Any, category: str) -> list[str] | None:
