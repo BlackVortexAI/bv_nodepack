@@ -3,14 +3,19 @@
 Mirrors ComfyUI-Manager's local mode instead of inventing credentials: a
 state-changing management request is accepted when every address ComfyUI
 listens on is a loopback address and the request's own socket peer is a
-loopback address. Forwarded headers are never consulted, so a reverse proxy
-does not turn remote clients into local ones by itself.
+loopback address. Forwarded headers are never consulted.
+
+Known limit of this model, accepted deliberately: a reverse proxy running on
+the same machine in front of a loopback-only ComfyUI satisfies both checks for
+every client it forwards. Whoever operates such a proxy administers the host
+and must protect or block these routes there; nothing here is an
+authentication.
 
 Operators of a ``--listen`` server opt in explicitly by writing
 ``{"schema": "bv.admin.settings", "version": 1, "allow_remote_management": true}``
 to ``admin_settings.json`` in BV's private storage directory. That is a
-deliberate opening to every client that can reach the server, not an
-authentication; the file cannot be created through HTTP.
+deliberate opening to every client that can reach the server; the file cannot
+be created through HTTP.
 """
 from __future__ import annotations
 
@@ -48,7 +53,10 @@ def listen_addresses() -> list[str] | None:
     listen = getattr(args, "listen", None)
     if not isinstance(listen, str):
         return None
-    return [item.strip() for item in listen.split(",") if item.strip()]
+    # ComfyUI binds every comma-separated entry as given, including empty ones
+    # (host ""), so nothing is filtered here: an empty entry is not loopback and
+    # makes the whole listener non-local.
+    return [item.strip() for item in listen.split(",")]
 
 
 def server_is_local(addresses: list[str] | None = None) -> bool:
@@ -88,7 +96,12 @@ def management_allowed(request: Any, *, addresses: list[str] | None = None, sett
 
 
 def management_state(*, addresses: list[str] | None = None, settings_path: Path | None = None) -> dict[str, Any]:
-    """Server-side view for the UI: whether management routes accept requests at all."""
+    """Server capability for the UI, not a per-request decision.
+
+    ``allowed`` says whether this server can accept management requests from
+    anyone (loopback-only listener, or operator opt-in); a particular remote
+    client may still be refused by ``management_allowed``.
+    """
     remote = allow_remote_management(settings_path)
     local = server_is_local(addresses)
     return {"allowed": remote or local, "local_server": local, "remote_management": remote}

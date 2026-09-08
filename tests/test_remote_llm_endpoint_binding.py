@@ -245,6 +245,12 @@ class EndpointBindingTests(unittest.TestCase):
         self.assertEqual(asyncio.run(invoke(valid, remote='192.168.1.20')).status, 403)
         self.assertEqual(asyncio.run(invoke(valid, listen=('0.0.0.0', '::'))).status, 403)
         self.assertEqual(self.path.read_bytes(), before)
+        async def delete(remote):
+            with patch.object(admin_gate, 'listen_addresses', return_value=['127.0.0.1']), \
+                    patch.object(admin_gate, 'default_admin_settings_path', return_value=None):
+                return await routes.remote_llm_delete_api_key(SimpleNamespace(match_info={'profile_id': 'openai-compatible'}, remote=remote))
+        self.assertEqual(asyncio.run(delete('192.168.1.20')).status, 403)
+        self.assertEqual(self.path.read_bytes(), before)
         response = asyncio.run(invoke(valid))
         self.assertEqual(response.status, 200)
         status = asyncio.run(routes.remote_llm_providers(None))

@@ -45,6 +45,18 @@ class LoopbackTests(unittest.TestCase):
         with patch.dict(sys.modules, {"comfy": None, "comfy.cli_args": None}):
             self.assertIsNone(admin_gate.listen_addresses())
 
+    def test_empty_listen_entries_make_the_server_non_local(self):
+        # ComfyUI passes every split entry to TCPSite, so "127.0.0.1," also binds host "".
+        comfy = types.ModuleType("comfy")
+        comfy.__path__ = []
+        for listen in ("127.0.0.1,", ",127.0.0.1", "127.0.0.1,,::1", " , ", ""):
+            cli = types.ModuleType("comfy.cli_args")
+            cli.args = SimpleNamespace(listen=listen)
+            with self.subTest(listen=listen), patch.dict(sys.modules, {"comfy": comfy, "comfy.cli_args": cli}):
+                addresses = admin_gate.listen_addresses()
+                self.assertIn("", addresses)
+                self.assertFalse(server_is_local(addresses))
+
 
 class ManagementDecisionTests(unittest.TestCase):
     def setUp(self):
@@ -78,6 +90,12 @@ class ManagementDecisionTests(unittest.TestCase):
         request = SimpleNamespace(remote="10.0.0.9", headers={"X-Forwarded-For": "127.0.0.1", "X-Real-IP": "127.0.0.1"})
         allowed, _ = management_allowed(request, addresses=["127.0.0.1"], settings_path=self.settings)
         self.assertFalse(allowed)
+
+    def test_local_proxy_peer_is_the_accepted_limit_of_the_model(self):
+        # A reverse proxy on the same host is a loopback peer; its forwarded origin is not consulted.
+        request = SimpleNamespace(remote="127.0.0.1", headers={"X-Forwarded-For": "203.0.113.7"})
+        allowed, _ = management_allowed(request, addresses=["127.0.0.1"], settings_path=self.settings)
+        self.assertTrue(allowed, "documented limit: the proxy operator administers the host")
 
     def test_operator_opt_in_requires_a_well_formed_private_file(self):
         self.assertFalse(allow_remote_management(self.settings))
