@@ -124,6 +124,11 @@ class RegionalDocumentTests(unittest.TestCase):
         }
         document["regions"][0]["geometry"] = [shape]
         self.assertEqual(parse_document(document)["regions"][0]["geometry"][0]["type"], "raster_mask")
+        oversized = dict(shape, pixel_width=8192, pixel_height=8192)  # 64 MP, above the 32 MP budget
+        document["regions"][0]["geometry"] = [oversized]
+        with self.assertRaisesRegex(ValueError, "pixels"):
+            parse_document(document)
+        document["regions"][0]["geometry"] = [shape]
         shape["data_url"] = "data:image/png;base64,bm90IGEgcG5n"
         with self.assertRaisesRegex(RegionalValidationError, "PNG data"):
             parse_document(document)

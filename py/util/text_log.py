@@ -55,13 +55,14 @@ def _reject_log_alias(path: Path) -> None:
 def write_text_log(output_root: str | Path, text: object, log_name: object, mode: str) -> Path:
     if mode not in LOG_MODES:
         raise ValueError(f"Unsupported BV text log mode '{mode}'")
+    # Validate the name before touching the filesystem at all.
+    safe_name = safe_log_name(log_name)
+    content = str(text)
     log_directory = Path(output_root).resolve() / LOG_DIRECTORY_NAME
     _reject_log_alias(log_directory)
     log_directory.mkdir(parents=True, exist_ok=True)
     _reject_log_alias(log_directory)
-    safe_name = safe_log_name(log_name)
     target = log_directory / safe_name
-    content = str(text)
 
     if mode == "timestamped":
         suffix = target.suffix

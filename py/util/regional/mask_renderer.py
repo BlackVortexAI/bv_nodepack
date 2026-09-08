@@ -10,7 +10,7 @@ import torch.nn.functional as functional
 from PIL import Image, ImageDraw
 
 from .context import context_document
-from .document import region_used_for
+from .document import MAX_RASTER_PIXELS, region_used_for
 
 
 def _rect(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
@@ -70,9 +70,12 @@ def _brush(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
 def _raster(shape: dict[str, Any], width: int, height: int) -> torch.Tensor:
     payload = base64.b64decode(shape["data_url"].split(",", 1)[1], validate=True)
     with Image.open(io.BytesIO(payload)) as source:
-        source.load()
+        # Header only so far: check format, declared size and the pixel budget before decoding.
         if source.format != "PNG" or source.width != shape["pixel_width"] or source.height != shape["pixel_height"]:
             raise ValueError("raster_mask PNG dimensions do not match its document metadata")
+        if source.width * source.height > MAX_RASTER_PIXELS:
+            raise ValueError(f"raster_mask exceeds the {MAX_RASTER_PIXELS} pixel budget")
+        source.load()
         alpha = source.convert("RGBA").getchannel("A")
         x0 = max(0, min(width - 1, round(shape["x"] * width)))
         y0 = max(0, min(height - 1, round(shape["y"] * height)))

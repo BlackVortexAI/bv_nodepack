@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -24,6 +25,9 @@ CatalogChannel = Literal["stable", "experimental"]
 CATALOG_CHANNELS: tuple[CatalogChannel, ...] = ("stable", "experimental")
 MAX_LUT_BYTES = 8 * 1024 * 1024
 MAX_CATALOG_BYTES = 1024 * 1024
+MAX_PARALLEL_INSTALLS = 2
+_INSTALL_LOCK = threading.Lock()
+_INSTALLS_IN_FLIGHT: set[str] = set()
 CATALOG_TIMEOUT_SECONDS = 10
 CATALOG_PATH = Path(__file__).with_name("lut_catalog.json")
 EXPERIMENTAL_CATALOG_PATH = Path(__file__).with_name("lut_catalog.experimental.json")
@@ -441,9 +445,12 @@ def _install_root(folder_paths_module=None) -> Path:
         import folder_paths as folder_paths_module
     models_dir = Path(folder_paths_module.models_dir)
     root = models_dir / "luts" / "downloaded"
-    root.mkdir(parents=True, exist_ok=True)
     # A linked "luts" or "downloaded" directory must not redirect installs outside models/.
+    # Check before creating anything (resolve() tolerates missing final components) and
+    # again afterwards, so no directory is ever created outside models/.
     try:
+        resolve_within_roots(root, [models_dir], "LUT install directory")
+        root.mkdir(parents=True, exist_ok=True)
         resolve_within_roots(root, [models_dir], "LUT install directory")
     except ValueError as error:
         raise LutCatalogError(str(error)) from error
@@ -477,26 +484,40 @@ async def install_catalog_lut(entry_id: str, *, channel: str, catalog_version: i
     service = catalog_service or CATALOG_SERVICE
     selected = _channel(channel)
     entry = service.installation_snapshot(entry_id, selected, catalog_version)
-    payload = await fetch(approved_download_url(entry["download_url"]))
-    if len(payload) > MAX_LUT_BYTES:
-        raise ValueError("LUT download exceeds the size limit")
-    digest = hashlib.sha256(payload).hexdigest()
-    if digest.lower() != entry["sha256"].lower():
-        raise ValueError("LUT checksum does not match the catalog")
     root = _install_root(folder_paths_module)
     target = root / entry["filename"]
-    descriptor, temporary_name = tempfile.mkstemp(prefix=".bv-lut-", suffix=".cube", dir=root)
-    temporary = Path(temporary_name)
+    # Cheap checks first: nothing is downloaded for a file that already exists, for an
+    # entry that is already being installed, or beyond the global install concurrency.
+    if target.exists():
+        raise FileExistsError(f"LUT already exists: {target.name}")
+    with _INSTALL_LOCK:
+        if entry["id"] in _INSTALLS_IN_FLIGHT:
+            raise LutCatalogConflictError(f"LUT is already being installed: {entry['id']}")
+        if len(_INSTALLS_IN_FLIGHT) >= MAX_PARALLEL_INSTALLS:
+            raise LutCatalogConflictError("Too many LUT installations are running; try again in a moment")
+        _INSTALLS_IN_FLIGHT.add(entry["id"])
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(payload)
-        parsed = parse_cube(temporary)
-        with service.install_publish_guard(entry, selected, catalog_version):
-            if target.exists():
-                raise FileExistsError(f"LUT already exists: {target.name}")
-            temporary.replace(target)
+        payload = await fetch(approved_download_url(entry["download_url"]))
+        if len(payload) > MAX_LUT_BYTES:
+            raise ValueError("LUT download exceeds the size limit")
+        digest = hashlib.sha256(payload).hexdigest()
+        if digest.lower() != entry["sha256"].lower():
+            raise ValueError("LUT checksum does not match the catalog")
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".bv-lut-", suffix=".cube", dir=root)
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+            parsed = await asyncio.to_thread(parse_cube, temporary)
+            with service.install_publish_guard(entry, selected, catalog_version):
+                if target.exists():
+                    raise FileExistsError(f"LUT already exists: {target.name}")
+                temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
     finally:
-        temporary.unlink(missing_ok=True)
+        with _INSTALL_LOCK:
+            _INSTALLS_IN_FLIGHT.discard(entry["id"])
     if folder_paths_module is None:
         import folder_paths as folder_paths_module
     _refresh_lut_cache(folder_paths_module)

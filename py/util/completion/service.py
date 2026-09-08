@@ -10,6 +10,8 @@ from .dataset import CompletionDataset
 ROOT = Path(__file__).resolve().parents[3]
 LOCAL_DATA_DIR = ROOT / "data" / "completion"
 ENVIRONMENT_KEY = "BV_COMPLETION_DATASET"
+MAX_TERM_LENGTH = 256
+MAX_SELECTED_DATASETS = 32
 
 
 class CompletionService:
@@ -28,6 +30,7 @@ class CompletionService:
 
     def search(self, term: str, limit: int = 20, selected: list[str] | None = None):
         safe_limit = max(1, min(int(limit), 100))
+        term = str(term or "")[:MAX_TERM_LENGTH]
         paths = self.resolve_paths(selected)
         merged = {}
         for path in paths:
@@ -54,7 +57,13 @@ class CompletionService:
         if selected is None:
             return [candidate.resolve() for candidate in candidates]
         by_name = {candidate.name: candidate.resolve() for candidate in candidates}
-        return [by_name[name] for name in selected if name in by_name]
+        # Each dataset is searched at most once, whatever the request repeats or pads.
+        chosen: list[Path] = []
+        for name in selected[:MAX_SELECTED_DATASETS]:
+            path = by_name.get(str(name))
+            if path is not None and path not in chosen:
+                chosen.append(path)
+        return chosen
 
     def _get_dataset(self, path: Path):
         with self._lock:

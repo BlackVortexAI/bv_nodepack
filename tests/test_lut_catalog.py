@@ -583,6 +583,48 @@ class LutCatalogTests(unittest.TestCase):
                 (models / "luts" / "downloaded").unlink()
             self.assertEqual(_install_root(SimpleNamespace(models_dir=str(models))), models / "luts" / "downloaded")
 
+    def test_install_root_creates_nothing_behind_a_linked_parent(self):
+        from py.util.lut_catalog import _install_root
+
+        with tempfile.TemporaryDirectory() as directory:
+            models = Path(directory) / "models"
+            models.mkdir()
+            outside = Path(directory) / "elsewhere"
+            outside.mkdir()
+            try:
+                (models / "luts").symlink_to(outside, target_is_directory=True)  # "downloaded" does not exist yet
+            except OSError as error:
+                self.skipTest(f"Symlink privilege unavailable: {error}")
+            try:
+                with self.assertRaisesRegex(LutCatalogError, "outside"):
+                    _install_root(SimpleNamespace(models_dir=str(models)))
+                self.assertEqual(list(outside.iterdir()), [], "no directory was created outside models/")
+            finally:
+                (models / "luts").unlink()
+
+    def test_install_checks_existence_and_concurrency_before_downloading(self):
+        from py.util import lut_catalog as module
+
+        async def fetch(_url):
+            raise AssertionError("must not download")
+
+        with tempfile.TemporaryDirectory() as root:
+            fake = SimpleNamespace(models_dir=root, filename_list_cache={}, cache_helper=SimpleNamespace(clear=lambda: None))
+            service = self._install_service(root)
+            target = Path(root) / "luts" / "downloaded" / "Fieldnote.cube"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"present")
+            with self.assertRaises(FileExistsError):
+                asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, folder_paths_module=fake, catalog_service=service))
+            target.unlink()
+            with patch.object(module, "_INSTALLS_IN_FLIGHT", {"lumix-fieldnote"}):
+                with self.assertRaisesRegex(LutCatalogConflictError, "already being installed"):
+                    asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, folder_paths_module=fake, catalog_service=service))
+            with patch.object(module, "_INSTALLS_IN_FLIGHT", {"other-1", "other-2"}), patch.object(module, "MAX_PARALLEL_INSTALLS", 2):
+                with self.assertRaisesRegex(LutCatalogConflictError, "Too many"):
+                    asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, folder_paths_module=fake, catalog_service=service))
+            self.assertEqual(module._INSTALLS_IN_FLIGHT, set(), "in-flight marker is released")
+
     def test_install_rejects_tampered_download_url_before_fetch(self):
         entry = deepcopy(load_lut_catalog(CATALOG_PATH, channel="stable")["entries"][0])
         entry["download_url"] = "https://evil.invalid/a.cube"
