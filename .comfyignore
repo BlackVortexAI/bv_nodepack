@@ -4,3 +4,4 @@ tests/
 ui/
 .tmp/
 user/
+.github/

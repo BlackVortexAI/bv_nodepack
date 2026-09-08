@@ -57,7 +57,7 @@ class RegionalPromptEnhancerTests(unittest.TestCase):
         )
         for name in names:
             with self.subTest(name=name):
-                value = json.loads((ROOT / "examples" / name).read_text(encoding="utf-8"))
+                value = json.loads((ROOT / "tests" / "fixtures" / "regional" / "enhancer" / name).read_text(encoding="utf-8"))
                 self.assertEqual(parse_document(value), value)
 
     def test_prompt_bundle_loads_balanced_policy_and_metadata(self):

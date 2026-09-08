@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "anima-single-regional-lora-v1",
-      "workflow": "examples/workflows/anima-regional-skin-tone-lora-hybrid-035.json",
+      "workflow": "tests/fixtures/workflows/anima-regional-skin-tone-lora-hybrid-035.json",
       "prompt_node_id": 1,
       "document_version_before": 1,
       "region_count": 2,
@@ -21,7 +21,7 @@
     },
     {
       "id": "anima-dual-regional-lora-v1",
-      "workflow": "examples/workflows/anima-dual-regional-character-loras-hybrid-035.json",
+      "workflow": "tests/fixtures/workflows/anima-dual-regional-character-loras-hybrid-035.json",
       "prompt_node_id": 1,
       "document_version_before": 1,
       "region_count": 2,
@@ -41,7 +41,7 @@
   "detailer_cases": [
     {
       "id": "detailer-two-jobs-two-resources",
-      "workflow": "examples/workflows/bv-regional-v3-detailer-loop-two-jobs.json",
+      "workflow": "tests/fixtures/workflows/bv-regional-v3-detailer-loop-two-jobs.json",
       "prompt_node_id": 7,
       "plan_node_id": 8,
       "collector_node_id": 15,

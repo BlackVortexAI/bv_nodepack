@@ -21,7 +21,7 @@ class ExampleWorkflowTests(unittest.TestCase):
     @staticmethod
     def detailer_workflow():
         return json.loads(
-            (ROOT / "examples" / "workflows" / "bv-regional-v3-detailer-loop-two-jobs.json")
+            (ROOT / "tests" / "fixtures" / "workflows" / "bv-regional-v3-detailer-loop-two-jobs.json")
             .read_text(encoding="utf-8")
         )
 

@@ -11,10 +11,11 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.4.1** closes the remaining workflow-reachable file, model
-> and endpoint boundaries: text logs are limited to text formats, Regional LoRAs
-> to `.safetensors` files inside the configured LoRA folders, and the Remote LLM
-> destination is no longer a workflow widget. It builds on **1.4.0**, which added
+> **BV Node Pack 1.4.2** moves API keys, settings and catalogs into ComfyUI's
+> private System User directory, limits management actions to local clients,
+> pins LUT downloads to one host and applies folder containment to every file
+> the pack reads. **1.4.1** closed the workflow-reachable file, model and
+> endpoint boundaries. Both build on **1.4.0**, which added
 > reference-driven regional editing, one workflow-wide Global LoRA Registry,
 > automatic MODEL/CLIP preparation and improved Registry, catalog and Quick Edit UI.
 > The [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) contains the full
@@ -42,6 +43,33 @@ Restart ComfyUI and hard-refresh the browser after installation or update.
 Registry review remains open in [issue #217](https://github.com/Comfy-Org/registry-backend/issues/217).
 Registry publication, security-review status and the version offered by Manager are
 separate states; Manager may offer an older version while review is pending.
+
+### Updating to 1.4.2
+
+- BV runtime files move from `user/default/bv_nodepack/` to ComfyUI's private
+  System User directory `user/__bv_nodepack/`, which ComfyUI never serves over
+  HTTP. The move happens once at startup: settings, API keys, LUT catalogs and
+  caches are copied, verified and then removed from the public folder. If a
+  private file already exists and differs, the public content is kept next to it
+  as a `*.recovered` file that is never loaded. Until this update the public files
+  were potentially readable through ComfyUI's `/userdata` API by anyone who could
+  reach the server; consider rotating API keys if that applies to your setup.
+- On a ComfyUI without the System User API (older versions) BV stores nothing in
+  the public folder: API-key providers and catalog updates are disabled with a
+  clear message, everything else keeps working. Update ComfyUI to restore them.
+- Management actions (saving or deleting API keys, installing LUTs, switching the
+  catalog channel) are accepted only from clients on the same machine while
+  ComfyUI listens on a loopback address, like ComfyUI-Manager's local mode. For
+  a `--listen` server, either edit the files in `user/__bv_nodepack/` directly or
+  create `admin_settings.json` there with
+  `{"schema": "bv.admin.settings", "version": 1, "allow_remote_management": true}`,
+  which deliberately opens these actions to every client that can reach the server.
+- LUT catalogs and downloads come only from `raw.githubusercontent.com`, without
+  following redirects. Foreign catalogs are not supported; place your own `.cube`
+  files in the LUT folder instead.
+- Previews, sidecars and model hashes follow the same folder containment as LoRA
+  loading: a link inside a model folder that leads outside it is ignored.
+- Restart ComfyUI and reload the browser after updating both backend and frontend.
 
 ### Updating to 1.4.1
 
@@ -81,8 +109,16 @@ separate states; Manager may offer an older version while review is pending.
   The catalog identifies an older running backend instead of presenting missing
   routing fields as a compatibility result.
 
-The following safeguards from 1.3.0 still apply:
+The following safeguards from 1.3.0 to 1.4.2 apply together:
 
+- All BV runtime files (`remote_llm_settings.json`, `remote_llm_secrets.json`,
+  `admin_settings.json`, LUT catalogs, caches) live in ComfyUI's private
+  `user/__bv_nodepack/` directory, which the `/userdata` API never serves.
+  Nothing is read from the public `user/default/` tree any more.
+- Management routes (API keys, LUT install, catalog channel) answer only local
+  clients of a loopback-only ComfyUI unless `allow_remote_management` is set in
+  the private `admin_settings.json`. This mirrors ComfyUI-Manager's local mode
+  and is not an authentication: a reverse proxy on the same machine is local.
 - Re-enter existing API keys for custom OpenAI-compatible providers through
   **Configure API Key** and confirm the displayed destination. Keys are bound to
   that full endpoint; redirects are blocked. Fixed-provider legacy keys retain
@@ -90,15 +126,20 @@ The following safeguards from 1.3.0 still apply:
 - **BV Remote LLM Provider** has no endpoint widget any more. The destination is
   decided by the backend only: the catalog address for fixed profiles, the
   approved API-key binding for custom bearer profiles, and the optional
-  `profile_defaults.<profile>.custom_endpoint` entry in `remote_llm_settings.json`
-  for the key-less local custom profile. A workflow cannot select a destination.
+  `profile_defaults.<profile>.custom_endpoint` entry in the private
+  `remote_llm_settings.json` for the key-less local custom profile. A workflow
+  cannot select a destination.
+- LUT catalogs and LUT files are downloaded only from
+  `raw.githubusercontent.com`, checked before any connection, without redirects.
 - Regional LoRA stacks accept `.safetensors` files only, and only inside
   configured ComfyUI LoRA folders, including `extra_model_paths.yaml` entries.
   Register additional folders there; absolute paths within configured folders
   remain supported. Pickle-based formats (`.pt`, `.ckpt`, `.bin`) are rejected
-  with a clear error, so no LoRA reaches `torch.load`. The same rule applies to
-  the LoRA hashes that BV Regional Image Save embeds as Civitai metadata; files
-  outside those folders are never read.
+  with a clear error, so no LoRA reaches `torch.load`. The same folder rule
+  applies to LoRA previews, metadata sidecars, the LoRA and model hashes that
+  BV Regional Image Save embeds as Civitai metadata, and the LUT install
+  directory: links are resolved first, and a file that resolves outside its
+  configured folders is never read or written.
 - Text logs reject linked log files and linked `bv_logs` directories. Use an
   ordinary log directory below the configured ComfyUI output root. Log names
   must end with `.txt`, `.json` or `.log`; other endings are rejected.
@@ -186,8 +227,8 @@ Create deterministic latent sizes and transformations for reusable workflows.
 
 Detailed guides and references are maintained separately from the runtime repository
 in the [BV Node Pack Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/).
-
-Only selected, verified examples are published in [`workflows`](workflows/README.md).
+Reviewed example workflows will ship as ComfyUI templates in `example_workflows/`
+once they are updated for the current node set.
 
 ## Support
 
@@ -203,6 +244,25 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
+
+### 1.4.2 — unreleased
+
+- Store Remote LLM settings and API keys, the response cache, LUT working
+  catalogs and the LoRA header cache in ComfyUI's private System User directory
+  `user/__bv_nodepack/`, with a verified one-time migration from the public
+  `user/default/bv_nodepack/` folder. Without the System User API the pack fails
+  closed instead of using the public folder.
+- Accept management requests (API keys, LUT install, catalog channel) only from
+  local clients of a loopback-only ComfyUI, with an explicit operator opt-in file
+  for `--listen` servers. Read routes and the catalog refresh stay open.
+- Download LUT catalogs and files only from `raw.githubusercontent.com`, checked
+  before any connection, and never follow redirects.
+- Apply one folder-containment rule to LoRA previews, sidecars, Civitai model
+  hashes and the LUT install directory, resolving links before use.
+- Bound raster masks to 32 megapixels, deduplicate autocomplete dataset
+  selections, check LUT existence before downloading and limit parallel installs.
+- Exclude `.github/` from the Registry package and remove outdated example
+  workflows, fixtures and scripts from the runtime repository.
 
 ### 1.4.1 — 2026-09-08
 
@@ -260,8 +320,4 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
 - Update the frontend build toolchain; the release audit reports no known npm
   advisories at the time of validation.
 
-### 1.2.3 — 2026-09-01
-
-- Harden the Comfy Registry package by excluding development tests and UI source
-  files while retaining the committed runtime bundle. Runtime behavior is unchanged.
 

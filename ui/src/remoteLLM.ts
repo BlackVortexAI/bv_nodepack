@@ -14,19 +14,32 @@ type ProviderProfile = {
     effective_endpoint: string | null;
 };
 
-let profilesPromise: Promise<ProviderProfile[]> | null = null;
+type ProviderCatalog = {
+    profiles: ProviderProfile[];
+    // Server capability, not a per-request decision: whether this server accepts
+    // management requests from anyone (loopback-only listener or operator opt-in).
+    management: { allowed: boolean; local_server: boolean; remote_management: boolean };
+    private_storage: boolean;
+};
 
-const loadProfiles = (api: any, refresh = false) => {
-    if (refresh || !profilesPromise) {
-        profilesPromise = fetch(api.apiURL("/bv_nodepack/remote_llm/providers"))
+let catalogPromise: Promise<ProviderCatalog> | null = null;
+
+const loadCatalog = (api: any, refresh = false) => {
+    if (refresh || !catalogPromise) {
+        catalogPromise = fetch(api.apiURL("/bv_nodepack/remote_llm/providers"))
             .then(async response => {
                 if (!response.ok) throw new Error(await response.text());
                 const value = await response.json();
-                return Array.isArray(value.profiles) ? value.profiles : [];
+                return {
+                    profiles: Array.isArray(value.profiles) ? value.profiles : [],
+                    management: value.management ?? { allowed: true, local_server: true, remote_management: false },
+                    private_storage: value.private_storage !== false,
+                } as ProviderCatalog;
             });
     }
-    return profilesPromise;
+    return catalogPromise;
 };
+const loadProfiles = (api: any, refresh = false) => loadCatalog(api, refresh).then(catalog => catalog.profiles);
 
 const widget = (node: any, name: string) => node.widgets?.find((item: any) => item.name === name);
 
@@ -38,6 +51,8 @@ const hostOf = (endpoint: string | null) => {
 // The node has no endpoint widget: the destination is decided by the backend from the
 // provider catalog, the approved API-key binding or the local settings file. The button
 // label only mirrors that decision so the user can see where requests will go.
+let serverState: Pick<ProviderCatalog, "management" | "private_storage"> = { management: { allowed: true, local_server: true, remote_management: false }, private_storage: true };
+
 const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: string) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? ""));
     if (!selected) return;
@@ -53,6 +68,12 @@ const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: st
         if (selected.auth_mode === "none") {
             status.disabled = true;
             status.label = `✓ No API key required · ${destination}`;
+        } else if (!serverState.private_storage) {
+            status.disabled = true;
+            status.label = "⚠ API keys need a ComfyUI with private user storage";
+        } else if (!serverState.management.allowed) {
+            status.disabled = true;
+            status.label = "⚠ Key management is local-only on this server";
         } else {
             status.disabled = false;
             const ready = selected.configured && selected.approved_endpoint;
@@ -100,7 +121,9 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
 };
 
 export const upgradeRemoteLLMProvider = (node: any, api: any) => {
-    loadProfiles(api).then(profiles => {
+    loadCatalog(api).then(catalog => {
+        serverState = { management: catalog.management, private_storage: catalog.private_storage };
+        const profiles = catalog.profiles;
         let previousLabel = String(widget(node, "provider_profile")?.value ?? "");
         const selector = widget(node, "provider_profile");
         if (selector && !selector.__bvRemoteLLMHooked) {
