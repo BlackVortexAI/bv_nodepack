@@ -11,7 +11,7 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.4.0 is prepared locally; publication is pending.** It adds
+> **BV Node Pack 1.4.0** adds
 > reference-driven regional editing, one workflow-wide Global LoRA Registry,
 > automatic MODEL/CLIP preparation and improved Registry, catalog and Quick Edit UI.
 > The [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) contains the full
@@ -176,7 +176,7 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
-### 1.4.0 — 2026-09-08 (prepared locally; publication pending)
+### 1.4.0 — 2026-09-08
 
 - Add reference-driven regional editing with **BV Reference Registry**, inline
   `@` references, regional tool controls and the Krea 2 Identity Edit path.
