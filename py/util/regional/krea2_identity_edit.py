@@ -1,7 +1,8 @@
 """Global single-image Identity Edit, separate from regional token routing.
 
 Sequence/grounding follow conradlocke's Identity Edit training contract and
-lbouaraba/comfyui-krea2edit (Apache-2.0); see docs/design/krea2-identity-edit.md.
+lbouaraba/comfyui-krea2edit (Apache-2.0); see the design note
+krea2-identity-edit.md in the private bv_nodepack_agents workspace.
 """
 import copy
 import math

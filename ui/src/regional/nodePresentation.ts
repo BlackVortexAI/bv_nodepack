@@ -11,7 +11,7 @@ export type PresentationRole="public"|"legacy"|"internalState"|"provider"|"dynam
  * are exceptions to be retired or absorbed here, not examples to copy.
  *
  * Full invariants, ownership rules and adapter rationale:
- * docs/design/node-presentation.md
+ * design note node-presentation.md (private bv_nodepack_agents workspace, source-repositories/bv_nodepack/docs/design/)
  */
 export type PresentationException=Readonly<{
     id:string;
@@ -25,13 +25,13 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         id:"reference-autogrow-identity-lifecycle",
         implementation:["ui/src/regional/referenceRegistryLifecycle.ts"],
         reason:"Native Autogrow reconstructs slots during configure. Logical reference place UUIDs must persist through workflow serialization and source changes.",
-        centralizationPath:"The adapter owns identity only, never slot geometry or topology. Replace its callback seam with an official persistent Autogrow entry identity when available. See docs/design/reference-registry.md.",
+        centralizationPath:"The adapter owns identity only, never slot geometry or topology. Replace its callback seam with an official persistent Autogrow entry identity when available. See the design note reference-registry.md in the private bv_nodepack_agents workspace.",
     },
     {
         id:"fan-in-stable-native-places",
         implementation:["ui/src/regional/interactiveFanIn.ts"],
         reason:"Native Autogrow compacts disconnected slots. The shared fanIn role retains vacant logical places so changing one source cannot retarget saved references.",
-        centralizationPath:"Replace the scoped native minimum getter with a supported native preserve-empty-slots option when available. See docs/design/node-presentation.md.",
+        centralizationPath:"Replace the scoped native minimum getter with a supported native preserve-empty-slots option when available. See the design note node-presentation.md in the private bv_nodepack_agents workspace.",
     },
     {
         id:"react-node-dom-widget-host",
@@ -61,7 +61,7 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         id:"subgraph-boundary-provider-slots",
         implementation:["ui/src/regional/m0VisualProjection.ts#installM0CanvasVisibility"],
         reason:"ComfyUI renders SubgraphInput/SubgraphOutput through virtual I/O nodes whose provider interfaces live in node.slots rather than normal node.inputs/node.outputs.",
-        centralizationPath:"The central canvas projection suppresses labels and drawing for one draw, and collapses only technical boundary layout measurements on both I/O sides; graph-owned names, slots and link topology remain unchanged. See docs/design/node-presentation.md.",
+        centralizationPath:"The central canvas projection suppresses labels and drawing for one draw, and collapses only technical boundary layout measurements on both I/O sides; graph-owned names, slots and link topology remain unchanged. See the design note node-presentation.md in the private bv_nodepack_agents workspace.",
     },
     {
         id:"dynamic-pipe-slot-structure",
@@ -73,7 +73,7 @@ export const PRESENTATION_EXCEPTIONS:readonly PresentationException[]=[
         id:"smart-pipe-native-relocation-lifecycle",
         implementation:["js/bv_smart_pipe.js#installRelocationHooks","js/bv_smart_pipe.js#repairHostOutputBacklinks","js/bv_smart_pipe.js#restoreSerializedPipeSlots"],
         reason:"Native Convert/Unpack requires synchronous route relocation before afterChange and scoped compatibility repairs for compact slots, definition links and confirmed host backlinks.",
-        centralizationPath:"Replace the version-bound graph-instance adapters with an official atomic relocation event when available; retain route, Undo, shared-instance and payload tests. No visual projection ownership moves here. See docs/design/node-presentation.md.",
+        centralizationPath:"Replace the version-bound graph-instance adapters with an official atomic relocation event when available; retain route, Undo, shared-instance and payload tests. No visual projection ownership moves here. See the design note node-presentation.md in the private bv_nodepack_agents workspace.",
     },
     {
         id:"seed-action-projection",

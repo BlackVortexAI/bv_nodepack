@@ -1,7 +1,9 @@
 """Native static LoRA stacks for full-image, spatially blended edit passes.
 
 Uses the public sampler wrapper and model loading seams, never conditional
-WeightHooks. See docs/design/krea2-identity-edit.md for supported boundaries.
+WeightHooks. See the design note krea2-identity-edit.md in the private
+bv_nodepack_agents workspace (source-repositories/bv_nodepack/docs/design/) for
+supported boundaries.
 """
 import uuid
 

@@ -186,6 +186,21 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.4.1 — unreleased
+
+- Restrict **BV Text Log Writer** names to `.txt`, `.json` and `.log`; other
+  endings are rejected before anything is written.
+- Approve every workflow-supplied LoRA path with one shared rule: inside the
+  configured ComfyUI LoRA folders and `.safetensors` only. This covers LoRA
+  loading and the Civitai metadata hashes; pickle-based files never reach
+  `torch.load`, and files outside those folders are never read.
+- Remove the endpoint widget from **BV Remote LLM Provider**. The destination
+  is resolved by the backend from the provider catalog, the approved API-key
+  binding or the local settings file; the Configure dialog now takes the
+  destination for custom bearer profiles. Workflows saved with earlier versions
+  load unchanged apart from the dropped endpoint value.
+- Move internal design notes out of the Registry package.
+
 ### 1.4.0 — 2026-09-08
 
 - Add reference-driven regional editing with **BV Reference Registry**, inline
@@ -232,13 +247,3 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
 - Harden the Comfy Registry package by excluding development tests and UI source
   files while retaining the committed runtime bundle. Runtime behavior is unchanged.
 
-### 1.2.2 — 2026-08-31
-
-- Centralize native node, port and widget presentation across Classic and Nodes
-  2.0, including titlebar routing for hidden infrastructure connections.
-- Add Regional Canvas image selection from connected inputs and sender sources,
-  including a compact thumbnail picker and automatic latest-image selection.
-- Align LoRA Registry count and summary outputs and use stable 0.05 increments
-  for strength scrubbing.
-- Remove the temporary titlebar-port Canary after the shared production path
-  passed the complete regression suite.

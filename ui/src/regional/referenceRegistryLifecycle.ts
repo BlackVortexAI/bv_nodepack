@@ -1,5 +1,5 @@
 /** Native Autogrow identity seam; presentation is owned by nodePresentation.
- * See docs/design/reference-registry.md and the registered lifecycle exception.
+ * See the design note reference-registry.md (private bv_nodepack_agents workspace) and the registered lifecycle exception.
  */
 import {resolveNativeInputSource} from "./regionalNativeSource";
 export type ReferenceEntry = {id:string;slot:string;media_type?:"IMAGE"|"AUDIO"|"VIDEO"};

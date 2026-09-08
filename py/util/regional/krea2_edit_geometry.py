@@ -1,7 +1,8 @@
 # Pixel preparation adapted from lbouaraba/comfyui-krea2edit.
 # Upstream commit 86f886dac23013d88996e3a2e99093ba44d322fb, Apache-2.0.
 # Changes: removed diagnostic output; only pixel preparation is retained.
-# See licenses/comfyui-krea2edit-LICENSE.txt and docs/design/krea2-identity-edit.md.
+# See licenses/comfyui-krea2edit-LICENSE.txt and the design note
+# krea2-identity-edit.md in the private bv_nodepack_agents workspace.
 import torch.nn.functional as F
 
 def _fit_encode_image(image, vae, H, W, cache, key, fit_mode="crop"):
