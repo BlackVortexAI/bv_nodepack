@@ -11,7 +11,10 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.4.0** adds
+> **BV Node Pack 1.4.1** closes the remaining workflow-reachable file, model
+> and endpoint boundaries: text logs are limited to text formats, Regional LoRAs
+> to `.safetensors` files inside the configured LoRA folders, and the Remote LLM
+> destination is no longer a workflow widget. It builds on **1.4.0**, which added
 > reference-driven regional editing, one workflow-wide Global LoRA Registry,
 > automatic MODEL/CLIP preparation and improved Registry, catalog and Quick Edit UI.
 > The [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) contains the full
@@ -39,6 +42,21 @@ Restart ComfyUI and hard-refresh the browser after installation or update.
 Registry review remains open in [issue #217](https://github.com/Comfy-Org/registry-backend/issues/217).
 Registry publication, security-review status and the version offered by Manager are
 separate states; Manager may offer an older version while review is pending.
+
+### Updating to 1.4.1
+
+- **BV Text Log Writer** accepts `.txt`, `.json` and `.log` names only. Rename
+  logs that used other endings; a rejected name fails the node with a clear error.
+- Regional LoRA stacks and Civitai metadata hashes accept `.safetensors` files
+  only, inside the configured ComfyUI LoRA folders. Convert pickle-based LoRAs
+  (`.pt`, `.ckpt`, `.bin`) before referencing them.
+- **BV Remote LLM Provider** lost its endpoint widget. Fixed profiles keep their
+  catalog address. For **OpenAI Compatible**, open **Configure API Key**, enter
+  the destination there and save the key again. For **Local OpenAI Compatible
+  (Custom)**, set `profile_defaults.local-openai-compatible.custom_endpoint` in
+  `remote_llm_settings.json` when the catalog loopback address does not fit.
+  Saved workflows load unchanged apart from the dropped endpoint value.
+- Restart ComfyUI and reload the browser after updating both backend and frontend.
 
 ### Updating to 1.4.0
 
@@ -186,7 +204,7 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
-### 1.4.1 — unreleased
+### 1.4.1 — 2026-09-08
 
 - Restrict **BV Text Log Writer** names to `.txt`, `.json` and `.log`; other
   endings are rejected before anything is written.
