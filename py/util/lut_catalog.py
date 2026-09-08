@@ -11,8 +11,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
+import urllib.request
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from .lut_prototype import parse_cube
 from .user_storage import UNAVAILABLE_MESSAGE, private_path, private_root
@@ -44,6 +45,33 @@ class LutCatalogConflictError(LutCatalogError):
     pass
 
 
+# The only host the pack ever downloads catalogs and LUT files from. Foreign
+# catalogs are deliberately unsupported; users drop their own .cube files into
+# the LUT folder instead. Checked before any connection is opened.
+ALLOWED_DOWNLOAD_HOSTS = frozenset({"raw.githubusercontent.com"})
+
+
+def approved_download_url(url: Any, label: str = "LUT download URL") -> str:
+    text = str(url)
+    try:
+        parsed = urlparse(text)
+    except ValueError as error:
+        raise LutCatalogError(f"{label} is not a valid URL") from error
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in ALLOWED_DOWNLOAD_HOSTS
+        or parsed.username or parsed.password or parsed.query or parsed.fragment
+        or any(char.isspace() for char in text)
+    ):
+        raise LutCatalogError(f"{label} must be a plain HTTPS URL on {', '.join(sorted(ALLOWED_DOWNLOAD_HOSTS))}")
+    return text
+
+
+class _NoDownloadRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise LutCatalogError("LUT catalog redirects are blocked; the catalog source must answer directly")
+
+
 def _channel(value: str) -> CatalogChannel:
     if value not in CATALOG_CHANNELS:
         raise LutCatalogError(f"unsupported LUT catalog channel: {value!r}")
@@ -73,9 +101,10 @@ def _validate_lut_catalog(catalog: Any, expected_channel: CatalogChannel | None 
         if not isinstance(entry_id, str) or not entry_id or entry_id in seen:
             raise LutCatalogError(f"duplicate or invalid LUT catalog id: {entry_id!r}")
         seen.add(entry_id)
-        for field in ("download_url", "source_url", "license_url"):
+        for field in ("source_url", "license_url"):
             if urlparse(str(entry[field])).scheme != "https":
                 raise LutCatalogError(f"LUT catalog {field} must use HTTPS: {entry_id}")
+        approved_download_url(entry["download_url"], f"LUT catalog download_url ({entry_id})")
         checksum = entry["sha256"]
         if not isinstance(checksum, str) or len(checksum) != 64 or any(char not in "0123456789abcdefABCDEF" for char in checksum):
             raise LutCatalogError(f"invalid LUT catalog checksum: {entry_id}")
@@ -136,14 +165,11 @@ def _atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 
 
 def download_catalog_bytes(url: str, max_bytes: int = MAX_CATALOG_BYTES) -> bytes:
-    source = urlparse(url)
-    if source.scheme != "https" or source.hostname != "raw.githubusercontent.com":
-        raise LutCatalogError("LUT catalog source must use HTTPS")
+    approved_download_url(url, "LUT catalog source")
     request = Request(url, headers={"User-Agent": "BV-NodePack-LUT-Catalog/1"})
-    with urlopen(request, timeout=CATALOG_TIMEOUT_SECONDS) as response:
-        final = urlparse(response.geturl())
-        if final.scheme != "https" or final.hostname != "raw.githubusercontent.com":
-            raise LutCatalogError("LUT catalog redirect left the approved HTTPS host")
+    opener = urllib.request.build_opener(_NoDownloadRedirects())
+    with opener.open(request, timeout=CATALOG_TIMEOUT_SECONDS) as response:
+        approved_download_url(response.geturl(), "LUT catalog source")
         declared = response.headers.get("Content-Length")
         if declared is not None and int(declared) > max_bytes:
             raise LutCatalogError("LUT download catalog exceeds the size limit")
@@ -389,10 +415,13 @@ def start_lut_catalog_refresh() -> dict[str, Any]:
 
 
 async def download_bytes(url: str, max_bytes: int = MAX_LUT_BYTES) -> bytes:
+    approved_download_url(url)
     import aiohttp
     timeout = aiohttp.ClientTimeout(total=45)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url, allow_redirects=True) as response:
+        async with session.get(url, allow_redirects=False) as response:
+            if 300 <= int(response.status) < 400:
+                raise ValueError("LUT download redirects are blocked; the catalog must point at the file directly")
             response.raise_for_status()
             if response.content_length is not None and response.content_length > max_bytes:
                 raise ValueError("LUT download exceeds the size limit")
@@ -441,7 +470,7 @@ async def install_catalog_lut(entry_id: str, *, channel: str, catalog_version: i
     service = catalog_service or CATALOG_SERVICE
     selected = _channel(channel)
     entry = service.installation_snapshot(entry_id, selected, catalog_version)
-    payload = await fetch(entry["download_url"])
+    payload = await fetch(approved_download_url(entry["download_url"]))
     if len(payload) > MAX_LUT_BYTES:
         raise ValueError("LUT download exceeds the size limit")
     digest = hashlib.sha256(payload).hexdigest()

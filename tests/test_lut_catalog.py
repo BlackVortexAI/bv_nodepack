@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -22,6 +23,7 @@ from py.util.lut_catalog import (
     LutCatalogError,
     LutCatalogService,
     _catalog_from_bytes,
+    _validate_lut_catalog,
     catalog_with_install_state,
     install_catalog_lut,
     load_lut_catalog,
@@ -473,6 +475,105 @@ class LutCatalogTests(unittest.TestCase):
         invalid["catalog_version"] = True
         with self.assertRaisesRegex(LutCatalogError, "positive integer"):
             _catalog_from_bytes(json.dumps(invalid).encode(), "stable")
+
+    def test_download_urls_are_limited_to_the_approved_host_before_any_contact(self):
+        from py.util.lut_catalog import ALLOWED_DOWNLOAD_HOSTS, approved_download_url, download_bytes, download_catalog_bytes
+
+        self.assertEqual(ALLOWED_DOWNLOAD_HOSTS, frozenset({"raw.githubusercontent.com"}))
+        good = "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/py/util/lut_catalog.json"
+        self.assertEqual(approved_download_url(good), good)
+        for url in ("https://github.com/x/y/raw/main/a.cube", "http://raw.githubusercontent.com/x/a.cube",
+                    "https://user:pw@raw.githubusercontent.com/x/a.cube", good + "?token=1", good + "#frag",
+                    "https://raw.githubusercontent.com.evil.invalid/a.cube", "https://raw.githubusercontent.com/a b.cube", "file:///tmp/a.cube"):
+            with self.subTest(url=url), self.assertRaisesRegex(LutCatalogError, "raw.githubusercontent.com"):
+                approved_download_url(url)
+        invalid = self._document()
+        invalid["entries"][0]["download_url"] = "https://github.com/x/y/raw/main/a.cube"
+        with self.assertRaisesRegex(LutCatalogError, "download_url"):
+            _validate_lut_catalog(invalid)
+        # Rejected targets are never contacted: no opener is built, aiohttp is not even imported.
+        with patch("urllib.request.build_opener", side_effect=AssertionError("must not contact")):
+            with self.assertRaises(LutCatalogError):
+                download_catalog_bytes("https://github.com/x/y/raw/main/catalog.json")
+        with patch.dict(sys.modules, {"aiohttp": None}):
+            with self.assertRaises(LutCatalogError):
+                asyncio.run(download_bytes("https://github.com/x/y/raw/main/a.cube"))
+
+    def test_catalog_source_redirects_are_blocked_before_following(self):
+        import io
+        import urllib.request
+        import urllib.response
+        from email.message import Message
+        from py.util.lut_catalog import _NoDownloadRedirects, download_catalog_bytes
+
+        source = "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/py/util/lut_catalog.json"
+        for code, target in ((301, "https://evil.invalid/catalog.json"), (302, source + "-other"), (307, "/relative")):
+            calls = []
+
+            class FakeHTTPS(urllib.request.HTTPSHandler):
+                def https_open(self, req):
+                    calls.append(req.full_url)
+                    headers = Message()
+                    headers["Location"] = target
+                    response = urllib.response.addinfourl(io.BytesIO(b""), headers, req.full_url, code)
+                    response.msg = "Redirect"
+                    return response
+
+            opener = urllib.request.build_opener(_NoDownloadRedirects(), FakeHTTPS())
+            with self.subTest(code=code, target=target), patch("urllib.request.build_opener", return_value=opener):
+                with self.assertRaisesRegex(LutCatalogError, "redirects are blocked"):
+                    download_catalog_bytes(source)
+                self.assertEqual(calls, [source])
+
+    def test_lut_download_refuses_redirect_status(self):
+        from py.util.lut_catalog import download_bytes
+
+        class FakeResponse:
+            status = 302
+            content_length = None
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            def raise_for_status(self):
+                raise AssertionError("redirect must be refused before raise_for_status")
+
+        class FakeSession:
+            def __init__(self, **_kwargs):
+                self.calls = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_args):
+                return False
+
+            def get(self, url, **kwargs):
+                self.calls.append((url, kwargs))
+                return FakeResponse()
+
+        fake = types.ModuleType("aiohttp")
+        fake.ClientTimeout = lambda total: total
+        sessions = []
+        fake.ClientSession = lambda **kwargs: sessions.append(FakeSession(**kwargs)) or sessions[-1]
+        with patch.dict(sys.modules, {"aiohttp": fake}):
+            with self.assertRaisesRegex(ValueError, "redirects are blocked"):
+                asyncio.run(download_bytes("https://raw.githubusercontent.com/x/y/main/a.cube"))
+        self.assertEqual(sessions[0].calls[0][1], {"allow_redirects": False})
+
+    def test_install_rejects_tampered_download_url_before_fetch(self):
+        entry = deepcopy(load_lut_catalog(CATALOG_PATH, channel="stable")["entries"][0])
+        entry["download_url"] = "https://evil.invalid/a.cube"
+        service = SimpleNamespace(installation_snapshot=lambda *_args: entry)
+
+        async def fetch(_url):
+            raise AssertionError("must not fetch")
+
+        with self.assertRaisesRegex(LutCatalogError, "raw.githubusercontent.com"):
+            asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, catalog_service=service))
 
     def test_catalog_rejects_non_https_advisory_links(self):
         invalid = self._document("stable", 1)
