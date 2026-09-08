@@ -128,6 +128,13 @@ class RegionalDocumentTests(unittest.TestCase):
         document["regions"][0]["geometry"] = [oversized]
         with self.assertRaisesRegex(ValueError, "pixels"):
             parse_document(document)
+        # Several individually acceptable masks are bounded by the document-wide budget.
+        big = [dict(shape, id=f"20000000-0000-4000-8000-0000000001{index:02d}", pixel_width=4096, pixel_height=4096) for index in range(7)]  # 7 x 16 MP = 112 MP > 96 MP
+        document["regions"][0]["geometry"] = big
+        with self.assertRaisesRegex(ValueError, "document budget"):
+            parse_document(document)
+        document["regions"][0]["geometry"] = big[:6]  # 96 MP is still allowed
+        self.assertEqual(len(parse_document(document)["regions"][0]["geometry"]), 6)
         document["regions"][0]["geometry"] = [shape]
         shape["data_url"] = "data:image/png;base64,bm90IGEgcG5n"
         with self.assertRaisesRegex(RegionalValidationError, "PNG data"):

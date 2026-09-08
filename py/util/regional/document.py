@@ -17,9 +17,12 @@ SELECTION = "BV_REGIONAL_SELECTION"
 SUPPORTED_OVERLAP_MODES = frozenset({"joint"})
 LATEST_VERSION = 2
 REGION_USAGES = frozenset({"generation", "detailer", "both"})
-# Raster masks are decoded per execution; 32 megapixels covers 8K canvases while
-# staying far below Pillow's decompression-bomb threshold.
+# Raster masks are decoded per execution; 32 megapixels per mask covers 8K canvases
+# while staying far below Pillow's decompression-bomb threshold. The document-wide
+# budgets bound what one workflow can make the server decode and hold in total.
 MAX_RASTER_PIXELS = 32 * 1024 * 1024
+MAX_TOTAL_RASTER_PIXELS = 96 * 1024 * 1024
+MAX_TOTAL_RASTER_DATA_BYTES = 128 * 1024 * 1024
 
 
 class RegionalValidationError(ValueError):
@@ -74,6 +77,8 @@ def _check_prompt_pair(value: Any, path: str, issues: list[str]) -> None:
 
 def validate_document(document: Any, *, executable: bool = True) -> list[str]:
     issues: list[str] = []
+    total_raster_pixels = 0
+    total_raster_bytes = 0
     if not isinstance(document, dict):
         return ["document must be an object"]
     if document.get("schema") != "bv.regional":
@@ -237,9 +242,13 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
                     if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 65536:
                         issues.append(f"{shape_path}.{key} must be an integer between 1 and 65536")
                 pixel_width, pixel_height = shape.get("pixel_width"), shape.get("pixel_height")
-                if isinstance(pixel_width, int) and isinstance(pixel_height, int) and pixel_width * pixel_height > MAX_RASTER_PIXELS:
-                    issues.append(f"{shape_path} raster mask exceeds {MAX_RASTER_PIXELS} pixels")
+                if isinstance(pixel_width, int) and isinstance(pixel_height, int) and not isinstance(pixel_width, bool) and not isinstance(pixel_height, bool):
+                    if pixel_width * pixel_height > MAX_RASTER_PIXELS:
+                        issues.append(f"{shape_path} raster mask exceeds {MAX_RASTER_PIXELS} pixels")
+                    total_raster_pixels += max(0, pixel_width) * max(0, pixel_height)
                 data_url = shape.get("data_url")
+                if isinstance(data_url, str):
+                    total_raster_bytes += len(data_url)
                 if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,") or len(data_url) > 67_108_864:
                     issues.append(f"{shape_path}.data_url must be a PNG data URL no larger than 64 MiB")
                 else:
@@ -251,6 +260,13 @@ def validate_document(document: Any, *, executable: bool = True) -> list[str]:
                         issues.append(f"{shape_path}.data_url contains invalid base64")
             else:
                 issues.append(f"{shape_path}.type is unsupported")
+
+    # Document-wide budgets: many individually acceptable masks must not add up to an
+    # unbounded amount of decoding work or embedded data for one workflow.
+    if total_raster_pixels > MAX_TOTAL_RASTER_PIXELS:
+        issues.append(f"raster masks total {total_raster_pixels} pixels, above the document budget of {MAX_TOTAL_RASTER_PIXELS}")
+    if total_raster_bytes > MAX_TOTAL_RASTER_DATA_BYTES:
+        issues.append(f"raster mask data totals {total_raster_bytes} bytes, above the document budget of {MAX_TOTAL_RASTER_DATA_BYTES}")
 
     for region_id, parent_id in parents.items():
         if parent_id is not None and str(parent_id) not in region_ids:

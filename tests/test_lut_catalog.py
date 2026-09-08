@@ -633,8 +633,10 @@ class LutCatalogTests(unittest.TestCase):
         async def fetch(_url):
             raise AssertionError("must not fetch")
 
-        with self.assertRaisesRegex(LutCatalogError, "raw.githubusercontent.com"):
-            asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, catalog_service=service))
+        with tempfile.TemporaryDirectory() as root:
+            fake = SimpleNamespace(models_dir=root)
+            with self.assertRaisesRegex(LutCatalogError, "raw.githubusercontent.com"):
+                asyncio.run(install_catalog_lut("lumix-fieldnote", channel="stable", catalog_version=1, fetch=fetch, folder_paths_module=fake, catalog_service=service))
 
     def test_catalog_rejects_non_https_advisory_links(self):
         invalid = self._document("stable", 1)

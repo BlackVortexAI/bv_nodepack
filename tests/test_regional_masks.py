@@ -30,6 +30,36 @@ def raster_data_url(alpha):
 
 
 class RegionalMaskTests(unittest.TestCase):
+    def test_raster_header_is_checked_before_any_pixel_is_decoded(self):
+        from unittest.mock import patch
+        from util.regional import mask_renderer
+
+        class HeaderOnly:
+            format = "PNG"
+            width = 8192
+            height = 8192
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def load(self):
+                raise AssertionError("decoder must not run for a rejected header")
+
+            def convert(self, *_args):
+                raise AssertionError("decoder must not run for a rejected header")
+
+        shape = {"data_url": raster_data_url([[255]]), "pixel_width": 8192, "pixel_height": 8192,
+                 "x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0}
+        with patch.object(mask_renderer.Image, "open", return_value=HeaderOnly()):
+            with self.assertRaisesRegex(ValueError, "pixel budget"):
+                mask_renderer._raster(shape, 16, 16)
+            HeaderOnly.width = 2  # declared size differs from the document metadata
+            with self.assertRaisesRegex(ValueError, "dimensions"):
+                mask_renderer._raster(shape, 16, 16)
+
     def test_global_is_full_and_background_is_inverse_union(self):
         document = fixture()
         global_mask = render_selection(select_scope(document, "global"), 96, 64)

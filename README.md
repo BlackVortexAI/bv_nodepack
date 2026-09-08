@@ -13,8 +13,9 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > [!IMPORTANT]
 > **BV Node Pack 1.4.2** moves API keys, settings and catalogs into ComfyUI's
 > private System User directory, limits management actions to local clients,
-> pins LUT downloads to one host and applies folder containment to every file
-> the pack reads. **1.4.1** closed the workflow-reachable file, model and
+> pins LUT downloads to one host and applies one folder-containment rule to the
+> LoRA, preview, sidecar, model-hash and LUT files it handles. **1.4.1** closed
+> the workflow-reachable file, model and
 > endpoint boundaries. Both build on **1.4.0**, which added
 > reference-driven regional editing, one workflow-wide Global LoRA Registry,
 > automatic MODEL/CLIP preparation and improved Registry, catalog and Quick Edit UI.
@@ -47,16 +48,19 @@ separate states; Manager may offer an older version while review is pending.
 ### Updating to 1.4.2
 
 - BV runtime files move from `user/default/bv_nodepack/` to ComfyUI's private
-  System User directory `user/__bv_nodepack/`, which ComfyUI never serves over
-  HTTP. The move happens once at startup: settings, API keys, LUT catalogs and
-  caches are copied, verified and then removed from the public folder. If a
-  private file already exists and differs, the public content is kept next to it
-  as a `*.recovered` file that is never loaded. Until this update the public files
-  were potentially readable through ComfyUI's `/userdata` API by anyone who could
+  System User directory `user/__bv_nodepack/`, which ComfyUI's own `/userdata`
+  routes do not serve. The move happens once at startup: settings, API keys, LUT
+  catalogs and the LoRA header cache are copied, verified and then removed from
+  the public folder; the Remote LLM response cache is deleted there and rebuilt
+  on demand. If a private file already exists and differs, the public content is
+  kept next to it as a `*.recovered` file that is never loaded. The startup log
+  lists every migrated, removed, recovered or failed file. Until this update the
+  public files were potentially readable through `/userdata` by anyone who could
   reach the server; consider rotating API keys if that applies to your setup.
-- On a ComfyUI without the System User API (older versions) BV stores nothing in
-  the public folder: API-key providers and catalog updates are disabled with a
-  clear message, everything else keeps working. Update ComfyUI to restore them.
+- On a ComfyUI without the System User API (older versions) BV neither reads nor
+  writes the public folder: API-key providers and catalog updates are disabled
+  with a clear message, everything else keeps working, and existing public files
+  stay where they are until you update ComfyUI or remove them yourself.
 - Management actions (saving or deleting API keys, installing LUTs, switching the
   catalog channel) are accepted only from clients on the same machine while
   ComfyUI listens on a loopback address, like ComfyUI-Manager's local mode. For
@@ -113,8 +117,9 @@ The following safeguards from 1.3.0 to 1.4.2 apply together:
 
 - All BV runtime files (`remote_llm_settings.json`, `remote_llm_secrets.json`,
   `admin_settings.json`, LUT catalogs, caches) live in ComfyUI's private
-  `user/__bv_nodepack/` directory, which the `/userdata` API never serves.
-  Nothing is read from the public `user/default/` tree any more.
+  `user/__bv_nodepack/` directory, which ComfyUI's `/userdata` routes do not
+  serve. BV itself reads nothing from the public `user/default/` tree any more;
+  other custom nodes or routes are outside this guarantee.
 - Management routes (API keys, LUT install, catalog channel) answer only local
   clients of a loopback-only ComfyUI unless `allow_remote_management` is set in
   the private `admin_settings.json`. This mirrors ComfyUI-Manager's local mode
