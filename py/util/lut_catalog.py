@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from .lut_prototype import parse_cube
+from .user_storage import UNAVAILABLE_MESSAGE, private_path, private_root
 
 
 CatalogChannel = Literal["stable", "experimental"]
@@ -99,25 +100,21 @@ def _read_catalog(path: Path, expected_channel: CatalogChannel | None = None) ->
     return _catalog_from_bytes(payload, expected_channel), payload
 
 
-def _user_root() -> Path:
-    try:
-        import folder_paths
-
-        return Path(folder_paths.get_user_directory())
-    except (ImportError, AttributeError):
-        return Path.cwd() / "user"
-
-
-def default_working_catalog_paths() -> dict[CatalogChannel, Path]:
-    root = _user_root() / "default" / "bv_nodepack"
+# Working catalogs and the channel selection live in BV's private System User
+# directory. None means ComfyUI offers no private storage; the service then serves
+# the bundled catalogs read-only and refuses refresh and channel changes.
+def default_working_catalog_paths() -> dict[CatalogChannel, Path] | None:
+    root = private_root()
+    if root is None:
+        return None
     return {
         "stable": root / "lut_catalog.json",
         "experimental": root / "lut_catalog.experimental.json",
     }
 
 
-def default_catalog_settings_path() -> Path:
-    return _user_root() / "default" / "bv_nodepack" / "lut_catalog_settings.json"
+def default_catalog_settings_path() -> Path | None:
+    return private_path("lut_catalog_settings.json")
 
 
 def _atomic_write_bytes(path: Path, payload: bytes) -> None:
@@ -171,8 +168,9 @@ def _status_error(error: BaseException) -> str:
 class LutCatalogService:
     def __init__(self, *, bundled_paths=None, working_paths=None, settings_path=None, remote_urls=None, fetch=download_catalog_bytes) -> None:
         self.bundled_paths = dict(bundled_paths or BUNDLED_CATALOG_PATHS)
-        self.working_paths = dict(working_paths or default_working_catalog_paths())
-        self.settings_path = settings_path or default_catalog_settings_path()
+        working = working_paths if working_paths is not None else default_working_catalog_paths()
+        self.working_paths: dict[CatalogChannel, Path] | None = dict(working) if working is not None else None
+        self.settings_path = settings_path if settings_path is not None else default_catalog_settings_path()
         self.remote_urls = dict(remote_urls or REMOTE_CATALOG_URLS)
         self.fetch: Callable[[str, int], bytes] = fetch
         self._lock = threading.RLock()
@@ -196,6 +194,9 @@ class LutCatalogService:
             return self._selected_channel
         selected: CatalogChannel = "stable"
         valid = False
+        if self.settings_path is None:
+            self._selected_channel = selected
+            return selected
         try:
             value = json.loads(self.settings_path.read_text(encoding="utf-8"))
             valid = isinstance(value, dict) and value.get("schema") == SETTINGS_SCHEMA and value.get("version") == 1 and value.get("selected_channel") in CATALOG_CHANNELS
@@ -215,8 +216,13 @@ class LutCatalogService:
         with self._lock:
             return self._load_selected_channel()
 
+    def has_private_storage(self) -> bool:
+        return self.working_paths is not None and self.settings_path is not None
+
     def set_selected_channel(self, channel: str) -> dict[str, Any]:
         selected = _channel(channel)
+        if not self.has_private_storage():
+            raise LutCatalogError(UNAVAILABLE_MESSAGE)
         with self._lock:
             _atomic_write_json(self.settings_path, {"schema": SETTINGS_SCHEMA, "version": 1, "selected_channel": selected})
             self._selected_channel = selected
@@ -231,16 +237,17 @@ class LutCatalogService:
             bundled, bundled_payload = _read_catalog(self.bundled_paths[selected], selected)
         except (OSError, LutCatalogError):
             pass
-        try:
-            working, _ = _read_catalog(self.working_paths[selected], selected)
-        except (OSError, LutCatalogError):
-            pass
+        if self.working_paths is not None:
+            try:
+                working, _ = _read_catalog(self.working_paths[selected], selected)
+            except (OSError, LutCatalogError):
+                pass
         if bundled is None and working is None:
             raise LutCatalogError(f"no valid local {selected} LUT catalog is available")
         use_working = working is not None and (bundled is None or working["catalog_version"] >= bundled["catalog_version"])
         catalog = working if use_working else bundled
         source = "working" if use_working else "bundled"
-        if not use_working and materialize and bundled_payload is not None:
+        if not use_working and materialize and bundled_payload is not None and self.working_paths is not None:
             try:
                 _atomic_write_bytes(self.working_paths[selected], bundled_payload)
                 source = "working"
@@ -290,10 +297,12 @@ class LutCatalogService:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            return {"version": 1, "selected_channel": self._load_selected_channel(), "worker_running": bool(self._worker and self._worker.is_alive()), "channels": deepcopy(self._status)}
+            return {"version": 1, "selected_channel": self._load_selected_channel(), "worker_running": bool(self._worker and self._worker.is_alive()), "private_storage": self.has_private_storage(), "channels": deepcopy(self._status)}
 
     def request_refresh(self, channel: str | None = None) -> dict[str, Any]:
         selected = _channel(channel) if channel is not None else self.selected_channel()
+        if not self.has_private_storage():
+            raise LutCatalogError(UNAVAILABLE_MESSAGE)
         self.resolve_local(selected, materialize=True)
         with self._lock:
             coalesced = selected in self._running or selected in self._pending
@@ -309,6 +318,8 @@ class LutCatalogService:
     def request_startup_refresh(self) -> dict[str, Any]:
         with self._lock:
             selected = self._load_selected_channel()
+            if not self.has_private_storage():
+                return {"accepted": False, "coalesced": False, "channel": selected, "generation": 0, "reason": UNAVAILABLE_MESSAGE}
             if self._startup_requested:
                 return {"accepted": True, "coalesced": True, "channel": selected, "generation": self._status[selected]["generation"]}
             self._startup_requested = True

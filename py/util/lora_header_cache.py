@@ -11,10 +11,11 @@ MAX_ENTRIES = 10000
 
 
 def default_header_cache_path(folder_paths):
-    try:
-        return Path(folder_paths.get_user_directory()) / "default" / "bv_nodepack" / "cache" / "lora_header_checks.json"
-    except (AttributeError, TypeError, OSError):
-        return None
+    # Private System User storage only; None disables persistence rather than
+    # writing into the HTTP-served user/default tree.
+    from .user_storage import private_path
+
+    return private_path("cache", "lora_header_checks.json", folder_paths_module=folder_paths)
 
 
 def _valid_result(value):

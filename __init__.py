@@ -6,6 +6,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 
 WEB_DIRECTORY = "./js"
 
+# Runs before any module touches runtime storage: moves trusted files out of the
+# HTTP-served user/default tree into ComfyUI's private System User directory.
+try:
+    from .py.util.user_storage import run_startup_migration
+
+    run_startup_migration()
+except Exception as error:
+    print(f"BV Node Pack: private storage check failed: {error}")
+
 try:
     from .py.util.completion import routes as _completion_routes  # noqa: F401
 except Exception as error:

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .regional.prompt_enhancer import LLMCapabilities, LLMRequest, LLMResponse
+from .user_storage import UNAVAILABLE_MESSAGE, private_path
 
 
 MAX_HTTP_RESPONSE_BYTES = 1_048_576
@@ -201,21 +202,25 @@ def load_provider_catalog(path: Path | None = None) -> tuple[RemoteProviderProfi
     return tuple(profiles)
 
 
-def default_user_settings_path() -> Path:
-    try:
-        import folder_paths
-        user_root = Path(folder_paths.get_user_directory())
-    except (ImportError, AttributeError):
-        user_root = Path.cwd() / "user"
-    return user_root / "default" / "bv_nodepack" / USER_SETTINGS_FILENAME
+# All three live in BV's private System User directory; None means ComfyUI offers no
+# private storage, and the callers below fail closed instead of touching user/default.
+def default_user_settings_path() -> Path | None:
+    return private_path(USER_SETTINGS_FILENAME)
 
 
-def default_user_secrets_path() -> Path:
-    return default_user_settings_path().with_name(USER_SECRETS_FILENAME)
+def default_user_secrets_path() -> Path | None:
+    return private_path(USER_SECRETS_FILENAME)
 
 
-def default_remote_cache_directory() -> Path:
-    return default_user_settings_path().parent / "cache" / "remote_llm" / "v1"
+def default_remote_cache_directory() -> Path | None:
+    return private_path("cache", "remote_llm", "v1")
+
+
+def _require_secrets_path(path: Path | None) -> Path:
+    secrets_path = path or default_user_secrets_path()
+    if secrets_path is None:
+        raise RemoteLLMConfigurationError(UNAVAILABLE_MESSAGE)
+    return secrets_path
 
 
 def _empty_secrets_document() -> dict[str, Any]:
@@ -224,7 +229,7 @@ def _empty_secrets_document() -> dict[str, Any]:
 
 def _load_secrets_document(path: Path | None = None) -> dict[str, Any]:
     secrets_path = path or default_user_secrets_path()
-    if not secrets_path.exists():
+    if secrets_path is None or not secrets_path.exists():
         return _empty_secrets_document()
     try:
         value = json.loads(secrets_path.read_text(encoding="utf-8"))
@@ -281,7 +286,7 @@ def _upgrade_secrets(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_secrets_document(value: dict[str, Any], path: Path | None = None) -> None:
-    secrets_path = path or default_user_secrets_path()
+    secrets_path = _require_secrets_path(path)
     secrets_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_name = None
     try:
@@ -318,6 +323,7 @@ def set_remote_api_key(profile_id: str, api_key: str, path: Path | None = None, 
     approved = _validated_endpoint(endpoint if endpoint is not None else definition.endpoint, "Approved endpoint")
     if not definition.allow_custom_endpoint and approved != definition.endpoint:
         raise RemoteLLMConfigurationError("This provider requires its catalog endpoint")
+    _require_secrets_path(path)
     with _REMOTE_SECRETS_LOCK:
         value = _upgrade_secrets(_load_secrets_document(path))
         value["api_keys"][profile] = secret
@@ -326,6 +332,7 @@ def set_remote_api_key(profile_id: str, api_key: str, path: Path | None = None, 
 
 
 def delete_remote_api_key(profile_id: str, path: Path | None = None) -> None:
+    _require_secrets_path(path)
     with _REMOTE_SECRETS_LOCK:
         value = _upgrade_secrets(_load_secrets_document(path))
         value["api_keys"].pop(str(profile_id).strip(), None)
@@ -358,8 +365,8 @@ def _default_settings_document(profiles: tuple[RemoteProviderProfile, ...]) -> d
     }
 
 
-def ensure_user_settings_file(path: Path, profiles: tuple[RemoteProviderProfile, ...]) -> None:
-    if path.exists():
+def ensure_user_settings_file(path: Path | None, profiles: tuple[RemoteProviderProfile, ...]) -> None:
+    if path is None or path.exists():
         return
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +387,8 @@ def _load_settings_root(
     settings_path = path or default_user_settings_path()
     if create_if_missing:
         ensure_user_settings_file(settings_path, profiles)
-    if not settings_path.exists():
+    if settings_path is None or not settings_path.exists():
+        # No private storage means catalog defaults only; the public tree is never consulted.
         value = _default_settings_document(profiles)
     else:
         try:
@@ -457,6 +465,7 @@ def resolve_profile_endpoint(
     if not profile.allow_custom_endpoint:
         return profile.endpoint
     if profile.auth_mode == "bearer":
+        _require_secrets_path(secrets_path)
         bound = remote_api_key_endpoint(profile.id, secrets_path)
         if bound is None:
             raise RemoteLLMConfigurationError(
@@ -519,7 +528,12 @@ class OpenAICompatibleChatProvider:
         self.timeout_seconds = int(timeout_seconds)
         self._extra_body = dict(extra_body or {})
         self._transport = transport or _urllib_transport
-        self._cache_directory = None if cache_directory is False else Path(cache_directory or default_remote_cache_directory())
+        if cache_directory is False:
+            self._cache_directory = None
+        elif cache_directory:
+            self._cache_directory = Path(cache_directory)
+        else:
+            self._cache_directory = default_remote_cache_directory()  # None without private storage
         self.auth_mode = str(auth_mode).strip()
         self.capabilities = LLMCapabilities(
             structured_output="json_schema",
