@@ -82,6 +82,17 @@ class ReleasePathBoundaryTests(unittest.TestCase):
                 with self.subTest(source=source), self.assertRaisesRegex(ValueError, "outside configured"):
                     resolve_stack_paths({"a": [(source, 1, 0)]}, lambda name: str(outside), allowed_roots=[models])
 
+    def test_pickle_based_lora_formats_are_rejected_even_inside_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            models = Path(directory) / "models"
+            models.mkdir()
+            for name in ("legacy.pt", "legacy.ckpt", "legacy.bin", "legacy.pth"):
+                legacy = models / name
+                legacy.write_text("dummy")
+                for source in (str(legacy), name):
+                    with self.subTest(source=source), self.assertRaisesRegex(ValueError, "must be .safetensors"):
+                        resolve_stack_paths({"a": [(source, 1, 0)]}, lambda _name: str(legacy), allowed_roots=[models])
+
     def test_existing_relative_cwd_file_does_not_bypass_finder(self):
         with self.assertRaisesRegex(ValueError, "not found"):
             resolve_stack_paths({"a": [("pyproject.toml", 1, 0)]}, lambda name: None, allowed_roots=[Path.cwd()])

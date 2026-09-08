@@ -10,6 +10,21 @@ class TextLogWriterTests(unittest.TestCase):
         self.assertEqual(safe_log_name("../../enhancer diff.json"), "enhancer_diff.json")
         self.assertEqual(safe_log_name("CON"), "_CON.txt")
 
+    def test_safe_log_name_accepts_only_text_suffixes(self):
+        self.assertEqual(safe_log_name("run"), "run.txt")
+        self.assertEqual(safe_log_name("run.LOG"), "run.LOG")
+        for name in ("payload.pt", "payload.py", "payload.html", "page.htm", "report.v2"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "must end with one of"):
+                safe_log_name(name)
+
+    def test_rejected_suffix_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for mode in ("overwrite", "append", "timestamped"):
+                with self.subTest(mode=mode), self.assertRaises(ValueError):
+                    write_text_log(directory, "payload", "payload.pt", mode)
+            log_directory = Path(directory) / "bv_logs"
+            self.assertEqual(list(log_directory.iterdir()) if log_directory.exists() else [], [])
+
     def test_overwrite_uses_stable_file_and_utf8(self):
         with tempfile.TemporaryDirectory() as directory:
             first = write_text_log(directory, "eins ä", "result.txt", "overwrite")

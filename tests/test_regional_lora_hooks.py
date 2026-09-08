@@ -107,15 +107,21 @@ class RegionalLoraHookContractTests(unittest.TestCase):
         self.assertEqual(resolve_scope_stacks(registry, bindings, document), {})
 
     def test_stack_paths_are_canonicalized_before_model_fingerprinting(self):
-        canonical = str(Path(__file__).resolve())
-        stacks = {
-            "left": [("alias.safetensors", 0.8, 0.6)],
-            "right": [(canonical, 0.8, 0.6)],
-        }
+        import tempfile
 
-        resolved = resolve_stack_paths(stacks, lambda path: canonical if path == "alias.safetensors" else None, allowed_roots=[Path(__file__).parent])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lora = root / "alias.safetensors"
+            lora.write_text("dummy")
+            canonical = str(lora.resolve())
+            stacks = {
+                "left": [("alias.safetensors", 0.8, 0.6)],
+                "right": [(canonical, 0.8, 0.6)],
+            }
 
-        self.assertEqual(resolved["left"], resolved["right"])
+            resolved = resolve_stack_paths(stacks, lambda path: canonical if path == "alias.safetensors" else None, allowed_roots=[root])
+
+            self.assertEqual(resolved["left"], resolved["right"])
 
     def test_orphaned_region_binding_does_not_require_its_old_stack_at_runtime(self):
         document = {"document_id": "doc-a", "regions": [{"id": "current-region"}]}

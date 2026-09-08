@@ -10,6 +10,7 @@ from typing import Any
 from threading import Lock
 
 from .context import normalize_context
+from .lora_hooks import lora_path_approver
 from .lora_v3 import LORA_CAPABILITY_REGISTRY, materialized_lora_scopes
 from .v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
 from ..prompt.category import ast_to_plain_text, parse_prompt_to_ast
@@ -196,14 +197,46 @@ def _sha256(path: str) -> str:
     return result
 
 
-def _resolved_resources(scopes: dict[str, list[list[Any]]], resolver: Callable[[str], str | None], hasher: Callable[[str], str]) -> list[dict[str, Any]]:
+def _lora_approver(allowed_roots: Any = None) -> Callable[[Path], Path]:
+    """Same containment rule as LoRA loading; fail closed when the roots are unknown.
+
+    Metadata is best-effort, so an unavailable ComfyUI folder registry must not
+    abort the image save. It must also never widen what may be read: without
+    known roots no workflow-supplied path is hashed.
+    """
+    try:
+        return lora_path_approver(allowed_roots)
+    except Exception:
+        def reject(candidate: Path) -> Path:
+            raise ValueError("LoRA folders are unavailable; metadata hashing is disabled")
+
+        return reject
+
+
+def _resolved_resources(
+    scopes: dict[str, list[list[Any]]],
+    resolver: Callable[[str], str | None],
+    hasher: Callable[[str], str],
+    approve: Callable[[Path], Path] | None = None,
+) -> list[dict[str, Any]]:
+    # Workflow-supplied names may only reach files inside the configured LoRA
+    # folders. Anything else is skipped, never read.
+    if approve is None:
+        approve = _lora_approver()
     resources: dict[str, dict[str, Any]] = {}
     attempted: set[str] = set()
     for scope, entries in scopes.items():
         for name, model_strength, clip_strength in entries:
             source = str(name)
-            path = source if Path(source).is_file() else resolver(source)
-            if not path or not Path(path).is_file():
+            candidate = Path(source)
+            if not candidate.is_absolute():
+                found = resolver(source)
+                if not found:
+                    continue
+                candidate = Path(found)
+            try:
+                path = str(approve(candidate))
+            except ValueError:
                 continue
             canonical = _canonical_path(path)
             if canonical not in attempted:
@@ -230,6 +263,7 @@ def build_regional_metadata(
     lora_resolver: Callable[[str], str | None] | None = None,
     model_resolver: Callable[[str], str | None] | None = None,
     hasher: Callable[[str], str] = _sha256,
+    allowed_lora_roots: Any = None,
 ) -> tuple[str | None, dict[str, Any]]:
     context = normalize_context(regional, registry=REGIONAL_V3_CAPABILITY_REGISTRY)
     core = context.core
@@ -264,7 +298,7 @@ def build_regional_metadata(
             raise value
         return value
 
-    resources = _resolved_resources(scopes, lora_resolver, hash_once)
+    resources = _resolved_resources(scopes, lora_resolver, hash_once, _lora_approver(allowed_lora_roots))
     positive = _prompt_sections(core, "positive")
     negative = _prompt_sections(core, "negative")
     parameters = None

@@ -10,6 +10,8 @@ from pathlib import Path
 
 LOG_DIRECTORY_NAME = "bv_logs"
 LOG_MODES = ("overwrite", "append", "timestamped")
+# Text formats only. Nothing in ComfyUI or this pack loads these as code, models or pickles.
+LOG_SUFFIXES = (".txt", ".json", ".log")
 _WINDOWS_RESERVED = {
     "CON", "PRN", "AUX", "NUL",
     *(f"COM{index}" for index in range(1, 10)),
@@ -28,7 +30,10 @@ def safe_log_name(value: object) -> str:
         text = f"_{text}"
         path = Path(text)
     if not path.suffix:
-        text += ".txt"
+        return text + ".txt"
+    if path.suffix.lower() not in LOG_SUFFIXES:
+        allowed = ", ".join(LOG_SUFFIXES)
+        raise ValueError(f"BV text log names must end with one of {allowed}; got '{path.suffix}'")
     return text
 
 

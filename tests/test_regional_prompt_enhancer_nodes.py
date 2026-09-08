@@ -86,7 +86,7 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
         remote_llm = __import__(f"{PACKAGE}.py.util.remote_llm", fromlist=["get_remote_api_key"])
         with patch.object(remote_llm, "get_remote_api_key", return_value="test-key"):
             provider = self.module.BVRemoteLLMProviderNode().build(
-                "Venice", "https://ignored.invalid", "zai-org-glm-5-1", "none", 60
+                "Venice", "zai-org-glm-5-1", "none", 60
             )[0]
 
         self.assertEqual(provider.provider_id, "venice_chat_completions")
@@ -107,6 +107,8 @@ class RegionalPromptEnhancerNodeTests(unittest.TestCase):
 
             user_root = Path(directory) / "user" / "default" / "bv_nodepack"
             self.assertEqual(inputs["provider_profile"][1]["default"], "OpenAI Compatible")
+            self.assertNotIn("custom_endpoint", inputs)
+            self.assertFalse(any("endpoint" in name for name in inputs))
             self.assertFalse((user_root / "remote_llm_settings.json").exists())
             self.assertFalse((user_root / "remote_llm_secrets.json").exists())
             self.assertFalse((user_root / "cache" / "remote_llm").exists())

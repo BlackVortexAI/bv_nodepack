@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -177,20 +178,15 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
     return result
 
 
-def resolve_stack_paths(
-    scope_stacks: dict[str, Any],
-    find_lora: Any = None,
-    *,
-    allowed_roots: Any = None,
-) -> dict[str, list[tuple[str, float, float]]]:
-    if not scope_stacks:
-        return {}
-    if find_lora is None or allowed_roots is None:
+def lora_path_approver(allowed_roots: Any = None) -> Callable[[Path], Path]:
+    """Return a checker that only accepts existing files inside the configured LoRA folders.
+
+    Every consumer of a LoRA path that originates from a workflow (loading, metadata
+    hashing) must go through this single rule so the containment policy cannot drift.
+    """
+    if allowed_roots is None:
         import folder_paths
-        if find_lora is None:
-            find_lora = lambda path: folder_paths.get_full_path("loras", path)
-        if allowed_roots is None:
-            allowed_roots = folder_paths.get_folder_paths("loras")
+        allowed_roots = folder_paths.get_folder_paths("loras")
     configured_roots = [Path(root).absolute() for root in allowed_roots]
     real_roots = [root.resolve() for root in configured_roots]
 
@@ -201,9 +197,28 @@ def resolve_stack_paths(
         resolved = candidate.resolve()
         if not any(resolved.is_relative_to(root) for root in real_roots):
             raise ValueError("LoRA path resolves outside configured LoRA folders")
+        # Only the safetensors container is loaded; pickle-based checkpoints never reach torch.load.
+        if resolved.suffix.casefold() != ".safetensors":
+            raise ValueError(f"LoRA files must be .safetensors; convert '{candidate.name}' before using it")
         if not resolved.is_file():
             raise ValueError(f"LoRA file not found: {candidate}")
         return resolved
+
+    return approved_path
+
+
+def resolve_stack_paths(
+    scope_stacks: dict[str, Any],
+    find_lora: Any = None,
+    *,
+    allowed_roots: Any = None,
+) -> dict[str, list[tuple[str, float, float]]]:
+    if not scope_stacks:
+        return {}
+    if find_lora is None:
+        import folder_paths
+        find_lora = lambda path: folder_paths.get_full_path("loras", path)
+    approved_path = lora_path_approver(allowed_roots)
 
     resolved_stacks: dict[str, list[tuple[str, float, float]]] = {}
     resolved_paths: dict[str, str] = {}

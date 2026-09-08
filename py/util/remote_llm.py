@@ -372,11 +372,11 @@ def ensure_user_settings_file(path: Path, profiles: tuple[RemoteProviderProfile,
         raise RemoteLLMConfigurationError(f"Cannot create remote LLM user settings '{path}': {error}") from error
 
 
-def load_user_defaults(
+def _load_settings_root(
     profiles: tuple[RemoteProviderProfile, ...],
     path: Path | None = None,
     create_if_missing: bool = False,
-) -> RemoteLLMDefaults:
+) -> dict[str, Any]:
     settings_path = path or default_user_settings_path()
     if create_if_missing:
         ensure_user_settings_file(settings_path, profiles)
@@ -401,7 +401,11 @@ def load_user_defaults(
     unknown = set(root["profile_defaults"]) - set(by_id)
     if unknown:
         raise RemoteLLMConfigurationError(f"Unknown profile defaults: {', '.join(sorted(unknown))}")
-    profile = by_id[profile_id]
+    return root
+
+
+def profile_user_defaults(profile: RemoteProviderProfile, root: dict[str, Any]) -> RemoteLLMDefaults:
+    profile_id = profile.id
     override = root["profile_defaults"].get(profile_id, {})
     allowed_override = {"custom_endpoint", "model", "reasoning_effort", "timeout_seconds"}
     if not isinstance(override, dict) or not set(override) <= allowed_override:
@@ -425,6 +429,42 @@ def load_user_defaults(
         reasoning_effort=reasoning_effort,
         timeout_seconds=timeout_seconds,
     )
+
+
+def load_user_defaults(
+    profiles: tuple[RemoteProviderProfile, ...],
+    path: Path | None = None,
+    create_if_missing: bool = False,
+) -> RemoteLLMDefaults:
+    root = _load_settings_root(profiles, path, create_if_missing)
+    by_id = {profile.id: profile for profile in profiles}
+    return profile_user_defaults(by_id[str(root["default_profile_id"]).strip()], root)
+
+
+def resolve_profile_endpoint(
+    profile: RemoteProviderProfile,
+    *,
+    profiles: tuple[RemoteProviderProfile, ...] | None = None,
+    settings_path: Path | None = None,
+    secrets_path: Path | None = None,
+) -> str:
+    """Return the only destination a profile may talk to.
+
+    The destination never comes from a workflow: fixed profiles use the catalog,
+    bearer profiles with a custom endpoint use the endpoint their stored API key
+    was approved for, and key-less custom profiles use the local settings file.
+    """
+    if not profile.allow_custom_endpoint:
+        return profile.endpoint
+    if profile.auth_mode == "bearer":
+        bound = remote_api_key_endpoint(profile.id, secrets_path)
+        if bound is None:
+            raise RemoteLLMConfigurationError(
+                "API key has no approved endpoint. Open Configure API Key, verify the destination and save the key again."
+            )
+        return _validated_endpoint(bound, "Approved endpoint")
+    root = _load_settings_root(profiles or load_provider_catalog(), settings_path)
+    return profile_user_defaults(profile, root).custom_endpoint
 
 
 HttpTransport = Callable[[str, dict[str, str], bytes, int], tuple[int, bytes]]
@@ -647,7 +687,6 @@ class OpenAICompatibleChatProvider:
 
 def build_remote_provider(
     provider_profile: str,
-    custom_endpoint: str,
     model: str,
     reasoning_effort: str,
     timeout_seconds: int,
@@ -655,13 +694,17 @@ def build_remote_provider(
     catalog_path: Path | None = None,
     api_key_resolver: Callable[[], str] | None = None,
     cache_directory: Path | None | bool = None,
+    settings_path: Path | None = None,
+    secrets_path: Path | None = None,
 ) -> OpenAICompatibleChatProvider:
     selected = str(provider_profile).strip()
     profiles = load_provider_catalog(catalog_path)
     profile = next((item for item in profiles if selected in {item.id, item.label}), None)
     if profile is None:
         raise ValueError(f"Unsupported remote LLM provider profile '{selected}'")
-    endpoint = custom_endpoint if profile.allow_custom_endpoint else profile.endpoint
+    endpoint = resolve_profile_endpoint(
+        profile, profiles=profiles, settings_path=settings_path, secrets_path=secrets_path
+    )
     provider_id = f"{profile.id}_chat_completions"
     extra_body: dict[str, Any] = {}
     if profile.request_profile == "venice":

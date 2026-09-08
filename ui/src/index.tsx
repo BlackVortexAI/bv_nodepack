@@ -858,6 +858,13 @@ comfyApp.registerExtension({
                     && /^[A-Za-z_][A-Za-z0-9_]*$/.test(String(data.widgets_values[3] ?? ""))) {
                     data = { ...data, widgets_values: [...data.widgets_values.slice(0, 3), ...data.widgets_values.slice(4)] };
                 }
+                // BV-LEGACY(marked=2026-09-08, remove-after=2026-11-08): custom_endpoint widget removal.
+                // Workflows saved up to 1.4.0 stored the endpoint between provider_profile and model.
+                // The destination is now decided by the backend, so the stored value is dropped.
+                if (Array.isArray(data?.widgets_values) && data.widgets_values.length >= 5
+                    && /^(https?:\/\/|$)/.test(String(data.widgets_values[1] ?? "").trim())) {
+                    data = { ...data, widgets_values: [data.widgets_values[0], ...data.widgets_values.slice(2)] };
+                }
                 const result = originalConfigure?.call(this, data);
                 queueMicrotask(() => upgradeRemoteLLMProvider(this, comfyApi));
                 return result;

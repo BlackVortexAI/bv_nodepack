@@ -9,6 +9,7 @@ from .remote_llm import (
     load_provider_catalog,
     remote_api_key_status,
     remote_api_key_endpoint,
+    resolve_profile_endpoint,
     set_remote_api_key,
 )
 
@@ -18,6 +19,13 @@ routes = PromptServer.instance.routes
 
 def _profiles_by_id():
     return {profile.id: profile for profile in load_provider_catalog()}
+
+
+def _effective_endpoint(profile):
+    try:
+        return resolve_profile_endpoint(profile)
+    except (RemoteLLMConfigurationError, ValueError, OSError):
+        return None
 
 
 @routes.get("/bv_nodepack/remote_llm/providers")
@@ -35,6 +43,7 @@ async def remote_llm_providers(_request):
                 "auth_mode": profile.auth_mode,
                 "configured": profile.auth_mode == "none" or configured.get(profile.id, False),
                 "approved_endpoint": remote_api_key_endpoint(profile.id),
+                "effective_endpoint": _effective_endpoint(profile),
             }
             for profile in load_provider_catalog()
         ],

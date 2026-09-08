@@ -52,7 +52,6 @@ class BVRemoteLLMProviderNode:
         return {
             "required": {
                 "provider_profile": ([item.label for item in profiles], {"default": profile.label}),
-                "custom_endpoint": ("STRING", {"default": defaults.custom_endpoint}),
                 "model": ("STRING", {"default": defaults.model}),
                 "reasoning_effort": (
                     ["none", "low", "medium", "high"], {"default": defaults.reasoning_effort}
@@ -69,13 +68,12 @@ class BVRemoteLLMProviderNode:
     CATEGORY = CATEGORY
     DESCRIPTION = (
         "Creates an OpenAI-compatible local or remote Chat Completions provider with strict structured output. "
-        "The API key is read from the BV NodePack user secrets and is never serialized in the workflow."
+        "The destination comes from the provider catalog, the approved API-key binding or the local settings file; "
+        "the workflow cannot choose it. The API key is read from the BV NodePack user secrets and is never serialized."
     )
 
-    def build(self, provider_profile, custom_endpoint, model, reasoning_effort, timeout_seconds):
-        provider = build_remote_provider(
-            provider_profile, custom_endpoint, model, reasoning_effort, timeout_seconds
-        )
+    def build(self, provider_profile, model, reasoning_effort, timeout_seconds):
+        provider = build_remote_provider(provider_profile, model, reasoning_effort, timeout_seconds)
         provider.validate_configuration(require_api_key=True)
         return (provider,)
 

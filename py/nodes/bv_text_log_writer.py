@@ -11,7 +11,11 @@ class BVTextLogWriterNode:
         return {
             "required": {
                 "text": ("STRING", {"forceInput": True}),
-                "log_name": ("STRING", {"default": "regional-enhancer.txt", "multiline": False}),
+                "log_name": ("STRING", {
+                    "default": "regional-enhancer.txt",
+                    "multiline": False,
+                    "tooltip": "File name below output/bv_logs. Allowed endings: .txt, .json, .log (no ending becomes .txt).",
+                }),
                 "mode": (list(LOG_MODES), {"default": "timestamped"}),
                 "write_enabled": ("BOOLEAN", {"default": True}),
             }

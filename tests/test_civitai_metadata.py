@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import types
@@ -12,6 +13,7 @@ sys.path.insert(0, str(ROOT / "py"))
 
 from util.regional.civitai_metadata import build_regional_metadata  # noqa: E402
 from util.regional import civitai_metadata as metadata_module
+from util.regional.lora_hooks import lora_path_approver  # noqa: E402
 
 
 class CivitaiRegionalMetadataTests(unittest.TestCase):
@@ -94,11 +96,23 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
                 }
                 self.assertIsNone(metadata_module._sampler_info(graph, "s")["model"])
 
+    def setUp(self):
+        # A real .safetensors fixture inside a configured LoRA root: the containment rule
+        # rejects any other location or container format before a byte is read.
+        self._lora_root = tempfile.TemporaryDirectory()
+        self.addCleanup(self._lora_root.cleanup)
+        self.lora_root = Path(self._lora_root.name)
+        self.lora_file = self.lora_root / "test_civitai_metadata.safetensors"
+        self.lora_file.write_text("dummy")
+
+    def approve(self):
+        return lora_path_approver([self.lora_root])
+
     def test_deduplicates_resource_aliases_before_hashing(self):
         hasher = Mock(return_value="a" * 64)
         resources = metadata_module._resolved_resources(
             {"global": [["alias-a", 1, 1]], "region": [["alias-b", 0.5, 0]]},
-            lambda _name: __file__, hasher,
+            lambda _name: str(self.lora_file), hasher, self.approve(),
         )
         self.assertEqual(hasher.call_count, 1)
         self.assertEqual(len(resources), 1)
@@ -107,10 +121,69 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
     def test_failed_resource_is_not_rehashed_for_other_scopes(self):
         hasher = Mock(side_effect=OSError("file changed"))
         resources = metadata_module._resolved_resources(
-            {"global": [["a", 1, 1]], "region": [["b", 1, 0]]}, lambda _: __file__, hasher,
+            {"global": [["a", 1, 1]], "region": [["b", 1, 0]]}, lambda _: str(self.lora_file), hasher, self.approve(),
         )
         self.assertEqual(resources, [])
         self.assertEqual(hasher.call_count, 1)
+
+    def test_absolute_paths_outside_lora_roots_are_never_read(self):
+        hasher = Mock(return_value="a" * 64)
+        resolver = Mock(return_value=None)
+        outside = ROOT / "pyproject.toml"
+        self.assertTrue(outside.is_file())
+        resources = metadata_module._resolved_resources(
+            {"global": [[str(outside), 1, 1]]}, resolver, hasher, self.approve(),
+        )
+        self.assertEqual(resources, [])
+        hasher.assert_not_called()
+        resolver.assert_not_called()
+
+    def test_absolute_path_inside_lora_root_is_hashed(self):
+        hasher = Mock(return_value="a" * 64)
+        resources = metadata_module._resolved_resources(
+            {"global": [[str(self.lora_file), 1, 1]]}, lambda _name: None, hasher, self.approve(),
+        )
+        self.assertEqual(len(resources), 1)
+        self.assertEqual(hasher.call_count, 1)
+
+    def test_pickle_based_lora_inside_root_is_not_read_for_metadata(self):
+        legacy = self.lora_root / "legacy.pt"
+        legacy.write_text("dummy")
+        hasher = Mock(return_value="a" * 64)
+        resources = metadata_module._resolved_resources(
+            {"global": [[str(legacy), 1, 1]]}, lambda _name: None, hasher, self.approve(),
+        )
+        self.assertEqual(resources, [])
+        hasher.assert_not_called()
+
+    def test_resolver_result_outside_lora_roots_is_skipped(self):
+        hasher = Mock(return_value="a" * 64)
+        resources = metadata_module._resolved_resources(
+            {"global": [["evil.safetensors", 1, 1]]}, lambda _name: str(ROOT / "pyproject.toml"), hasher,
+            self.approve(),
+        )
+        self.assertEqual(resources, [])
+        hasher.assert_not_called()
+
+    def test_build_regional_metadata_applies_lora_root_containment(self):
+        hasher = Mock(return_value="a" * 64)
+        fixture = self.fixture()
+        outside = ROOT / "pyproject.toml"
+        graph = {
+            "90": {"class_type": "BV Regional Image Save", "inputs": {"images": ["30", 0]}},
+            "30": {"class_type": "KSampler", "inputs": {"model": ["20", 0], "steps": 8, "cfg": 1.0, "seed": 1,
+                                                        "sampler_name": "euler", "scheduler": "simple"}},
+            "20": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["10", 0], "lora_name": str(outside),
+                                                                    "strength_model": 0.8}},
+            "10": {"class_type": "UNETLoader", "inputs": {"unet_name": "anima.safetensors"}},
+        }
+        _, metadata = build_regional_metadata(
+            fixture, prompt=graph, unique_id="90",
+            lora_resolver=lambda _name: None, model_resolver=lambda _name: None,
+            hasher=hasher, allowed_lora_roots=[self.lora_root],
+        )
+        self.assertEqual(metadata["loras"], [])
+        hasher.assert_not_called()
 
     def fixture(self):
         with (ROOT / "tests" / "fixtures" / "regional" / "v1_hybrid_joint.json").open(encoding="utf-8") as handle:
@@ -183,9 +256,10 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
             self.fixture(),
             prompt=graph,
             unique_id="90",
-            lora_resolver=lambda name: __file__ if name == "turbo.safetensors" else None,
+            lora_resolver=lambda name: str(self.lora_file) if name == "turbo.safetensors" else None,
             model_resolver=lambda name: __file__ if name == "anima.safetensors" else None,
             hasher=lambda _path: "a" * 64,
+            allowed_lora_roots=[self.lora_root],
         )
 
         self.assertIn('Lora hashes: "test_civitai_metadata: aaaaaaaaaa"', parameters)

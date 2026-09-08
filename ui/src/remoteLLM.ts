@@ -11,6 +11,7 @@ type ProviderProfile = {
     auth_mode: "bearer" | "none";
     configured: boolean;
     approved_endpoint: string | null;
+    effective_endpoint: string | null;
 };
 
 let profilesPromise: Promise<ProviderProfile[]> | null = null;
@@ -29,29 +30,18 @@ const loadProfiles = (api: any, refresh = false) => {
 
 const widget = (node: any, name: string) => node.widgets?.find((item: any) => item.name === name);
 
+const hostOf = (endpoint: string | null) => {
+    if (!endpoint) return null;
+    try { return new URL(endpoint).host; } catch { return endpoint; }
+};
+
+// The node has no endpoint widget: the destination is decided by the backend from the
+// provider catalog, the approved API-key binding or the local settings file. The button
+// label only mirrors that decision so the user can see where requests will go.
 const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: string) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? ""));
     if (!selected) return;
-    const endpoint = widget(node, "custom_endpoint");
     const model = widget(node, "model");
-    if (endpoint) {
-        if (!selected.allow_custom_endpoint || !String(endpoint.value ?? "").trim()) endpoint.value = selected.endpoint;
-        // LiteGraph hides the value of disabled string widgets. Keep it visible and
-        // enforce managed endpoints through the callback plus the backend catalog.
-        endpoint.disabled = false;
-        if (endpoint.element) endpoint.element.readOnly = !selected.allow_custom_endpoint;
-        endpoint.label = selected.allow_custom_endpoint ? "custom endpoint" : "endpoint (managed)";
-        if (!endpoint.__bvRemoteEndpointHooked) {
-            endpoint.__bvRemoteEndpointHooked = true;
-            const originalEndpointCallback = endpoint.callback;
-            endpoint.callback = function () {
-                const result = originalEndpointCallback?.apply(this, arguments);
-                const active = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? ""));
-                if (active && !active.allow_custom_endpoint) endpoint.value = active.endpoint;
-                return result;
-            };
-        }
-    }
     if (model && previousLabel && previousLabel !== selected.label) {
         const previous = profiles.find(profile => profile.label === previousLabel);
         const current = String(model.value ?? "").trim();
@@ -59,10 +49,17 @@ const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: st
     }
     const status = widget(node, "configure_api_key");
     if (status) {
-        status.disabled = selected.auth_mode === "none";
-        status.label = selected.auth_mode === "none"
-            ? "✓ No API key required"
-            : `${selected.configured && selected.approved_endpoint ? "✓" : "⚠"} Configure ${selected.label} API Key`;
+        const destination = hostOf(selected.effective_endpoint ?? selected.endpoint);
+        if (selected.auth_mode === "none") {
+            status.disabled = true;
+            status.label = `✓ No API key required · ${destination}`;
+        } else {
+            status.disabled = false;
+            const ready = selected.configured && selected.approved_endpoint;
+            status.label = ready
+                ? `✓ Configure ${selected.label} API Key · ${hostOf(selected.approved_endpoint)}`
+                : `⚠ Configure ${selected.label} API Key`;
+        }
     }
     node.setDirtyCanvas?.(true, true);
 };
@@ -71,10 +68,15 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
     const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
     if (!selected) return;
     if (selected.auth_mode === "none") return;
-    // Snapshot the displayed destination; later workflow edits must not change the save request.
-    const destination = selected.allow_custom_endpoint ? String(widget(node, "custom_endpoint")?.value ?? "") : selected.endpoint;
-    mountBvView(close => createElement(RemoteLlmApiKeyDialog, { label: selected.label, configured: selected.configured, destination, approvedEndpoint: selected.approved_endpoint, close,
-      onSave: async (apiKey: string) => {
+    mountBvView(close => createElement(RemoteLlmApiKeyDialog, {
+      label: selected.label,
+      configured: selected.configured,
+      // Custom profiles enter and confirm the destination inside the dialog; fixed profiles show the catalog address.
+      destination: selected.approved_endpoint ?? selected.endpoint,
+      destinationEditable: selected.allow_custom_endpoint,
+      approvedEndpoint: selected.approved_endpoint,
+      close,
+      onSave: async (apiKey: string, destination: string) => {
         const response = await fetch(api.apiURL("/bv_nodepack/remote_llm/api_key"), {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ profile_id: selected.id, api_key: apiKey, endpoint: destination }),
@@ -82,6 +84,7 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         if (!response.ok) return (await response.json().catch(() => null))?.error ?? "Could not save API key.";
         selected.configured = true;
         selected.approved_endpoint = destination;
+        selected.effective_endpoint = destination;
         applyProfile(node, profiles);
         loadProfiles(api, true);
       }, onDelete: async () => {
@@ -89,6 +92,7 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         if (!response.ok) return "Could not delete API key.";
         selected.configured = false;
         selected.approved_endpoint = null;
+        selected.effective_endpoint = selected.allow_custom_endpoint ? null : selected.endpoint;
         applyProfile(node, profiles);
         loadProfiles(api, true);
       }

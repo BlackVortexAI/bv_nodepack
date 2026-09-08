@@ -69,11 +69,21 @@ The following safeguards from 1.3.0 still apply:
   **Configure API Key** and confirm the displayed destination. Keys are bound to
   that full endpoint; redirects are blocked. Fixed-provider legacy keys retain
   their catalog destination.
-- Regional LoRA stacks accept files only inside configured ComfyUI LoRA folders,
-  including `extra_model_paths.yaml` entries. Register additional folders there;
-  absolute paths within configured folders remain supported.
+- **BV Remote LLM Provider** has no endpoint widget any more. The destination is
+  decided by the backend only: the catalog address for fixed profiles, the
+  approved API-key binding for custom bearer profiles, and the optional
+  `profile_defaults.<profile>.custom_endpoint` entry in `remote_llm_settings.json`
+  for the key-less local custom profile. A workflow cannot select a destination.
+- Regional LoRA stacks accept `.safetensors` files only, and only inside
+  configured ComfyUI LoRA folders, including `extra_model_paths.yaml` entries.
+  Register additional folders there; absolute paths within configured folders
+  remain supported. Pickle-based formats (`.pt`, `.ckpt`, `.bin`) are rejected
+  with a clear error, so no LoRA reaches `torch.load`. The same rule applies to
+  the LoRA hashes that BV Regional Image Save embeds as Civitai metadata; files
+  outside those folders are never read.
 - Text logs reject linked log files and linked `bv_logs` directories. Use an
-  ordinary log directory below the configured ComfyUI output root.
+  ordinary log directory below the configured ComfyUI output root. Log names
+  must end with `.txt`, `.json` or `.log`; other endings are rejected.
 
 Keep ComfyUI and its settings routes restricted to trusted users, and review
 imported workflows before running them. These safeguards do not constitute

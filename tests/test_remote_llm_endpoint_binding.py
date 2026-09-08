@@ -28,14 +28,20 @@ class EndpointBindingTests(unittest.TestCase):
         self.paths = patch.object(remote, 'default_user_secrets_path', return_value=self.path)
         self.paths.start()
         self.addCleanup(self.paths.stop)
+        self.settings = patch.object(remote, 'default_user_settings_path',
+                                     return_value=Path(self.temp.name) / 'settings.json')
+        self.settings.start()
+        self.addCleanup(self.settings.stop)
         self.calls = []
 
     def transport(self, url, headers, body, timeout):
         self.calls.append((url, headers.copy()))
         return 200, b'{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}'
 
-    def provider(self, endpoint=A, profile='openai-compatible', cache=False):
-        return remote.build_remote_provider(profile, endpoint, 'model', 'none', 5,
+    def provider(self, profile='openai-compatible', cache=False):
+        # No endpoint argument exists any more: the destination is resolved from the
+        # catalog, the approved key binding or the local settings file only.
+        return remote.build_remote_provider(profile, 'model', 'none', 5,
                                             transport=self.transport, cache_directory=cache)
 
     def save(self, endpoint=A, key='dummy-generic'):
@@ -50,18 +56,27 @@ class EndpointBindingTests(unittest.TestCase):
         self.assertEqual(value['version'], 2)
         self.assertEqual(value['endpoints'], {'openai-compatible': A})
 
-    def test_workflow_cannot_change_host_port_or_path_or_add_query(self):
+    def test_provider_destination_is_the_approved_binding_and_nothing_else(self):
         self.save()
+        provider = self.provider()
+        self.assertEqual(provider.endpoint, A)
         for endpoint in [B, A+'/', A+'/other', A.replace('/v1/', '/V1/'),
                          A.replace('.invalid/', '.invalid:444/'), A+'?key=value',
                          'http://127.0.0.1/v1/chat/completions']:
+            provider.endpoint = endpoint
             with self.subTest(endpoint=endpoint), self.assertRaises(ValueError):
-                self.provider(endpoint).generate(request())
+                provider.generate(request())
+        self.assertEqual(self.calls, [])
+
+    def test_custom_bearer_profile_without_binding_cannot_be_built(self):
+        with self.assertRaisesRegex(ValueError, 'no approved endpoint'):
+            self.provider()
         self.assertEqual(self.calls, [])
 
     def test_canonical_host_and_default_port_are_equivalent(self):
         self.save('https://APPROVED.invalid:443/v1/chat/completions')
-        self.provider(A).generate(request())
+        self.assertEqual(self.provider().endpoint, A)
+        self.provider().generate(request())
         self.assertEqual(len(self.calls), 1)
 
     def test_unicode_host_and_ipv6_are_canonicalized(self):
@@ -131,7 +146,7 @@ class EndpointBindingTests(unittest.TestCase):
         self.save()
         remote.set_remote_api_key('openai', 'dummy-openai')
         self.provider().generate(request())
-        self.provider(B, 'openai').generate(request())
+        self.provider('openai').generate(request())
         self.assertEqual(self.calls[-1][0], 'https://api.openai.com/v1/chat/completions')
         self.assertEqual([item[1]['Authorization'] for item in self.calls],
                          ['Bearer dummy-generic', 'Bearer dummy-openai'])
@@ -185,9 +200,26 @@ class EndpointBindingTests(unittest.TestCase):
         self.assertEqual(remote.remote_api_key_status(), {'openai':True,'venice':True})
 
     def test_local_provider_still_works_without_credentials(self):
-        self.provider('http://127.0.0.1:1234/v1/chat/completions', 'local-openai-compatible').generate(request())
+        self.provider('local-openai-compatible').generate(request())
+        self.assertEqual(self.calls[0][0], 'http://127.0.0.1:1234/v1/chat/completions')
         self.assertNotIn('Authorization', self.calls[0][1])
         self.assertFalse(self.path.exists())
+
+    def test_local_custom_endpoint_comes_from_the_settings_file_only(self):
+        settings = Path(self.temp.name) / 'settings.json'
+        settings.write_text(json.dumps({'schema': 'bv.remote_llm.settings', 'version': 1,
+            'default_profile_id': 'openai-compatible',
+            'profile_defaults': {'local-openai-compatible': {'custom_endpoint': 'http://localhost:5000/v1/chat/completions'}}}))
+        provider = self.provider('local-openai-compatible')
+        self.assertEqual(provider.endpoint, 'http://localhost:5000/v1/chat/completions')
+        provider.generate(request())
+        self.assertEqual(self.calls[0][0], 'http://localhost:5000/v1/chat/completions')
+        settings.write_text(json.dumps({'schema': 'bv.remote_llm.settings', 'version': 1,
+            'default_profile_id': 'openai-compatible',
+            'profile_defaults': {'local-openai-compatible': {'custom_endpoint': 'http://example.com/v1/chat/completions'}}}))
+        with self.assertRaisesRegex(ValueError, 'HTTPS or loopback HTTP'):
+            self.provider('local-openai-compatible')
+        self.assertEqual(len(self.calls), 1)
 
     def test_save_route_requires_endpoint_and_key_and_never_returns_secret(self):
         decorators = SimpleNamespace(get=lambda _:lambda f:f, post=lambda _:lambda f:f, delete=lambda _:lambda f:f)

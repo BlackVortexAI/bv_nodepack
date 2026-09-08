@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
+from py.util import remote_llm as remote_llm_module
 from py.util.regional.prompt_enhancer import LLMRequest
 from py.util.remote_llm import (
     OpenAICompatibleChatProvider,
@@ -56,7 +58,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
             return 200, json.dumps(response).encode()
 
         provider = build_remote_provider(
-            "Venice", "https://ignored.invalid/v1/chat/completions", "zai-org-glm-5-1",
+            "Venice", "zai-org-glm-5-1",
             "low", 45, transport=transport, api_key_resolver=lambda: "secret-value", cache_directory=False
         )
         response = provider.generate(request())
@@ -82,7 +84,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
             return 200, b'{"choices":[{"message":{"content":"{}"},"finish_reason":"stop"}]}'
 
         build_remote_provider(
-            "OpenAI", "https://ignored.invalid", "model", "none", 60,
+            "OpenAI", "model", "none", 60,
             transport=transport, api_key_resolver=lambda: "secret-value", cache_directory=False
         ).generate(request(seed=0))
 
@@ -91,7 +93,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
 
     def test_missing_api_key_fails_before_transport(self):
         provider = build_remote_provider(
-            "Venice", "https://ignored.invalid", "model", "none", 60,
+            "Venice", "model", "none", 60,
             transport=lambda *_args: self.fail("must not call"), api_key_resolver=lambda: "", cache_directory=False
         )
         with self.assertRaisesRegex(ValueError, "not configured"):
@@ -102,7 +104,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
             return 401, b'{"error":"token secret-value rejected"}'
 
         provider = build_remote_provider(
-            "Venice", "https://ignored.invalid", "model", "none", 60,
+            "Venice", "model", "none", 60,
             transport=transport, api_key_resolver=lambda: "secret-value", cache_directory=False
         )
         with self.assertRaises(RemoteLLMProviderError) as caught:
@@ -114,7 +116,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
 
     def test_invalid_chat_completion_shape_fails_explicitly(self):
         provider = build_remote_provider(
-            "Venice", "https://ignored.invalid", "model", "none", 60,
+            "Venice", "model", "none", 60,
             transport=lambda *_args: (200, b'{"choices":[]}'), api_key_resolver=lambda: "secret-value", cache_directory=False
         )
         with self.assertRaisesRegex(RemoteLLMProviderError, "invalid Chat Completions response"):
@@ -122,23 +124,33 @@ class RemoteLLMProviderTests(unittest.TestCase):
 
     def test_openai_profile_uses_fixed_openai_endpoint(self):
         provider = build_remote_provider(
-            "OpenAI", "https://attacker.invalid/v1/chat/completions", "gpt-5-mini", "none", 60
+            "OpenAI", "gpt-5-mini", "none", 60
         )
         self.assertEqual(provider.endpoint, OPENAI_CHAT_COMPLETIONS_URL)
         self.assertEqual(provider.provider_id, "openai_chat_completions")
 
-    def test_custom_profile_uses_validated_custom_endpoint(self):
-        provider = build_remote_provider(
-            "OpenAI Compatible", "http://127.0.0.1:1234/v1/chat/completions", "local-model", "none", 60
-        )
-        self.assertEqual(provider.endpoint, "http://127.0.0.1:1234/v1/chat/completions")
+    def test_custom_bearer_profile_uses_only_the_approved_key_binding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secrets = Path(directory) / "secrets.json"
+            with patch.object(remote_llm_module, "default_user_secrets_path", return_value=secrets):
+                with self.assertRaisesRegex(ValueError, "no approved endpoint"):
+                    build_remote_provider("OpenAI Compatible", "local-model", "none", 60)
+                set_remote_api_key(
+                    "openai-compatible", "dummy-key", endpoint="https://compatible.invalid/v1/chat/completions"
+                )
+                provider = build_remote_provider("OpenAI Compatible", "local-model", "none", 60)
+        self.assertEqual(provider.endpoint, "https://compatible.invalid/v1/chat/completions")
         self.assertEqual(provider.provider_id, "openai-compatible_chat_completions")
 
-    def test_custom_profile_rejects_remote_plain_http(self):
-        with self.assertRaisesRegex(ValueError, "HTTPS or loopback HTTP"):
-            build_remote_provider(
-                "OpenAI Compatible", "http://example.com/v1/chat/completions", "model", "none", 60
-            )
+    def test_custom_bearer_profile_rejects_remote_plain_http_at_key_save(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secrets = Path(directory) / "secrets.json"
+            with patch.object(remote_llm_module, "default_user_secrets_path", return_value=secrets):
+                with self.assertRaisesRegex(ValueError, "HTTPS or loopback HTTP"):
+                    set_remote_api_key(
+                        "openai-compatible", "dummy-key", endpoint="http://example.com/v1/chat/completions"
+                    )
+            self.assertFalse(secrets.exists())
 
     def test_packaged_catalog_contains_abacus_strict_chat_profile(self):
         profiles = {profile.id: profile for profile in load_provider_catalog()}
@@ -148,7 +160,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
 
     def test_abacus_profile_uses_catalog_endpoint(self):
         provider = build_remote_provider(
-            "Abacus.AI", "https://attacker.invalid/v1/chat/completions", "route-llm", "none", 60
+            "Abacus.AI", "route-llm", "none", 60
         )
         self.assertEqual(provider.endpoint, ABACUS_CHAT_COMPLETIONS_URL)
         self.assertEqual(provider.provider_id, "abacus_chat_completions")
@@ -161,7 +173,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
             return 200, b'{"choices":[{"message":{"content":"{}"},"finish_reason":"stop"}]}'
 
         provider = build_remote_provider(
-            "Ollama (Local)", "https://ignored.invalid", "qwen3:4b", "none", 60,
+            "Ollama (Local)", "qwen3:4b", "none", 60,
             transport=transport, api_key_resolver=lambda: "", cache_directory=False,
         )
         response = provider.generate(request(seed=0))
@@ -182,14 +194,30 @@ class RemoteLLMProviderTests(unittest.TestCase):
         self.assertTrue(custom.allow_custom_endpoint)
         self.assertEqual(custom.auth_mode, "none")
 
-    def test_local_custom_profile_accepts_loopback_endpoint_without_authentication(self):
-        provider = build_remote_provider(
-            "Local OpenAI Compatible (Custom)",
-            "http://localhost:5000/v1/chat/completions",
-            "my-local-model", "none", 60,
-        )
-        self.assertEqual(provider.endpoint, "http://localhost:5000/v1/chat/completions")
-        self.assertEqual(provider.auth_mode, "none")
+    def test_local_custom_profile_endpoint_comes_from_settings_file_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = Path(directory) / "remote_llm_settings.json"
+            default = build_remote_provider(
+                "Local OpenAI Compatible (Custom)", "my-local-model", "none", 60, settings_path=settings
+            )
+            self.assertEqual(default.endpoint, "http://127.0.0.1:1234/v1/chat/completions")
+            settings.write_text(json.dumps({
+                "schema": "bv.remote_llm.settings", "version": 1, "default_profile_id": "openai-compatible",
+                "profile_defaults": {"local-openai-compatible": {"custom_endpoint": "http://localhost:5000/v1/chat/completions"}},
+            }), encoding="utf-8")
+            provider = build_remote_provider(
+                "Local OpenAI Compatible (Custom)", "my-local-model", "none", 60, settings_path=settings
+            )
+            self.assertEqual(provider.endpoint, "http://localhost:5000/v1/chat/completions")
+            self.assertEqual(provider.auth_mode, "none")
+            settings.write_text(json.dumps({
+                "schema": "bv.remote_llm.settings", "version": 1, "default_profile_id": "openai-compatible",
+                "profile_defaults": {"local-openai-compatible": {"custom_endpoint": "http://example.com/v1/chat/completions"}},
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "HTTPS or loopback HTTP"):
+                build_remote_provider(
+                    "Local OpenAI Compatible (Custom)", "my-local-model", "none", 60, settings_path=settings
+                )
 
     def test_user_settings_are_created_once_and_never_contain_secret_values(self):
         profiles = load_provider_catalog()
@@ -250,11 +278,11 @@ class RemoteLLMProviderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             cache = Path(directory) / "cache"
             first = build_remote_provider(
-                "Venice", "https://ignored.invalid", "model", "none", 60,
+                "Venice", "model", "none", 60,
                 transport=transport, api_key_resolver=lambda: "secret-value", cache_directory=cache,
             )
             second = build_remote_provider(
-                "Venice", "https://ignored.invalid", "model", "none", 60,
+                "Venice", "model", "none", 60,
                 transport=transport, api_key_resolver=lambda: "different-secret", cache_directory=cache,
             )
             self.assertEqual(first.generate(request()).raw_text, "{}")
@@ -273,7 +301,7 @@ class RemoteLLMProviderTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             provider = build_remote_provider(
-                "Venice", "https://ignored.invalid", "model", "none", 60,
+                "Venice", "model", "none", 60,
                 transport=transport, api_key_resolver=lambda: "secret-value", cache_directory=Path(directory),
             )
             provider.generate(request(seed=1))
