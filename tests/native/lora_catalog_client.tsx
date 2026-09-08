@@ -1,0 +1,36 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {flushSync} from 'react-dom';
+import {LoraCatalogLibraryLoader} from '../../ui/src/regional/LoraRegistryView';
+import {loraCatalogClient} from '../../ui/src/regional/loraCatalogClient';
+import {emptyLoraRegistryConfig,serializeLoraRegistryConfig} from '../../ui/src/regional/loraRegistryConfig';
+import {applyBvTheme} from '../../ui/src/ui/theme';
+applyBvTheme();
+const mount=document.querySelector('#mount')!,result=document.querySelector('#result')!;
+const root=createRoot(mount),config=emptyLoraRegistryConfig();let stored=serializeLoraRegistryConfig(config),requests:string[]=[];
+const base:any={base_model:'Krea 2',tags:['character','style'],trigger_words:[],author:'Synthetic',description:'Synthetic metadata only; no remote media.',size:1,preview_url:null,preview_safe:true,metadata_sources:['synthetic.json'],type:'LoRA',category:'Character',directory:'Synthetic'};
+const items=[{...base,name:'Synthetic/00-multipass.safetensors',display_name:'00 Synthetic long descriptive multipass character LoRA',civitai_url:'https://civitai.com/models/123?modelVersionId=456',compatibility:{status:'multipass',family:'krea2',reason:'Temporal targets require regional multipass.',target_model:'unknown'}},{...base,name:'Synthetic/01-token.safetensors',display_name:'01 Synthetic token candidate',civitai_url:'https://civitai.com/models/234',compatibility:{status:'token_candidate',family:'krea2',reason:'Token candidate; target model unverified.',target_model:'unknown'}},{...base,name:'Synthetic/02-unknown.safetensors',display_name:'02 Synthetic unknown',civitai_url:null,compatibility:{status:'unknown',family:null,reason:'Unsupported header targets.',target_model:'unknown'}}];
+const legacy=new URLSearchParams(location.search).has('legacy');
+const payloadItems=structuredClone(items) as any[];if(legacy)for(const item of payloadItems){delete item.compatibility;delete item.civitai_url}
+const originalFetch=window.fetch;
+window.fetch=async(input:any)=>{if(String(input)!=='/synthetic-api/bv_nodepack/loras/catalog')throw Error('Unexpected fixture request '+input);requests.push(String(input));return {ok:true,json:async()=>({schema:'bv.lora_catalog',version:1,items:payloadItems})} as Response};
+loraCatalogClient.invalidate();
+flushSync(()=>root.render(<LoraCatalogLibraryLoader api={{apiURL:path=>'/synthetic-api'+path}} readStored={()=>stored} targetStackId={config.stacks[0].id} save={value=>{stored=value}} close={()=>root.unmount()}/>));
+const checkButton=document.querySelector<HTMLButtonElement>('#check')!;
+checkButton.onclick=async()=>{
+ const checks:any[]=[];const check=(name:string,pass:unknown)=>checks.push({name,pass:!!pass});
+ check('actual singleton client made expected API request',requests.length>0&&requests.every(p=>p==='/synthetic-api/bv_nodepack/loras/catalog'));
+ const cached=loraCatalogClient.getSnapshot();check('API compatibility survives client cache',legacy?!('compatibility' in cached.items[0]):cached.items[0]?.compatibility?.status==='multipass');check('API Civitai URL survives client cache',legacy?!('civitai_url' in cached.items[0]):cached.items[0]?.civitai_url===items[0].civitai_url);
+ check('actual loader renders exact Civitai link',legacy?!mount.querySelector('a'):mount.querySelector<HTMLAnchorElement>('a')?.href===items[0].civitai_url);
+ check('actual loader shows known multipass routing',legacy?!mount.textContent?.includes('Multipass'):mount.textContent?.includes('Multipass'));
+ check('actual loader shows token candidate routing',legacy?!mount.textContent?.includes('Token candidate'):mount.textContent?.includes('Token candidate'));
+ flushSync(()=>mount.querySelector<HTMLButtonElement>('[aria-label="Grid view"]')?.click());
+ await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ check('old payload gets one actionable backend update notice',legacy?Array.from(mount.querySelectorAll('.bv-callout')).filter(el=>el.textContent?.includes('Catalog backend update required')).length===1:!mount.textContent?.includes('Catalog backend update required'));
+ const lines=Array.from(mount.querySelectorAll<HTMLElement>('.bv-resource-result small')).filter(el=>/^(Multipass|Token candidate|Not checked)$/.test(el.textContent??''));
+ check('routing lines remain readable at card width',legacy?lines.length===0:lines.length===3&&lines.every(el=>el.scrollWidth<=el.clientWidth+1));
+ const badges=Array.from(mount.querySelectorAll<HTMLElement>('.bv-resource-result .bv-badge')).filter(el=>/Regional:|Compatibility:/.test(el.textContent??''));
+ check('routing badges do not squeeze or clip in grid cards',badges.every(el=>el.scrollWidth<=el.clientWidth+1));
+ result.textContent=JSON.stringify({status:checks.every(c=>c.pass)?'passed':'failed',checks,badgeWidths:badges.map(el=>({label:el.textContent,width:el.clientWidth,contentWidth:el.scrollWidth})),boundary:'Real client fetch/cache/loader/components with synthetic API and no media'},null,2);
+};
+window.addEventListener('beforeunload',()=>{window.fetch=originalFetch});

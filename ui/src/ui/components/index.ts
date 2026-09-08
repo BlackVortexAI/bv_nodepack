@@ -3,6 +3,7 @@ export * from "./SegmentedToggleGroup";
 export * from "./content";
 export * from "./compactInteractions";
 export * from "./data";
+export * from "./MediaPreview";
 export * from "./feedback";
 export * from "./forms";
 export * from "./layout";

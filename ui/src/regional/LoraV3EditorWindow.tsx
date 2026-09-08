@@ -1,3 +1,4 @@
+import {LoraRegistrySourcesPanel} from "./LoraRegistrySourcesPanel";
 import React, { useEffect, useState } from "react";
 import { Button, ResourcePicker, SelectField, SortableList, type SortableItem } from "../ui/components";
 import { BvManagedWindow } from "../ui/window";
@@ -17,7 +18,7 @@ export default function LoraV3EditorWindow({open,node,onClose}:{open:boolean;nod
     const collectors=loraV3Catalog(node).filter(item=>item.resources.length>0),targets=loraV3TargetOptions(node);
     const legacyOperation=String(widget(node,"operation")?.value??"replace") as LoraV3Operation;
     const steps:LoraV3Step[]=config.steps??config.entries.flatMap(entry=>entry.targets.map(target=>({id:crypto.randomUUID(),operation:legacyOperation,target:target as any,entries:[{...entry,targets:[target]}]})));
-    const commit=(nextSteps:LoraV3Step[])=>{const next:LoraV3Config={version:3,entries:[],steps:nextSteps};setConfig(commitLoraV3Config(node,next));};
+    const commit=(nextSteps:LoraV3Step[])=>{const next:LoraV3Config={...config,version:3,entries:[],steps:nextSteps};setConfig(commitLoraV3Config(node,next));};
     const items:SortableItem[]=steps.map((step,index)=>{
         const targetValue=loraV3TargetValue(step.target),targetLabel=targets.find(item=>item.value===targetValue)?.label??"Missing region";
         return {id:step.id,title:`Step ${index+1}: ${targetLabel}`,description:step.operation,content:<div className="bv-ui-stack">
@@ -27,5 +28,5 @@ export default function LoraV3EditorWindow({open,node,onClose}:{open:boolean;nod
             {step.operation!=="clear"&&<Button intent="secondary" disabled={!collectors.length} onClick={()=>{const choice=collectors[0],resource=choice?.resources[0];if(resource)commit(steps.map(item=>item.id===step.id?{...item,entries:[...item.entries,{id:crypto.randomUUID(),source:{kind:"external",collector_id:choice.id,resource_id:resource.id},targets:[item.target]}]}:item));}}>Add LoRA stack</Button>}
         </div>};
     });
-    return <BvManagedWindow open={open} title="BV Regional LoRA Editor" shortTitle="Regional LoRA" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} initialGeometry={{width:620,height:520}} minSize={{width:420,height:320}} onClose={onClose}><div className="bv-ui bv-lora-v3-window"><Button intent="secondary" disabled={!targets.length} onClick={()=>commit([...steps,{id:crypto.randomUUID(),operation:"merge",target:targets[0].target,entries:[]}])}>Add step</Button><SortableList items={items} initialExpanded={items.map(item=>item.id)} onReorder={ordered=>{const byId=new Map(steps.map(step=>[step.id,step]));commit(ordered.map(item=>byId.get(item.id)!).filter(Boolean));}} onRemove={id=>commit(steps.filter(step=>step.id!==id))}/></div></BvManagedWindow>;
+    return <BvManagedWindow open={open} title="BV Regional LoRA Editor" shortTitle="Regional LoRA" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} initialGeometry={{width:620,height:520}} minSize={{width:420,height:320}} onClose={onClose}><div className="bv-ui bv-lora-v3-window"><LoraRegistrySourcesPanel node={node} config={config} onConfig={setConfig}/><Button intent="secondary" disabled={!targets.length} onClick={()=>commit([...steps,{id:crypto.randomUUID(),operation:"merge",target:targets[0].target,entries:[]}])}>Add step</Button><SortableList items={items} initialExpanded={items.map(item=>item.id)} onReorder={ordered=>{const byId=new Map(steps.map(step=>[step.id,step]));commit(ordered.map(item=>byId.get(item.id)!).filter(Boolean));}} onRemove={id=>commit(steps.filter(step=>step.id!==id))}/></div></BvManagedWindow>;
 }

@@ -1,10 +1,18 @@
 export const LORA_V3_INVENTORY_CHANGED_EVENT="bv-regional-lora-inventory-changed";
+import {exclusiveGlobalLoraChanges} from "./loraGlobalRegistry";
+import {strictLoraRegistryConfig,serializeLoraRegistryConfig} from "./loraRegistryConfig";
 
 export function notifyLoraV3InventoryChanged(node?:any){
     if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent(LORA_V3_INVENTORY_CHANGED_EVENT,{detail:{node}}));
 }
 
 export function storeLoraRegistryInventory(node:any,widget:any,value:string,refresh:()=>void){
+    const previous=strictLoraRegistryConfig(widget.value),next=strictLoraRegistryConfig(value);
+    const changes=previous&&next?exclusiveGlobalLoraChanges(node,previous,next):[];
+    for(const change of changes){
+        const other=change.node.widgets?.find((item:any)=>item.name==="config_json");
+        if(other){other.value=serializeLoraRegistryConfig(change.config);other.callback?.(other.value);change.node.setDirtyCanvas?.(true,true);}
+    }
     widget.value=value;
     widget.callback?.(value);
     refresh();

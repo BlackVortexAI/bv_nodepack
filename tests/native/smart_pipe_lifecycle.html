@@ -1,0 +1,141 @@
+<!doctype html><meta charset="utf-8"><title>SmartPipe native lifecycle regression</title>
+<button id="run" disabled>Run detached lifecycle tests</button><pre id="result">Loading test module</pre>
+<script type="module">
+const result=document.querySelector('#result');
+document.querySelector('#run').onclick=async()=>{
+ const report={status:'running',checks:[],detached:true};
+ const check=(name,value)=>{report.checks.push({name,pass:!!value});if(!value)throw Error(name)};
+ const settle=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+ try{
+  report.phase='native import';
+  const vue=await import('/native/assets/vendor-vue-core-BZZQdWHo.js');
+  const isolatedVueApp=vue.g({render(){return null}});isolatedVueApp.use(vue.l());
+  const native=await import('/native/assets/settingStore-CwkLtSKP.js');
+  const LGraph=Object.values(native).find(v=>typeof v==='function'&&v.name==='LGraph');
+  const LGraphNode=Object.values(native).find(v=>typeof v==='function'&&v.name==='LGraphNode');
+  const LiteGraph=Object.values(native).find(v=>v&&typeof v.registerNodeType==='function'&&typeof v.createNode==='function');
+  check('real native graph and registry exports',LGraph&&LGraphNode&&LiteGraph);
+  const SubgraphNode=Object.values(native).find(v=>typeof v==='function'&&v.prototype?.isSubgraphNode&&v.prototype.isSubgraphNode());
+  check('real native SubgraphNode export',SubgraphNode);
+  const createGraph=()=>{
+   const g=new LGraph();
+   g.events.addEventListener('subgraph-created',event=>{
+    const sub=event.detail.subgraph;
+    class BoundSubgraph extends SubgraphNode{constructor(){super(g,sub,{id:-1,type:sub.id,pos:[0,0],size:[200,100],flags:{},order:0,mode:0});}}
+    LiteGraph.registerNodeType(sub.id,BoundSubgraph);
+   });
+   return g;
+  };
+  const schema=[1,2,3,4,5,6].map(n=>({id:`id-${n}`,ordinal:n,name:`slot-${n}`,type:'STRING',showOutput:n!==3&&n!==4,showInput:false}));
+  let extension;globalThis.__detachedSmartPipeApp={graph:createGraph(),registerExtension(e){extension=e}};
+  report.phase='extension capture';
+  const original=new URLSearchParams(location.search).has('original');
+  const url=new URL(original?'/repo/.tmp/smartpipe-original/bv_smart_pipe.js':'/repo/js/bv_smart_pipe.js',location.href);
+  let text=await(await fetch(url)).text();
+  text=text.replace('import { app } from "../../scripts/app.js";','const app=globalThis.__detachedSmartPipeApp;').replace(/from "(\.\/[^\"]+)"/g,(_,p)=>`from ${JSON.stringify(new URL(p,url).href)}`);
+  text+='\nexport {reconcilePorts,remapSmartPipeOutputLinks};';
+  const blob=URL.createObjectURL(new Blob([text],{type:'text/javascript'}));const mod=await import(blob);URL.revokeObjectURL(blob);
+  const slotState=await import('/repo/js/bv_node_slots.js');
+  const connectionEvents=[];
+  let configured=0,serialized=0;
+  class Pipe extends LGraphNode{
+   constructor(){super('Native SmartPipe');this.addInput('pipe','BV_SMART_PIPE');this.addOutput('pipe','BV_SMART_PIPE');for(let n=1;n<=100;n++)this.addOutput(`out_${String(n).padStart(3,'0')}`,'STRING');this.addWidget('text','bv_smart_pipe_schema_json','[]',()=>{});this.addWidget('text','bv_smart_pipe_route_json','{}',()=>{});extension.nodeCreated(this);}
+   onConnectionsChange(){connectionEvents.push({id:String(this.id),guard:slotState.nativeSlotsAreConfiguring(this)});}
+   onConfigure(){configured++}
+   onSerialize(){serialized++}
+  }
+  class Consumer extends LGraphNode{constructor(){super('Native Consumer');this.addInput('regional','STRING')}}
+  await extension.beforeRegisterNodeDef(Pipe,{name:'BV Smart Pipe'});
+  LiteGraph.registerNodeType('BV Smart Pipe',Pipe);LiteGraph.registerNodeType('BV Test Consumer',Consumer);
+  let graph=globalThis.__detachedSmartPipeApp.graph;
+  const source=LiteGraph.createNode('BV Smart Pipe'),target=LiteGraph.createNode('BV Test Consumer');
+  source.properties.bvSmartPipe={version:1,localSlots:structuredClone(schema),inheritedSlots:[],resolvedSlots:structuredClone(schema),routing:{nodeId:'source',name:'Source',mode:'root'}};
+  graph.add(source);graph.add(target);await extension.nodeCreated(source);await settle();
+  const regionalIndex=source.outputs.findIndex(p=>p.name==='out_005');source.connect(regionalIndex,target,0);
+  // Explicitly hide an already linked output. Native configure replays its link;
+  // replay must not turn the persisted visibility back on as if newly connected.
+  schema.find(p=>p.id==='id-5').showOutput=false;
+  for(const list of ['localSlots','resolvedSlots'])source.properties.bvSmartPipe[list].find(p=>p.id==='id-5').showOutput=false;
+  mod.reconcilePorts(source,schema);
+  const sourceId=source.id,targetId=target.id;
+  check('fixture has compact regional visual index three',regionalIndex===3);
+  const inspect=(label)=>{
+   const s=graph.getNodeById(sourceId),t=graph.getNodeById(targetId),linkId=t.inputs[0].link;
+   const links=graph._links||graph.links,link=links.get?.(linkId)||links[linkId];
+   check(label + ": replay preserves hidden linked output flag",s.properties.bvSmartPipe.localSlots.find(p=>p.id==='id-5').showOutput===false);
+   check(`${label}: linked endpoint is Regional`,link&&s.outputs[link.origin_slot]?.name==='out_005');
+   check(`${label}: no duplicate or hidden ghost outputs`,s.outputs.length===1+schema.filter(p=>p.showOutput||p.id==='id-5').length&&new Set(s.outputs.map(p=>p.name)).size===s.outputs.length);
+   check(`${label}: actual native output prototype`,typeof s.outputs[link.origin_slot].toJSON==='function');
+   const api={consumer:{class_type:'Consumer',inputs:{regional:['20:17',link.origin_slot]}}};
+   mod.remapSmartPipeOutputLinks(api,{descriptors:[{node:s,address:'test',executionId:'20:17'}],registry:{test:{projection:{resolvedSlots:schema}}}});
+   check(`${label}: materialized ordinal five`,api.consumer.inputs.regional[1]===5);
+  };
+  inspect('initial');
+  for(let round=0;round<3;round++){
+   report.phase=`whole graph reload ${round}`;
+   const saved=JSON.parse(JSON.stringify(graph.serialize()));
+   report.savedNodeSummary=saved.nodes.map(n=>({id:n.id,type:n.type,outputs:n.outputs?.map(p=>p.name)}));
+   check(`round ${round}: extension onSerialize ran`,serialized>round);
+   check(`round ${round}: explicit identity persisted`,saved.nodes.find(n=>String(n.id)===String(sourceId))?.outputs?.find(p=>p.name==='out_005')?.bvSlotId==='id-5');
+   graph=createGraph();globalThis.__detachedSmartPipeApp.graph=graph;
+   const replayStart=connectionEvents.length;graph.configure(saved);await settle();
+   const replayEvents=connectionEvents.slice(replayStart);report.lastReplayEvents=replayEvents;
+   check('native original callbacks execute inside configure guard',replayEvents.length>0&&replayEvents.every(e=>e.guard));
+   check(`round ${round}: extension onConfigure ran`,configured>round);
+   inspect(`reload ${round}`);
+  }
+  const syncSchema=()=>{const n=graph.getNodeById(sourceId);n.properties.bvSmartPipe.localSlots=structuredClone(schema);n.properties.bvSmartPipe.resolvedSlots=structuredClone(schema);mod.reconcilePorts(n,schema);};
+  const reloadCurrent=async(label)=>{const saved=JSON.parse(JSON.stringify(graph.serialize()));graph=createGraph();globalThis.__detachedSmartPipeApp.graph=graph;graph.configure(saved);await settle();inspect(label);};
+  report.phase='native slot mutation matrix';
+  schema.splice(2,0,{id:'new-7',ordinal:7,name:'inserted-middle',type:'STRING',showOutput:true,showInput:false});syncSchema();await reloadCurrent('add middle ordinal7');
+  schema.splice(schema.findIndex(p=>p.id==='new-7'),1);syncSchema();await reloadCurrent('remove unlinked ordinal7');
+  schema.splice(2,0,{id:'new-8',ordinal:8,name:'replacement-middle',type:'STRING',showOutput:true,showInput:false});syncSchema();await reloadCurrent('readd new identity ordinal8');
+  const rename=schema.find(p=>p.id==='new-8');rename.name='renamed replacement';syncSchema();await reloadCurrent('rename stable identity');
+  rename.showOutput=false;syncSchema();await reloadCurrent('hide unlinked replacement');
+  rename.showOutput=true;syncSchema();await reloadCurrent('show replacement');
+  const beforeSnapshot=JSON.parse(JSON.stringify(graph.serialize())),beforeSchema=structuredClone(schema);
+  schema.splice(schema.findIndex(p=>p.id==='new-8'),1);syncSchema();const afterSnapshot=JSON.parse(JSON.stringify(graph.serialize())),afterSchema=structuredClone(schema);
+  for(const [label,snapshot,state] of [['snapshot undo',beforeSnapshot,beforeSchema],['snapshot redo',afterSnapshot,afterSchema]]){
+   schema.splice(0,schema.length,...structuredClone(state));graph=createGraph();globalThis.__detachedSmartPipeApp.graph=graph;graph.configure(snapshot);await settle();inspect(label);
+  }
+  report.historyBoundary='native graph snapshots restored; application Undo UI not exercised';
+  report.phase='native boundary conversion';
+  const converted=graph.convertToSubgraph(new Set([graph.getNodeById(sourceId)]));
+  await settle();
+  const host=converted.node,subgraph=converted.subgraph;
+  check('native conversion made one real subgraph boundary',host.subgraph===subgraph&&host.outputs.length>0);
+  const copyData=JSON.parse(JSON.stringify(host.serialize()));copyData.id=-1;
+  for(const p of copyData.outputs||[])p.links=null;
+  for(const p of copyData.inputs||[])p.link=null;
+  const copy=new SubgraphNode(graph,subgraph,copyData);graph.add(copy);
+  const target2=LiteGraph.createNode('BV Test Consumer');graph.add(target2);copy.connect(0,target2,0);
+  const hostId=host.id,copyId=copy.id,target2Id=target2.id;
+  const inspectHosts=(label)=>{
+   const a=graph.getNodeById(hostId),b=graph.getNodeById(copyId);
+   check(`${label}: two native instances share definition`,a.subgraph===b.subgraph);
+   for(const [h,t] of [[a,graph.getNodeById(targetId)],[b,graph.getNodeById(target2Id)]]){
+    const links=graph._links||graph.links,id=t.inputs[0].link,link=links.get?.(id)||links[id];
+    check(`${label}: instance ${h.id} keeps external endpoint`,link&&link.origin_id===h.id&&h.outputs[link.origin_slot].links.includes(id));
+   }
+   const pipe=a.subgraph._nodes.find(n=>n.type==='BV Smart Pipe');
+   check(`${label}: shared inner pipe no ghosts`,pipe&&pipe.outputs.length===5&&new Set(pipe.outputs.map(p=>p.name)).size===5);
+   const index=pipe.outputs.findIndex(p=>p.name==='out_005');
+   const descriptors=[a,b].map(h=>({node:pipe,address:`host-${h.id}`,executionId:`${h.id}:${pipe.id}`}));
+   const registry=Object.fromEntries(descriptors.map(d=>[d.address,{projection:{resolvedSlots:schema}}]));
+   const api=Object.fromEntries(descriptors.map((d,i)=>[`consumer${i}`,{class_type:'Consumer',inputs:{regional:[d.executionId,index]}}]));
+   mod.remapSmartPipeOutputLinks(api,{descriptors,registry});
+   check(`${label}: both expanded execution paths map ordinal five`,Object.values(api).every(n=>n.inputs.regional[1]===5));
+  };
+  inspectHosts('converted');
+  for(let round=0;round<2;round++){
+   const saved=JSON.parse(JSON.stringify(graph.serialize()));graph=createGraph();globalThis.__detachedSmartPipeApp.graph=graph;
+   const replayStart=connectionEvents.length;graph.configure(saved);await settle();
+   const replayEvents=connectionEvents.slice(replayStart);report.lastReplayEvents=replayEvents;
+   check('native original callbacks execute inside configure guard',replayEvents.length>0&&replayEvents.every(e=>e.guard));inspectHosts(`subgraph reload ${round}`);
+  }
+  report.status='passed';report.lifecycle={configured,serialized};report.original=original;
+ }catch(error){report.status='failed';report.error=String(error);report.stack=error.stack;report.failedNativeNodes=(globalThis.__detachedSmartPipeApp?.graph?._nodes||[]).map(n=>({id:n.id,type:n.type,outputs:n.outputs?.map(p=>({name:p.name,id:p.bvSlotId,links:p.links,ctor:p.constructor.name}))}));}
+ result.textContent=JSON.stringify(report,null,2);globalThis.__nativeSmartPipeResult=report;
+};
+document.querySelector('#run').disabled=false;result.textContent='Ready';
+</script>

@@ -4,7 +4,7 @@ import { Button, ResourcePicker, ResourcePickerCollector, ToggleField, type Sele
 export type LoraV3Entry={id:string;source:{kind:"external";collector_id:string;resource_id:string}|{kind:"native";lora_name:string;model_strength:number;clip_strength:number};targets:Record<string,unknown>[]};
 export type LoraV3Operation="replace"|"merge"|"subtract"|"clear";
 export type LoraV3Step={id:string;operation:LoraV3Operation;target:LoraV3Target;entries:LoraV3Entry[]};
-export type LoraV3Config={version:3;entries:LoraV3Entry[];steps?:LoraV3Step[]};
+export type LoraV3Config={version:3;entries:LoraV3Entry[];steps?:LoraV3Step[];registry_ids?:string[];apply_global?:boolean};
 
 export type LoraV3Target={scope:"global"}|{scope:"region";document_id:string;region_id:string};
 export type LoraV3TargetOption=SelectOption&{target:LoraV3Target};

@@ -1,0 +1,11 @@
+import React from 'react';
+import {applyBvTheme} from '../../ui/src/ui/theme';
+applyBvTheme();
+import {createRoot} from 'react-dom/client';
+import {LoraRegistryDialogView} from '../../ui/src/regional/LoraRegistryView';
+import {emptyLoraRegistryConfig,newLoraRegistryStack,newLoraRegistryEntry,serializeLoraRegistryConfig} from '../../ui/src/regional/loraRegistryConfig';
+const config=emptyLoraRegistryConfig();
+const basis=newLoraRegistryStack('Legacy style');basis.role='basis';basis.entries.push(newLoraRegistryEntry('synthetic-style.safetensors'));
+config.stacks.push(basis,newLoraRegistryStack('Regional costume'));
+const root=createRoot(document.querySelector('#mount')!);
+root.render(<LoraRegistryDialogView stored={localStorage.getItem('bv-global-fixture-saved')??serializeLoraRegistryConfig(config)} catalog={{schema:'bv.lora_catalog',version:1,items:[]}} save={value=>{localStorage.setItem('bv-global-fixture-saved',value);document.querySelector('#result')!.textContent='Saved synthetic fixture'}} close={()=>root.unmount()}/>);

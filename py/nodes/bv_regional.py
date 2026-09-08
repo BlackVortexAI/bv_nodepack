@@ -47,6 +47,8 @@ from ..util.regional.lora_v3 import (
     transform_lora_sequence,
 )
 from ..util.lora_registry import lora_registry_diagnostics, materialize_lora_registry
+from ..util.model_patcher import apply_global_patches
+from ..util.regional.lora_v3 import without_lora_provider_selection
 from ..util.regional.detailer_v3 import transform_detailer_capability
 from ..util.regional.lut_v3 import MAX_LUT_RESOURCE_PROVIDERS, transform_lut_capability
 from ..util.regional.v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
@@ -58,7 +60,6 @@ from ..util.regional.flux2_klein_attention import (
     apply_flux2_klein_attention_patch,
 )
 from ..util.regional.krea2_attention import compile_krea2_attention, apply_krea2_attention_patch
-from ..util.regional.krea2_token_lora import apply_krea2_token_lora_patch
 from ..util.regional.civitai_metadata import build_regional_metadata, metadata_json
 
 
@@ -217,14 +218,19 @@ class BVRegionalPromptNode:
     def build(self, regional_json, lora_bindings_json=None, lora_v3_config_json=None, detailer_v3_config_json=None, lut_v3_config_json=None, resource_provider=None, canvas_image=None, unique_id=None, reference_v3_config_json=None, **providers):
         document = parse_document(regional_json)
         payload = filter_tool_config(document, json.loads(lora_v3_config_json or DEFAULT_LORA_V3_JSON), "lora")
+        # Retired Prompt-only provider selection; manual entry dependencies stay intact.
+        payload.pop("registry_ids", None)
+        without_lora_provider_selection(payload, _lora_provider_map(resource_provider, **providers))
         regional = document
         if payload.get("entries"):
             regional = transform_lora_capability(
                 document, normalize_lora_prompt_config(payload), registry=REGIONAL_V3_CAPABILITY_REGISTRY
             )
-            regional = materialize_lora_capability(
-                regional, _lora_provider_map(resource_provider, **providers), registry=REGIONAL_V3_CAPABILITY_REGISTRY
-            ).to_dict()
+        materialized = materialize_lora_capability(
+            regional, _lora_provider_map(resource_provider, **providers), registry=REGIONAL_V3_CAPABILITY_REGISTRY, apply_global=payload.get("apply_global", True)
+        )
+        if LORA_CAPABILITY in materialized.capabilities:
+            regional = materialized.to_dict()
         detailer_payload = json.loads(detailer_v3_config_json or DEFAULT_DETAILER_V3_JSON)
         if detailer_payload.get("jobs"):
             regional = transform_detailer_capability(
@@ -341,14 +347,13 @@ class BVRegionalLoraNode:
 
     def transform(self, regional, operation, config_json, **providers):
         payload = json.loads(config_json) if isinstance(config_json, str) else config_json
+        without_lora_provider_selection(payload, _ordinal_lora_provider_map(**providers))
         transformed = transform_lora_sequence(
             regional, payload, registry=LORA_CAPABILITY_REGISTRY, fallback_operation=operation
         )
-        result = transformed.capabilities.get(LORA_CAPABILITY)
-        if result is not None:
-            transformed = materialize_lora_capability(
-                transformed, _ordinal_lora_provider_map(**providers), registry=LORA_CAPABILITY_REGISTRY
-            )
+        transformed = materialize_lora_capability(
+            transformed, _ordinal_lora_provider_map(**providers), registry=LORA_CAPABILITY_REGISTRY
+        )
         return (transformed.to_dict(),)
 
 
@@ -625,11 +630,11 @@ class BVRegionalNativeConditioningNode:
                 ),
             },
             # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): V2 LoRA sidecar inputs.
-            "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {})},
+            "optional": {"lora_registry": (REGISTRY, {}), "lora_bindings": (BINDINGS, {}), "model": ("MODEL", {})},
         }
 
-    RETURN_TYPES = ("CONDITIONING", "CONDITIONING")
-    RETURN_NAMES = ("positive", "negative")
+    RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "MODEL")
+    RETURN_NAMES = ("positive", "negative", "patched_model")
     FUNCTION = "compile"
     CATEGORY = CATEGORY_MODEL_GENERIC
     DESCRIPTION = (
@@ -638,14 +643,16 @@ class BVRegionalNativeConditioningNode:
     )
 
     def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35,
-                lora_registry=None, lora_bindings=None):
+                lora_registry=None, lora_bindings=None, model=None):
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
-        return compile_native_conditioning(
+        positive, negative = compile_native_conditioning(
             document, clip, region_strength_multiplier, hook_groups,
             composition_mode=native_composition, hybrid_blend_ratio=hybrid_blend_ratio,
         )
+        return positive, negative, model
 
 
 class BVRegionalSDXLAttentionNode:
@@ -684,6 +691,7 @@ class BVRegionalSDXLAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -726,6 +734,7 @@ class BVRegionalZImageAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -766,6 +775,7 @@ class BVRegionalFlux2KleinAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -823,8 +833,9 @@ class BVRegionalKrea2AttentionNode:
         "Experimental joint-attention regional routing for Krea 2 Raw and Turbo. "
         "Routes the 28 main DiT blocks with a standard KSampler; Krea's four upstream "
         "text-fusion blocks remain global. Turbo negatives require a sampler CFG branch. "
-        "Regional LoRAs default to token-gated single-pass; the previous multi-pass "
-        "execution remains available as multipass_legacy. Identity Edit mode uses one "
+        "Default LoRA routing applies shared weights globally, compatible regional files "
+        "through token gating, and non-spatial adapters through masked static-weight passes. "
+        "The previous execution remains available as multipass_legacy. Identity Edit mode uses one "
         "global Registry image, compatible VAE and the sampler's target latent; "
         "load edit weights separately. Regional routing controls apply only in generation mode."
     )
@@ -849,6 +860,7 @@ class BVRegionalKrea2AttentionNode:
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         if mode not in {"generation", "identity_edit"}:
             raise ValueError("Krea mode must be generation or identity_edit")
@@ -867,6 +879,9 @@ class BVRegionalKrea2AttentionNode:
             patched = apply_identity_edit(prepared_model, image, vae, target_latent, fit_mode=edit_fit, ref_boost=reference_boost)
             return passes.install(patched, positive, negative), positive, negative
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
+        if regional_lora_mode == "token_gated_singlepass":
+            from ..util.regional.krea2_generation_lora import compile_krea2_generation_loras
+            return compile_krea2_generation_loras(model, clip, document, scope_stacks, attention_strength, start_percent, end_percent)
         hook_groups = create_hook_groups(scope_stacks)
         positive, negative, slots, aspect_ratio = compile_krea2_attention(
             document, clip, hook_groups
@@ -879,10 +894,6 @@ class BVRegionalKrea2AttentionNode:
         patched_model = apply_krea2_attention_patch(
             model, slots, aspect_ratio, attention_strength, start_percent, end_percent
         )
-        if regional_lora_mode == "token_gated_singlepass":
-            patched_model = apply_krea2_token_lora_patch(
-                patched_model, slots, aspect_ratio, document, scope_stacks
-            )
         return patched_model, positive, negative
 
 
@@ -971,6 +982,7 @@ class BVRegionalAnimaConditioningNode:
                 "Update ComfyUI and verify the dependencies reported by the original import error."
             ) from error
 
+        model, clip = apply_global_patches(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)

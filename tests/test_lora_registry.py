@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT.parent))
 
 from bv_nodepack.py.util.lora_registry import (
     MAX_SIDECAR_BYTES,
+    lora_registry_diagnostics,
     discover_loras,
     lora_preview_path,
     materialize_lora_registry,
@@ -53,6 +54,18 @@ def entry(identifier, name, enabled=True, model=1.0, clip=1.0):
 
 
 class LoraRegistryTests(unittest.TestCase):
+    def test_diagnostics_count_effective_global_and_basis_switches(self):
+        value = parse_lora_registry_config(config([
+            {**stack(STACK_A, "Migrated basis", [entry(ENTRY_A, "basis.safetensors")]), "role": "basis"},
+            stack(STACK_B, "Manual", [entry(ENTRY_B, "manual.safetensors")]),
+        ]))
+        self.assertEqual(lora_registry_diagnostics(value)[0], 2)
+        value["stacks"][0]["enabled"] = False
+        count, summary = lora_registry_diagnostics(value)
+        self.assertEqual(count, 1)
+        self.assertIn("Migrated basis: 0/1 active · Registry Global disabled", summary)
+        self.assertTrue(value["stacks"][1]["enabled"])
+
     def test_config_roundtrip_preserves_nested_order_and_stable_ids(self):
         value = config([
             stack(STACK_A, "Portrait", [entry(ENTRY_A, "people/portrait.safetensors")]),
@@ -60,15 +73,15 @@ class LoraRegistryTests(unittest.TestCase):
         ])
         parsed = parse_lora_registry_config(serialize_lora_registry_config(value))
         self.assertEqual(parsed["registry_id"], REGISTRY_ID)
-        self.assertEqual([item["id"] for item in parsed["stacks"]], [STACK_A, STACK_B])
-        self.assertEqual(parsed["stacks"][1]["entries"][0]["id"], ENTRY_B)
-        self.assertEqual(parsed["stacks"][1]["entries"][0]["model_strength"], 0.75)
+        self.assertEqual([item["id"] for item in parsed["stacks"] if item.get("role") != "global"], [STACK_A, STACK_B])
+        self.assertEqual(parsed["stacks"][2]["entries"][0]["id"], ENTRY_B)
+        self.assertEqual(parsed["stacks"][2]["entries"][0]["model_strength"], 0.75)
         uppercase = config([stack(STACK_A.upper(), "Upper", [entry(ENTRY_A.upper(), "upper.safetensors")])])
         uppercase["registry_id"] = REGISTRY_ID.upper()
         normalized = parse_lora_registry_config(uppercase)
         self.assertEqual(normalized["registry_id"], REGISTRY_ID)
-        self.assertEqual(normalized["stacks"][0]["id"], STACK_A)
-        self.assertEqual(normalized["stacks"][0]["entries"][0]["id"], ENTRY_A)
+        self.assertEqual(normalized["stacks"][1]["id"], STACK_A)
+        self.assertEqual(normalized["stacks"][1]["entries"][0]["id"], ENTRY_A)
 
     def test_config_rejects_recursive_entries_duplicate_names_and_free_paths(self):
         with self.assertRaisesRegex(ValueError, "must be a LoRA entry"):
@@ -114,7 +127,7 @@ class LoraRegistryTests(unittest.TestCase):
             ])
             registry, provider_id = materialize_lora_registry(value, folders)
             self.assertEqual(provider_id, REGISTRY_ID)
-            self.assertEqual(registry["stacks"][STACK_A], {"id": STACK_A, "name": "Comparison off", "stack": []})
+            self.assertEqual(registry["stacks"][STACK_A], {"id": STACK_A, "name": "Comparison off", "stack": [], "origin_provider_id": REGISTRY_ID, "entry_ids": []})
             self.assertEqual(registry["stacks"][STACK_B]["stack"], [("active.safetensors", 0.8, 0.6)])
             self.assertNotIn(("full", "loras", "missing.safetensors"), folders.calls)
             self.assertNotIn(("full", "loras", "missing-too.safetensors"), folders.calls)

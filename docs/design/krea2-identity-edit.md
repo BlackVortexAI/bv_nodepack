@@ -15,10 +15,10 @@ remains stable.
    sampler. BV Empty Latent Random Ratio is supported: empty latents use ComfyUI's
    native sampler normalization to the model's channels and spatial resolution.
    Already populated latents must have the compatible 16-channel image format.
-5. Mark the Identity Edit LoRA stack as **Basis** in LoRA Registry and select the
-   Registry in **BV Model Patcher** upstream of the attention node. Alternatively,
-   supply a model with the weights already merged. Existing normal global stacks
-   remain supported. No dedicated edit-weight selector is needed.
+5. Put the Identity Edit LoRA in the fixed **Global** stack of LoRA Registry and
+   enable its **Global** switch. Keep **Globalen Stack anwenden** enabled in the
+   Regional Editor. Attention prepares MODEL and CLIP automatically. Alternatively,
+   supply a model with the weights already merged. No dedicated edit-weight selector is needed.
 6. Describe the edit in the global prompt. An empty negative prompt is still
    encoded with the same image for the CFG branch.
 
@@ -117,12 +117,12 @@ effects. Many overlapping soft overlays can increase memory and execution cost.
 
 ### Native execution
 
-Keep Identity/Turbo weights in the Basis Registry stack and apply them upstream
-with BV Model Patcher. Select ordinary LoRAs in the Regional Editor as usual.
-The existing Registry/Collector resolver defines each effective regional stack,
-including its existing Global inheritance/override rules. Every effective stack
-starts from the same input MODEL/CLIP, so Basis patches remain present and Global
-weights are not added twice. Both positive and negative prompts use the matching
+Keep Identity/Turbo weights in the active Registry's fixed Global stack.
+The shared automatic preparation service applies them to MODEL and CLIP.
+Select ordinary LoRAs in the Regional Editor as usual; the existing resolver
+defines their effective regional stacks and manual global inheritance/override rules.
+Each regional variant starts from the same automatically prepared MODEL/CLIP.
+The occurrence ledger prevents repeated application of automatic Global weights. Both positive and negative prompts use the matching
 statically patched CLIP and the same reference image. No token-gating mode is used
 in Identity Edit, regardless of the generation-only mode selector.
 

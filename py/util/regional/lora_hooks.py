@@ -102,10 +102,22 @@ def parse_registry(value: Any) -> dict[str, Any]:
         if folded in names:
             raise ValueError(f"Duplicate LoRA stack name: {name}")
         names.add(folded)
-        if item.get("role", "normal") not in ("normal", "basis"):
-            raise ValueError("LoRA stack role must be normal or basis")
+        if item.get("role", "normal") not in ("normal", "basis", "global"):
+            raise ValueError("LoRA stack role must be normal, basis or global")
         stacks[key] = {"id": identifier, "name": name, "stack": _normalize_stack(item.get("stack"), f"LoRA stack {name}"),
-                       **({"role": "basis"} if item.get("role") == "basis" else {})}
+                       **({"role": item["role"]} if item.get("role") in ("basis", "global") else {})}
+        if "global_enabled" in item:
+            if not isinstance(item["global_enabled"], bool):
+                raise ValueError("LoRA resource global_enabled must be boolean")
+            stacks[key]["global_enabled"] = item["global_enabled"]
+        if "origin_provider_id" in item:
+            from uuid import UUID
+            origin = str(UUID(item["origin_provider_id"]))
+            ids = item.get("entry_ids")
+            if not isinstance(ids, list) or len(ids) != len(stacks[key]["stack"]) or len(set(ids)) != len(ids):
+                raise ValueError("LoRA resource entry identities must match its occurrences")
+            ids = [str(UUID(entry_id)) for entry_id in ids]
+            stacks[key].update(origin_provider_id=origin, entry_ids=ids)
     return {"schema": "bv.lora_stack_registry", "version": 1, "stacks": stacks}
 
 
@@ -141,7 +153,7 @@ def resolve_scope_stacks(registry: Any, bindings: Any, document: dict[str, Any])
     stacks = parse_registry(registry)["stacks"]
     requested = {stack_id for stack_id in active_assignments if stack_id}
     if any(stacks.get(stack_id, {}).get("role") == "basis" for stack_id in requested):
-        raise ValueError("Basis LoRA stacks belong in BV Model Patcher; remove their global/regional assignments")
+        raise ValueError("Basis LoRA groups are applied automatically by the active Global Registry; remove their manual global/regional assignments")
     missing = requested.difference(stacks)
     if missing:
         raise ValueError(f"Assigned LoRA stack is missing: {', '.join(sorted(missing))}")
@@ -292,10 +304,13 @@ def apply_attention_hook_passes(
     document: dict[str, Any],
     scope_stacks: dict[str, Any],
     hook_groups: dict[str, Any],
+    *,
+    pass_builder=None,
 ) -> tuple[list, list]:
     """Split full attention conditioning into masked LoRA model passes."""
     if not scope_stacks:
         return positive, negative
+    build_pass = pass_builder or _conditionings_with_pass
 
     import torch
 
@@ -320,7 +335,7 @@ def apply_attention_hook_passes(
 
     if not grouped_masks:
         hooks = hook_groups.get("global")
-        return _conditionings_with_pass(positive, hooks), _conditionings_with_pass(negative, hooks)
+        return build_pass(positive, hooks), build_pass(negative, hooks)
 
     override_union = torch.zeros((1, height, width), dtype=torch.float32)
     for mask in grouped_masks.values():
@@ -331,10 +346,10 @@ def apply_attention_hook_passes(
     negative_passes: list = []
     if bool(torch.any(baseline_mask > 0)):
         baseline_hooks = hook_groups.get("global")
-        positive_passes.extend(_conditionings_with_pass(positive, baseline_hooks, baseline_mask))
-        negative_passes.extend(_conditionings_with_pass(negative, baseline_hooks, baseline_mask))
+        positive_passes.extend(build_pass(positive, baseline_hooks, baseline_mask))
+        negative_passes.extend(build_pass(negative, baseline_hooks, baseline_mask))
     for key, mask in grouped_masks.items():
         hooks = hook_groups.get(representative_scope[key])
-        positive_passes.extend(_conditionings_with_pass(positive, hooks, mask))
-        negative_passes.extend(_conditionings_with_pass(negative, hooks, mask))
+        positive_passes.extend(build_pass(positive, hooks, mask))
+        negative_passes.extend(build_pass(negative, hooks, mask))
     return positive_passes, negative_passes

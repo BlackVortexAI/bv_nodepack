@@ -2,6 +2,7 @@
 // See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 const PRESENTATION_TYPES = new Set(["BV_HEADING", "BV_SPACER", "BV_DIVIDER"]);
 import { normalizeDynamicComboSelection } from "./bv_dynamic_combo_model.js";
+import { resizeNodeToContent } from "./bv_node_resize.js";
 const PRESENTATION_NODE_TYPES = new Map([
   ["BV Subgraph Heading", "BV_HEADING"],
   ["BV Subgraph Spacer", "BV_SPACER"],
@@ -277,9 +278,7 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
         const spacerCallback = function (value) {
           this.value = value;
           const result = originalCallback?.apply(this, arguments);
-          host.expandToFitContent?.();
-          const computedSize = host.computeSize?.();
-          if (computedSize) host.setSize?.(computedSize);
+          resizeNodeToContent(host);
           host.setDirtyCanvas?.(true, true);
           host.graph?.setDirtyCanvas?.(true, true);
           return result;
@@ -381,9 +380,7 @@ export function projectSubgraphUIPresentation(host, visited = new Set()) {
     const bridge = globalThis.__bvNodePresentationBridge;
     if (bridge?.applyClassicSubgraph) bridge.applyClassicSubgraph(host);
     else {
-      host.expandToFitContent?.();
-      const computedSize = host.computeSize?.();
-      if (computedSize) host.setSize?.(computedSize);
+      resizeNodeToContent(host);
     }
     host.setDirtyCanvas?.(true, true);
     host.graph?.setDirtyCanvas?.(true, true);

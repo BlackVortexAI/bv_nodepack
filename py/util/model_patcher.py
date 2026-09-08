@@ -1,59 +1,63 @@
-"""Model preparation independent of regional conditioning; currently basis LoRAs."""
-import json
-from uuid import UUID
-
-from .regional.lora_v3 import normalize_lora_provider
+"""Shared occurrence-aware automatic LoRA preparation for all model consumers."""
 from .regional.lora_hooks import apply_static_lora_stack, resolve_stack_paths
 
-MARKER = "bv_basis_lora_stacks"
+OCCURRENCE_MARKER = "bv_automatic_lora_occurrences_v1"
 
 
-def parse_patcher_config(value):
-    config = json.loads(value) if isinstance(value, str) else value
-    if not isinstance(config, dict) or set(config) != {"version", "collector_ids"} or config["version"] != 1:
-        raise ValueError("Model Patcher config requires version 1 and collector_ids")
-    ids = config["collector_ids"]
-    if not isinstance(ids, list) or len(ids) > 20 or any(not isinstance(item, str) for item in ids):
-        raise ValueError("Model Patcher accepts up to 20 unique Registry IDs")
-    if any(str(UUID(item)) != item for item in ids) or len(set(ids)) != len(ids):
-        raise ValueError("Model Patcher Registry IDs must be unique canonical UUIDs")
-    return {"version": 1, "collector_ids": list(ids)}
+def apply_automatic_resources(model, clip, resources):
+    """Apply each registry occurrence exactly once independently to MODEL and CLIP.
 
-
-def apply_basis_patches(model, clip, config, providers):
-    ids = parse_patcher_config(config)["collector_ids"]
-    inventory = {}
-    for raw in providers.values():
-        if raw is None:
-            continue
-        provider = normalize_lora_provider(raw)
-        identifier = provider["provider_id"]
-        if identifier in inventory:
-            raise ValueError("Model Patcher received a duplicate Registry provider")
-        inventory[identifier] = provider
-    if set(inventory) != set(ids):
-        raise ValueError("Model Patcher Registry selection and connected providers differ; reconnect the selected Registry")
-    entries, model_ids, clip_ids = [], set(), set()
-    for identifier in ids:
-        for resource_id, resource in inventory[identifier]["resources"].items():
-            if resource.get("role") != "basis":
-                continue
-            key = f"{identifier}:{resource_id}"
-            for path, ms, cs in resource["stack"]:
-                if ms == 0 and (clip is None or cs == 0):
-                    continue
-                entries.append((path, ms, cs if clip is not None else 0.))
-                if ms != 0: model_ids.add(key)
-                if clip is not None and cs != 0: clip_ids.add(key)
+    A resource may travel through multiple Collectors without changing its origin.
+    Equal filenames and strengths in distinct entries remain intentional repetitions.
+    """
+    from .regional.lora_v3 import validate_automatic_loras
+    validate_automatic_loras({"version": 1, "resources": resources})
+    if len({item["provider_id"] for item in resources}) > 1:
+        raise ValueError("Multiple active Global LoRA Registries; turn the intended Registry Global switch off and on again, or disable the other Global switches")
+    model_ledger = dict(model.get_attachment(OCCURRENCE_MARKER) or {}) if model is not None else {}
+    clip_ledger = dict(clip.patcher.get_attachment(OCCURRENCE_MARKER) or {}) if clip is not None else {}
+    entries = []
+    for resource in resources:
+        for entry_id, (path, ms, cs) in zip(resource["entry_ids"], resource["stack"]):
+            identity = f'{resource["provider_id"]}:{resource["resource_id"]}:{entry_id}'
+            strengths = []
+            for target, ledger, strength in ((model, model_ledger, ms), (clip, clip_ledger, cs)):
+                signature = (str(path), float(strength))
+                old = ledger.get(identity)
+                if old is not None and tuple(old) != signature:
+                    raise ValueError("Automatic LoRA occurrence changed on an already patched input; use the original MODEL/CLIP")
+                effective = float(strength) if target is not None and old is None else 0.
+                strengths.append(effective)
+                if target is not None and strength != 0:
+                    ledger[identity] = signature
+            if strengths[0] or strengths[1]:
+                entries.append((path, *strengths))
     if not entries:
         return model, clip
-    previous_model = set(model.get_attachment(MARKER) or ())
-    previous_clip = set(clip.patcher.get_attachment(MARKER) or ()) if clip is not None else set()
-    if previous_model & model_ids or previous_clip & clip_ids:
-        raise ValueError("Basis LoRA stack already applied to this MODEL or CLIP; use the original input or remove the duplicate Patcher")
-    resolved = resolve_stack_paths({"basis": entries})["basis"]
+    if model is None and any(item[1] for resource in resources for item in resource["stack"]):
+        raise ValueError("Automatic Global LoRAs require the Native Conditioning MODEL input and patched MODEL output")
+    resolved = resolve_stack_paths({"automatic": entries})["automatic"]
     result_model, result_clip = apply_static_lora_stack(model, clip, resolved)
-    result_model.set_attachments(MARKER, tuple(sorted(previous_model | model_ids)))
+    if result_model is not None:
+        result_model.set_attachments(OCCURRENCE_MARKER, model_ledger)
     if result_clip is not None:
-        result_clip.patcher.set_attachments(MARKER, tuple(sorted(previous_clip | clip_ids)))
+        result_clip.patcher.set_attachments(OCCURRENCE_MARKER, clip_ledger)
     return result_model, result_clip
+
+
+def apply_global_patches(model, clip, regional):
+    from .regional.lora_v3 import LORA_CAPABILITY, LORA_CAPABILITY_REGISTRY
+    from .regional.context import normalize_context
+    context = normalize_context(regional, registry=LORA_CAPABILITY_REGISTRY)
+    automatic = context.capabilities.get(LORA_CAPABILITY, {}).get("automatic", {})
+    if automatic.get("enabled", True) is False:
+        for target in (model, clip.patcher if clip is not None else None):
+            if target is not None and target.get_attachment(OCCURRENCE_MARKER):
+                raise ValueError("Global LoRAs are disabled for this editor, but its MODEL/CLIP is already globally patched. Use the original MODEL/CLIP input.")
+        return model, clip
+    resources = automatic.get("resources", [])
+    if len({item["provider_id"] for item in resources}) > 1:
+        raise ValueError("Multiple active Global LoRA Registries; turn the intended Registry Global switch off and on again, or disable the other Global switches")
+    if model is None and any(item[1] != 0 for resource in resources for item in resource["stack"]):
+        raise ValueError("Automatic Global LoRAs require the Native Conditioning MODEL input and patched MODEL output")
+    return apply_automatic_resources(model, clip, resources) if resources else (model, clip)

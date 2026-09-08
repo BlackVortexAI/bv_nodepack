@@ -1,3 +1,4 @@
+import {GlobalLoraApplyControl} from "./GlobalLoraApplyControl";
 import ReferenceToolsPanel from "./ReferenceToolsPanel";
 import {regionalActiveTools} from "./regionalToolState";
 import {ToolTabs,SegmentedToggleGroup} from "../ui/components";
@@ -178,6 +179,7 @@ export default function QuickPromptEditor({ open, activationToken=0, activitySco
                         ,...(!region?[{id:"references",label:"References",content:<ReferenceToolsPanel node={node} value={documentValue.reference_images} onValue={images=>updateDocument(next=>{next.reference_images=images})}/>}]:[])
                     ]}/>
                 </div>
+                {target==="global"&&<GlobalLoraApplyControl node={node} config={loraV3Config} onConfig={setLoraV3Config}/>}
                 <ReferenceSearchToggle value={prompts.reference_editor===true} onValue={reference_editor=>updatePrompts({...prompts,reference_editor})}/>
                 <PromptPairFields key={target} value={prompts} onValue={updatePrompts} scope={target==="global"||target==="background"?target:"region"} choices={referenceChoices}/>
             </>}

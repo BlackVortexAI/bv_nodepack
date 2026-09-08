@@ -2,8 +2,8 @@ import{createElement}from"react";
 import{mountBvView}from"../ui";
 import{LoraCatalogLibraryLoader,LoraRegistryDialogLoader}from"./LoraRegistryView";
 
-export function openLoraRegistryDialog(api:any,stored:unknown,save:(value:string)=>void,windowKey:string){
-    mountBvView(close=>createElement(LoraRegistryDialogLoader,{api,stored,save,close}),{key:windowKey});
+export function openLoraRegistryDialog(api:any,stored:unknown,save:(value:string)=>void,windowKey:string,readStored?:()=>unknown){
+    mountBvView(close=>createElement(LoraRegistryDialogLoader,{api,stored,save,close,readStored}),{key:windowKey});
 }
 
 export function openLoraCatalogLibraryDialog(api:any,readStored:()=>unknown,targetStackId:string,save:(value:string)=>void,windowKey:string){

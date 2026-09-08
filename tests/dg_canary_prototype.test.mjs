@@ -71,8 +71,8 @@ test("pilot clipboard remaps paired domain and transport identities without touc
   const config={version:3,entries,steps:[{entries:[structuredClone(entries[0])]}]};
   const receiver={type:"BV Regional LoRA",properties:{bvRegistryDgPilot:true,bvLoraDgSelections:{resource_provider_1:"transport",resource_provider_2:"external"}},widgets_values:["merge",JSON.stringify(config)]};
   const original=structuredClone({nodes:[receiver],subgraphs:[{nodes:[registry]}]}),copied=prepareDgClipboard(original),newRegistry=JSON.parse(copied.subgraphs[0].nodes[0].widgets_values[0]),newConfig=JSON.parse(copied.nodes[0].widgets_values[1]);
-  assert.notEqual(newRegistry.registry_id,registryId);assert.notEqual(newRegistry.stacks[0].id,resourceId);
-  assert.equal(newConfig.entries[0].source.collector_id,newRegistry.registry_id);assert.equal(newConfig.entries[0].source.resource_id,newRegistry.stacks[0].id);
+  assert.notEqual(newRegistry.registry_id,registryId);assert.notEqual(newRegistry.stacks.find(stack=>stack.name==="A").id,resourceId);
+  assert.equal(newConfig.entries[0].source.collector_id,newRegistry.registry_id);assert.equal(newConfig.entries[0].source.resource_id,newRegistry.stacks.find(stack=>stack.name==="A").id);
   assert.deepEqual(newConfig.entries.slice(1),entries.slice(1));assert.equal(newConfig.steps[0].entries[0].source.collector_id,newRegistry.registry_id);
   assert.equal(copied.nodes[0].properties.bvLoraDgSelections.resource_provider_1,copied.subgraphs[0].nodes[0].properties.bvDgSenderId);
   assert.equal(copied.nodes[0].properties.bvLoraDgSelections.resource_provider_2,"external");

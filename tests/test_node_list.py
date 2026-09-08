@@ -57,7 +57,7 @@ EXPECTED_NODE_NAMES_BY_CATEGORY = {
         "BV Detailer Loop Detect to SEGS (Impact)",
         "BV Regional Detailer Mask",
     },
-    "🌀 BV Node Pack/regional/LoRA": {"BV LoRA Registry", "BV Regional LoRA", "BV Model Patcher"},
+    "🌀 BV Node Pack/regional/LoRA": {"BV LoRA Registry", "BV Regional LoRA"},
     "🌀 BV Node Pack/regional/LoRA/Manual Chains (Optional)": {
         "BV LoRA Stack Collector",
         "BV Named LoRA Stack",

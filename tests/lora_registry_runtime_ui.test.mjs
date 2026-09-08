@@ -14,6 +14,7 @@ const data=readFileSync(new URL("../ui/src/ui/components/data.tsx",import.meta.u
 const content=readFileSync(new URL("../ui/src/ui/components/content.tsx",import.meta.url),"utf8");
 const windowSource=readFileSync(new URL("../ui/src/ui/window.tsx",import.meta.url),"utf8");
 const styles=readFileSync(new URL("../ui/src/index.css",import.meta.url),"utf8");
+const media=readFileSync(new URL("../ui/src/ui/components/MediaPreview.tsx",import.meta.url),"utf8");
 const hoverPreview=data.slice(data.indexOf("export function HoverPreview"),data.indexOf("export function IncrementalResourceList"));
 
 test("LoRA registry dialog mounts before catalog IO can finish",()=>{
@@ -26,7 +27,7 @@ test("LoRA registry dialog mounts before catalog IO can finish",()=>{
 
 test("search result media uses the bounded shared BVUI slot",()=>{
   assert.match(forms,/className="bv-search-result-media"/);
-  assert.match(library,/loading="lazy"/);assert.match(library,/decoding="async"/);
+  assert.match(library,/<MediaPreview/);assert.match(media,/loading=\{active \? "eager" : "lazy"\}/);assert.match(media,/decoding="async"/);
   assert.match(styles,/\.bv-search-result-media\{[^}]*inline-size:[^;}]+;[^}]*block-size:[^;}]+;[^}]*overflow:hidden/);
   assert.match(styles,/\.bv-search-result-media img\{[^}]*width:100%;[^}]*height:100%;[^}]*object-fit:(?:cover|contain)/);
 });
@@ -72,7 +73,7 @@ test("LoRA metadata text keeps the native context menu while window export remai
 test("mature or unrated LoRA previews use the persisted global BV preference",()=>{
   assert.match(library,/Show mature or unrated previews/);
   assert.match(library,/item\.preview_safe\|\|showMature/);
-  assert.match(library,/safe=\{item\.preview_safe\|\|showMature\}/);
+  assert.match(library,/policy="mature"/);assert.match(library,/safe=\{item\.preview_safe\}/);
   assert.match(library,/useSyncExternalStore\(subscribeMaturePreviewVisibility,getMaturePreviewVisibility,getMaturePreviewVisibility\)/);
   assert.match(library,/onValue=\{setMaturePreviewVisibility\}/);
   assert.doesNotMatch(library,/\[showMature,setShowMature\]=useState|localStorage|sessionStorage/);
@@ -107,7 +108,7 @@ test("LoRA library delegates bounded incremental rendering to shared BVUI",()=>{
   assert.doesNotMatch(library,/MAX_LORA_SEARCH_RESULTS/);
   assert.match(data,/export function IncrementalResourceList/);
   assert.match(library,/<IncrementalResourceList/);
-  assert.match(library,/loading="lazy"/);assert.match(library,/decoding="async"/);
+  assert.match(library,/<MediaPreview/);assert.match(media,/loading=\{active \? "eager" : "lazy"\}/);assert.match(media,/decoding="async"/);
   assert.match(styles,/\.bv-incremental-resource-list/);
   assert.match(styles,/\.bv-resource-grid/);
 });
@@ -144,8 +145,8 @@ test("advanced strength popover and hover preview are centrally themed and bound
   assert.match(styles,/\.bv-hover-preview\{[^}]*position:fixed/);
   assert.match(styles,/\.bv-hover-preview img\{[^}]*max-width:var\(--bv-hover-preview-max-width/);
   assert.doesNotMatch(styles,/\.bv-hover-preview img\{[^}]*object-fit:cover/);
-  assert.match(hoverPreview,/fitHoverPreviewSize/);assert.match(hoverPreview,/onLoad=/);
-  assert.match(hoverPreview,/loading="eager"/);assert.doesNotMatch(hoverPreview,/loading="lazy"/);
+  assert.match(hoverPreview,/fitHoverPreviewSize/);assert.match(hoverPreview,/onDimensions=/);assert.match(media,/onLoad=/);
+  assert.match(hoverPreview,/<MediaPreview[^]*active onDimensions/);assert.match(media,/loading=\{active \? "eager" : "lazy"\}/);
   assert.match(styles,/\.bv-timed-status-slot\{[^}]*min-height/);
 });
 

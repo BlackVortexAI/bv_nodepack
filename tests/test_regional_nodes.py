@@ -297,7 +297,7 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_native_compiler_is_not_a_lora_resource_consumer(self):
         inputs = self.module.BVRegionalNativeConditioningNode.INPUT_TYPES()
-        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings"})
+        self.assertEqual(set(inputs["optional"]), {"lora_registry", "lora_bindings", "model"})
         self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in inputs["optional"].values()})
         self.assertEqual(self.module.BVRegionalPromptNode.RETURN_TYPES[0], "BV_REGIONAL")
 
@@ -317,7 +317,7 @@ class RegionalNodeTests(unittest.TestCase):
             self.module.BVRegionalAnimaConditioningNode,
         ):
             optional = node_type.INPUT_TYPES()["optional"]
-            self.assertEqual(set(optional), {"lora_registry", "lora_bindings"})
+            self.assertEqual(set(optional), {"lora_registry", "lora_bindings"} | ({"model"} if node_type is self.module.BVRegionalNativeConditioningNode else set()))
             self.assertNotIn(self.module.RUNTIME_PROVIDER, {spec[0] for spec in optional.values()})
         edit_optional = self.module.BVRegionalKrea2AttentionNode.INPUT_TYPES()["optional"]
         self.assertNotIn("resource_provider_1", edit_optional)
@@ -395,7 +395,7 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(provider["provider_id"], "11111111-1111-4111-8111-111111111111")
         self.assertEqual(provider["resources"], registry["stacks"])
         self.assertEqual(lora_count, 2)
-        self.assertEqual(registry_summary, "Portrait: 2/3 active\nStyle: 0/2 active · stack disabled\nEmpty: 0/0 active")
+        self.assertEqual(registry_summary, "Global: 0/0 active · stack disabled\nPortrait: 2/3 active\nStyle: 0/2 active · stack disabled\nEmpty: 0/0 active")
         self.assertEqual(self.module.BVLoraRegistryNode.RETURN_TYPES, ("INT", "STRING", self.module.RUNTIME_PROVIDER))
         self.assertEqual(self.module.BVLoraRegistryNode.RETURN_NAMES, ("lora_count", "registry_summary", "resource_provider"))
 
@@ -410,7 +410,7 @@ class RegionalNodeTests(unittest.TestCase):
             lora_count, registry_summary, provider = self.module.BVLoraRegistryNode().collect(json.dumps(config))
         self.assertEqual(provider["resources"], {})
         self.assertEqual(lora_count, 0)
-        self.assertEqual(registry_summary, "No LoRAs configured")
+        self.assertEqual(registry_summary, "Global: 0/0 active · stack disabled")
 
     def test_helper_pipeline_selects_extracts_and_renders(self):
         document = fixture()
@@ -632,7 +632,7 @@ class RegionalNodeTests(unittest.TestCase):
 
     def test_native_conditioning_node_is_registered_with_standard_outputs(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Native Conditioning"], self.module.BVRegionalNativeConditioningNode)
-        self.assertEqual(self.module.BVRegionalNativeConditioningNode.RETURN_TYPES, ("CONDITIONING", "CONDITIONING"))
+        self.assertEqual(self.module.BVRegionalNativeConditioningNode.RETURN_TYPES, ("CONDITIONING", "CONDITIONING", "MODEL"))
 
     def test_sdxl_attention_node_is_registered_with_standard_sampler_outputs(self):
         self.assertIs(
@@ -736,32 +736,19 @@ class RegionalNodeTests(unittest.TestCase):
         self.assertEqual(mode[1]["default"], "token_gated_singlepass")
 
     def test_krea2_call_without_mode_uses_singlepass_default(self):
-        node = self.module.BVRegionalKrea2AttentionNode()
-        with (
-            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={}),
-            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
-            unittest.mock.patch.object(
-                self.module, "compile_krea2_attention",
-                return_value=(["positive"], ["negative"], ["slot"], 1.0),
-            ),
-            unittest.mock.patch.object(self.module, "apply_attention_hook_passes") as legacy,
-            unittest.mock.patch.object(
-                self.module, "apply_krea2_attention_patch", return_value="attention-model"
-            ),
-            unittest.mock.patch.object(
-                self.module, "apply_krea2_token_lora_patch", return_value="singlepass-model"
-            ) as singlepass,
-        ):
-            result = node.apply("model", "clip", fixture(), 1.0, 0.0, 0.5)
-
-        legacy.assert_not_called()
-        singlepass.assert_called_once()
-        self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+        import importlib
+        generation=importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_generation_lora")
+        node=self.module.BVRegionalKrea2AttentionNode()
+        with mock.patch.object(self.module,"resolve_stack_paths",return_value={}), mock.patch.object(generation,"compile_krea2_generation_loras",return_value=("hybrid",["positive"],["negative"])) as route, mock.patch.object(self.module,"create_hook_groups",side_effect=AssertionError("legacy hook path")):
+            result=node.apply("model","clip",fixture(),1.,0.,.5)
+        self.assertEqual(result,("hybrid",["positive"],["negative"]))
+        route.assert_called_once_with("model","clip",mock.ANY,{},1.,0.,.5)
 
     def test_krea_identity_edit_uses_static_global_loras_and_registry_image(self):
         import importlib
         edit = importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_identity_edit")
         references = importlib.import_module(f"{PACKAGE}.py.util.regional.reference_images")
+        generation = importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_generation_lora")
         edit_regions = importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_edit_regions")
         loras = importlib.import_module(f"{PACKAGE}.py.util.regional.edit_lora_passes")
         node = self.module.BVRegionalKrea2AttentionNode()
@@ -778,7 +765,7 @@ class RegionalNodeTests(unittest.TestCase):
             mock.patch.object(loras,"apply_static_lora_stack",create=True,return_value=("lora-model","lora-clip")) as static,
             mock.patch.object(self.module,"apply_attention_hook_passes",return_value=(["hooked-pos"],["hooked-neg"])) as passes,
             mock.patch.object(self.module,"compile_krea2_attention",side_effect=AssertionError("regional compiler used")),
-            mock.patch.object(self.module,"apply_krea2_token_lora_patch",side_effect=AssertionError("token gating used")),
+            mock.patch.object(generation,"compile_krea2_generation_loras",side_effect=AssertionError("generation routing used in identity edit")),
         ):
             result=node.apply("model","clip",document,1.,0.,.5,mode="identity_edit",vae="vae",target_latent="latent",reference_resource_provider_1="provider")
             self.assertEqual(result,("edit-model",[["positive",{}]],[["negative",{}]]))
@@ -790,32 +777,13 @@ class RegionalNodeTests(unittest.TestCase):
             self.assertEqual(source.call_args.args[2],{"reference_resource_provider_1":"provider"})
 
     def test_krea2_singlepass_skips_model_hook_passes(self):
-        node = self.module.BVRegionalKrea2AttentionNode()
-        with (
-            unittest.mock.patch.object(self.module, "resolve_stack_paths", return_value={"region-a": []}),
-            unittest.mock.patch.object(self.module, "create_hook_groups", return_value={}),
-            unittest.mock.patch.object(
-                self.module, "compile_krea2_attention",
-                return_value=(["positive"], ["negative"], ["slot"], 1.0),
-            ),
-            unittest.mock.patch.object(self.module, "apply_attention_hook_passes") as legacy,
-            unittest.mock.patch.object(
-                self.module, "apply_krea2_attention_patch", return_value="attention-model"
-            ),
-            unittest.mock.patch.object(
-                self.module, "apply_krea2_token_lora_patch", return_value="singlepass-model"
-            ) as singlepass,
-        ):
-            result = node.apply(
-                "model", "clip", fixture(), 1.0, 0.0, 0.5,
-                regional_lora_mode="token_gated_singlepass",
-            )
-
-        legacy.assert_not_called()
-        singlepass.assert_called_once_with(
-            "attention-model", ["slot"], 1.0, unittest.mock.ANY, {"region-a": []}
-        )
-        self.assertEqual(result, ("singlepass-model", ["positive"], ["negative"]))
+        import importlib
+        generation=importlib.import_module(f"{PACKAGE}.py.util.regional.krea2_generation_lora")
+        node=self.module.BVRegionalKrea2AttentionNode()
+        with mock.patch.object(self.module,"resolve_stack_paths",return_value={"region-a":[]}), mock.patch.object(generation,"compile_krea2_generation_loras",return_value=("hybrid",["positive"],["negative"])) as route, mock.patch.object(self.module,"apply_attention_hook_passes",side_effect=AssertionError("legacy model hooks")):
+            result=node.apply("model","clip",fixture(),1.,0.,.5,regional_lora_mode="token_gated_singlepass")
+        route.assert_called_once_with("model","clip",mock.ANY,{"region-a":[]},1.,0.,.5)
+        self.assertEqual(result,("hybrid",["positive"],["negative"]))
 
     def test_anima_adapter_is_registered_with_external_region_type(self):
         self.assertIs(self.module.NODE_CLASS_MAPPINGS["BV Regional Anima Adapter"], self.module.BVRegionalAnimaAdapterNode)

@@ -2,6 +2,7 @@
 // See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
 import { applySeedAction, materializeSeedControl } from "./bv_seed_model.js";
+import { resizeNodeToContent } from "./bv_node_resize.js";
 
 const NODE_CLASS = "BV Seed";
 const MIN_WIDTH = 300;
@@ -151,9 +152,7 @@ function migrateExposedSeedName(host, input, inputIndex) {
 }
 
 function relayout(node) {
-  node.expandToFitContent?.();
-  const size = node.computeSize?.();
-  if (size) node.setSize?.(size);
+  resizeNodeToContent(node);
   node.setDirtyCanvas?.(true, true);
 }
 

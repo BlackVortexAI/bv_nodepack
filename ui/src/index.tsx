@@ -31,7 +31,6 @@ import { DETAILER_UI_NODES, detailerUiLabel } from "./regional/detailerLoopUi";
 import { bindDetailerV3Graph, detailerV3Catalog, prepareDetailerPlanV3, prepareDetailerPromptV3, prepareDetectorCollectorV3 } from "./regional/detailerV3Graph";
 import { prepareLutV3 } from "./regional/lutV3Catalog";
 import { enableRegistryFamily } from "./regional/registryDgFamilies";
-import { installModelPatcherUi } from "./regional/modelPatcherUi";
 import { installRegistryDgLifecycle } from "./regional/registryDgLifecycle";
 import { openLutDownloadDialog } from "./regional/lutDownloadDialog";
 import { openLutPlanDialog } from "./regional/lutPlanDialog";
@@ -56,7 +55,7 @@ import { reconcileDeferredPublicInputs, setProjectedSlotLabel, suppressInitialPr
 import { applyClassicNodePresentation, applyClassicSubgraphLayout, removeNodePresentation } from "./regional/classicNodePresentation";
 import { reconcileConfiguredNodeOutputs } from "./regional/nodeOutputCompatibility";
 import { installNodePreviewProjection } from "./regional/nodePreviewProjection";
-import { configurePresentationSizeLifecycle } from "./regional/presentationSize";
+import { configurePresentationSizeLifecycle, presentationSize, setAutomaticPresentationSize } from "./regional/presentationSize";
 import { installExecutionResultPreview } from "./regional/executionResultPreview";
 import { hasNodePresentationPolicy } from "./regional/nodePresentation";
 import { installLoraRegistryUi } from "./regional/loraRegistryUi";
@@ -73,6 +72,7 @@ import { currentRegionalCanvasPublication, regionalCanvasExecutionOutputs, regio
         return applyClassicNodePresentation(node,nodeType);
     },
     applyClassicSubgraph(node:any){return applyClassicSubgraphLayout(node)},
+    setAutomaticSize(node:any,size:[number,number]){return setAutomaticPresentationSize(node,presentationSize(node,size))},
     remove(node:any){removeNodePresentation(node)},
 });
 const comfyApp = getApp();
@@ -781,7 +781,6 @@ comfyApp.registerExtension({
             nodeType.prototype.onRemoved=function(){removeNodePresentation(this);return removed?.apply(this,arguments)};
         }
         if (nodeData.name === "BV Regional Krea 2 Attention") installRegistryDgLifecycle(nodeType,prepareReferenceConsumer);
-        if(nodeData.name === "BV Model Patcher"){installModelPatcherUi(nodeType,nodeData,detailerGraphOwner);return;}
         const installedLoraV3Ui = installLoraV3Ui(nodeType, nodeData, detailerGraphOwner);
         if (installedLoraV3Ui && nodeData.name !== "BV Regional Prompt") return;
         if(installLutNodePresentation(nodeType,nodeData,{api:comfyApi,graphOwner:detailerGraphOwner,scopedNodeKey,workflowNodesOfType,windowMenuVisible,switchView:switchBvView,sourceDocument:sourceRegionalDocument,detectorCollectors:detectorCollectorsForPlan,openRegistry:openLutRegistryDialog,openPlan:openLutPlanDialog,openDownload:openLutDownloadDialog}))return;

@@ -1,3 +1,4 @@
+import{presentationUserHeight}from"./presentationSize";
 import type{ReactNode}from"react";
 import{createRoot,type Root}from"react-dom/client";
 import{applyClassicNodePresentation,removeNodePresentation}from"./classicNodePresentation";
@@ -9,7 +10,7 @@ type RootLike=Pick<Root,"render"|"unmount">;
 type HostLike=HTMLElement;
 type HostPlatform={createHost:()=>HostLike;createContentHost:(host:HostLike)=>HostLike;createRoot:(host:HostLike)=>RootLike;schedule:(action:()=>void)=>void;applyPresentation:(node:any,nodeType:string)=>void;viewportHeight:()=>number;observeHost:(host:HostLike,onHeight:(height:number)=>void)=>(()=>void)};
 export type NativeNodeAction={id:string;name:string;label:string|((node:any)=>string);invoke:(node:any)=>void};
-export type ReactNodeWidgetSpec={id:string;name:string;minHeight:number;maxHeight?:number;overflow?:"auto"|"hidden";nativeActions?:NativeNodeAction[];render:(node:any)=>ReactNode};
+export type ReactNodeWidgetSpec={id:string;name:string;minHeight:number;maxHeight?:number;growWithContent?:boolean;overflow?:"auto"|"hidden";nativeActions?:NativeNodeAction[];render:(node:any)=>ReactNode};
 type MountedWidget={host:HostLike;root:RootLike;widget:any;disconnect:()=>void};
 type HostLifecycle={generation:number;removed:boolean};
 
@@ -68,13 +69,13 @@ export function renderReactNodeWidget(node:any,nodeType:string,spec:ReactNodeWid
     if(typeof node.addDOMWidget!=="function")return null;
     const host=platform.createHost();host.className="bv-ui bv-react-node-widget-host";host.dataset.bvNodeWidget=spec.id;
     const content=platform.createContentHost(host);
-    if(spec.maxHeight){content.className=`${content.className} bv-react-node-widget-scroll`.trim();content.style.maxHeight=`min(${spec.maxHeight}px, 60vh, 100%)`;content.style.overflowY=spec.overflow??"auto";content.style.overscrollBehavior="contain"}
+    if(spec.maxHeight){content.className=`${content.className} bv-react-node-widget-scroll`.trim();content.style.maxHeight=spec.growWithContent?"100%":`min(${spec.maxHeight}px, 60vh, 100%)`;content.style.overflowY=spec.overflow??"auto";content.style.overscrollBehavior="contain"}
     let effectiveHeight=Math.min(spec.minHeight,heightCap(spec)),reconcilePending=false,disposed=false;
     const widget=node.addDOMWidget(spec.name,"div",host,{
         serialize:false,
         margin:10,
-        getMinHeight:()=>Math.min(spec.minHeight,heightCap(spec)),
-        getMaxHeight:()=>heightCap(spec),
+        getMinHeight:()=>Math.min(spec.growWithContent&&!presentationUserHeight(node)?effectiveHeight:spec.minHeight,heightCap(spec)),
+        getMaxHeight:()=>spec.growWithContent&&presentationUserHeight(node)?Number.POSITIVE_INFINITY:heightCap(spec),
     });
     if(!widget)return null;
     widget.serialize=false;

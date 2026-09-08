@@ -1,0 +1,80 @@
+<!doctype html><meta charset="utf-8"><title>Native subgraph width isolation</title><button id="run" disabled>Run width isolation</button><pre id="result">Loading</pre>
+<script type="module">
+const result=document.querySelector('#result');
+document.querySelector('#run').onclick=async()=>{
+ const report={status:'running',cases:[],detached:true};
+ try{
+ const vue=await import('/native/assets/vendor-vue-core-BZZQdWHo.js');vue.g({render(){return null}}).use(vue.l());
+ const native=await import('/native/assets/settingStore-CwkLtSKP.js');
+ const LGraph=Object.values(native).find(v=>typeof v==='function'&&v.name==='LGraph');
+ const LGraphNode=Object.values(native).find(v=>typeof v==='function'&&v.name==='LGraphNode');
+ const LiteGraph=Object.values(native).find(v=>v&&typeof v.registerNodeType==='function'&&typeof v.createNode==='function');
+ const SubgraphNode=Object.values(native).find(v=>typeof v==='function'&&v.prototype?.isSubgraphNode&&v.prototype.isSubgraphNode());
+ const createGraph=()=>{const g=new LGraph();g.events.addEventListener('subgraph-created',({detail:{subgraph:sub}})=>{class Bound extends SubgraphNode{constructor(){super(g,sub,{id:-1,type:sub.id,pos:[0,0],size:[200,100],flags:{},order:0,mode:0});}}LiteGraph.registerNodeType(sub.id,Bound);});return g;};
+ const settle=()=>new Promise(r=>setTimeout(()=>requestAnimationFrame(()=>requestAnimationFrame(r)),600));
+ class Plain extends LGraphNode{constructor(){super('Native control');this.addWidget('number','value',1,()=>{});}}
+ LiteGraph.registerNodeType('BV Test Width Native',Plain);
+ for(const count of [1,5]){
+  let graph=createGraph();const nodes=[];
+  for(let i=0;i<count;i++){const n=LiteGraph.createNode('BV Test Width Native');n.pos=[i*220,0];graph.add(n);nodes.push(n);}
+  const {node:host}=graph.convertToSubgraph(new Set(nodes));await settle();
+  host.setSize([500,Math.max(200,host.size[1])]);await settle();
+  const c={variant:`no BV extensions, ${count} native nodes`,promoted:false,before:[...host.size],rounds:[]};report.cases.push(c);
+  let id=host.id;
+  for(let round=0;round<3;round++){
+   const saved=JSON.parse(JSON.stringify(graph.serialize()));const stored=saved.nodes.find(n=>String(n.id)===String(id));
+   graph=createGraph();graph.configure(saved);const restored=graph.getNodeById(id);
+   const observation={saved:[...stored.size],immediate:[...restored.size]};await settle();observation.settled=[...restored.size];observation.preserved=observation.settled[0]===500;c.rounds.push(observation);
+  }
+ }
+ // Isolate the actual BV projection against native sizing. Only the host's
+ // resolved-connection/widget lookup seam is supplied explicitly here.
+ globalThis.__widthApp={registerExtension(){}};
+ const url=new URL('/repo/js/bv_seed.js',location.href);let text=await(await fetch(url,{cache:"no-store"})).text();
+ text=text.replace('import { app } from "../../scripts/app.js";','const app=globalThis.__widthApp;').replace(/from "(\.\/[^\"]+)"/g,(_,p)=>`from ${JSON.stringify(new URL(p,url).href)}`);
+ report.seedSourceUsesSharedResize=text.includes('resizeNodeToContent');
+ text+='\nexport {relayout};';const blob=URL.createObjectURL(new Blob([text],{type:'text/javascript'}));const seed=await import(blob);URL.revokeObjectURL(blob);
+ let graph=createGraph();const n=LiteGraph.createNode('BV Test Width Native');graph.add(n);const {node:host}=graph.convertToSubgraph(new Set([n]));await settle();
+ host.setSize([500,200]);const plainBefore=[...host.size];seed.relayout(host);await settle();
+ report.cases.push({variant:'actual BV Seed relayout on native host',before:plainBefore,rounds:[{settled:[...host.size],preserved:host.size[0]===500}],adapterBoundary:'no promoted widget needed for direct layout isolation'});
+ const inner=new LGraphNode('Seed');inner.type='BV Seed';inner.properties={};inner.addInput('seed_bv','INT');
+ const promoted=host.addWidget('number','seed_bv',1,()=>{});host.addInput('seed','INT');
+ host.resolveSubgraphInputLinks=()=>[{inputNode:inner,input:inner.inputs[0]}];host.getWidgetFromSlot=()=>promoted;
+ host.setSize([500,300]);const before=[...host.size];const matched=seed.projectSeedControls(host);await settle();
+ report.cases.push({variant:'actual projectSeedControls native host/widget sizing',before,matched,rounds:[{settled:[...host.size],preserved:host.size[0]===500}],adapterBoundary:'connection resolver and promoted-widget lookup explicitly bound; not full native promotion lifecycle'});
+ host.setSize([320,300]);seed.relayout(host);await settle();
+ report.cases.push({variant:'native user deliberately narrows 500 to 320 then relayout',before:[320,300],rounds:[{settled:[...host.size],preserved:host.size[0]===320}]});
+ const projection=await import('/repo/js/bv_subgraph_ui_projection.js?probe='+Date.now());
+ const loadPatch=async(file,name)=>{const u=new URL('/repo/js/'+file,location.href);let t=await(await fetch(u,{cache:"no-store"})).text();t=t.replace('import { app } from "../../scripts/app.js";','const app=globalThis.__widthApp;');t+='\nexport {'+name+'};';const b=URL.createObjectURL(new Blob([t],{type:'text/javascript'}));try{return (await import(b))[name]}finally{URL.revokeObjectURL(b)}};
+ const patchHeading=await loadPatch('bv_subgraph_heading.js','patchHeading'),patchDivider=await loadPatch('bv_subgraph_divider.js','patchDivider');
+ for(const variant of ['heading','dividers','heading+dividers','heading+dividers+seed']){
+  const g=createGraph(),plain=LiteGraph.createNode('BV Test Width Native');g.add(plain);const h=g.convertToSubgraph(new Set([plain])).node;
+  const mappings=[];
+  const addPresentation=(kind)=>{
+   const sn=new LGraphNode(kind);sn.type=kind;sn.properties={};
+   const heading=kind==='BV Subgraph Heading';
+   if(heading){sn.addWidget('text','value','Dashboard',()=>{});sn.addWidget('number','font_size',20,()=>{});sn.addWidget('toggle','show_divider',false,()=>{});patchHeading(sn);}
+   else{sn.addWidget('number','thickness',2,()=>{});sn.addWidget('number','padding',10,()=>{});sn.addWidget('number','alpha',.35,()=>{});patchDivider(sn);}
+   const input=sn.addInput(heading?'value':'thickness',heading?'STRING':'INT');const hi=h.addInput('presentation_'+mappings.length,input.type);const w=h.addWidget(heading?'text':'number','presentation_'+mappings.length,heading?'Dashboard':2,()=>{});
+   mappings.push({inputNode:sn,input,hostInput:hi,widget:w});
+  };
+  if(variant.includes('heading'))addPresentation('BV Subgraph Heading');if(variant.includes('dividers'))for(let i=0;i<3;i++)addPresentation('BV Subgraph Divider');
+  if(variant.includes('seed')){const sn=new LGraphNode('Seed');sn.type='BV Seed';sn.properties={};const input=sn.addInput('seed_bv','INT'),hi=h.addInput('seed','INT'),w=h.addWidget('number','seed_bv',1,()=>{});mappings.push({inputNode:sn,input,hostInput:hi,widget:w});}
+  h.resolveSubgraphInputLinks=index=>[mappings[index]];h.getWidgetFromSlot=input=>mappings.find(m=>m.hostInput===input)?.widget;
+  h.setSize([500,400]);const before=[...h.size];const projected=projection.projectSubgraphUIPresentation(h);const afterPresentation=[...h.size];const seedCount=variant.includes('seed')?seed.projectSeedControls(h):0;await settle();
+  report.cases.push({variant:'actual projection fallback '+variant,before,projected,seedCount,afterPresentation,rounds:[{settled:[...h.size],preserved:h.size[0]===500}],adapterBoundary:'real source patches/native host and widgets; explicit resolver mapping; no TS presentation bridge loaded'});
+ }
+ let narrowGraph=createGraph();const narrowInner=LiteGraph.createNode('BV Test Width Native');narrowGraph.add(narrowInner);const narrowHost=narrowGraph.convertToSubgraph(new Set([narrowInner])).node;
+ narrowHost.setSize([500,300]);narrowHost.setSize([320,300]);const narrowId=narrowHost.id,narrowSaved=JSON.parse(JSON.stringify(narrowGraph.serialize()));
+ narrowGraph=createGraph();narrowGraph.configure(narrowSaved);const narrowRestored=narrowGraph.getNodeById(narrowId);const narrowImmediate=[...narrowRestored.size];seed.relayout(narrowRestored);await settle();
+ report.cases.push({variant:'native 500 to 320, whole graph reload, actual Seed relayout',before:[320,300],rounds:[{saved:narrowSaved.nodes.find(n=>String(n.id)===String(narrowId)).size,immediate:narrowImmediate,settled:[...narrowRestored.size],preserved:narrowRestored.size[0]===320}],adapterBoundary:'native whole graph lifecycle plus actual relayout; no promoted lookup override'});
+ const hiddenGraph=createGraph(),hiddenInner=LiteGraph.createNode('BV Test Width Native');hiddenGraph.add(hiddenInner);const hiddenHost=hiddenGraph.convertToSubgraph(new Set([hiddenInner])).node;
+ hiddenHost.setSize([500,250]);const publicMeasured=[...hiddenHost.computeSize()];const hiddenPort=hiddenHost.addOutput('hidden_provider_'.repeat(60),'STRING');hiddenPort.hidden=true;
+ const withHiddenMeasured=[...hiddenHost.computeSize()];seed.relayout(hiddenHost);
+ report.hiddenProviderProbe={publicMeasured,withHiddenMeasured,after:[...hiddenHost.size],widthPreserved:hiddenHost.size[0]===500,boundary:'one real native hidden output, no visible content added; diagnostic only'};
+ report.status=report.cases.every(c=>c.rounds.every(r=>r.preserved))?'passed':'reproduced';
+ }catch(error){report.status='failed';report.error=String(error);report.stack=error.stack;}
+ result.textContent=JSON.stringify(report,null,2);globalThis.__nativeWidthResult=report;
+};
+document.querySelector('#run').disabled=false;result.textContent='Ready';
+</script>

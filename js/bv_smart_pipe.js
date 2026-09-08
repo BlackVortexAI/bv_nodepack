@@ -1,6 +1,7 @@
 // Registered presentation exception: dynamic-pipe-slot-structure.
 // See PRESENTATION_EXCEPTIONS in ui/src/regional/nodePresentation.ts.
 import { app } from "../../scripts/app.js";
+import {duplicateNativeSlotRemovals, installNativeSlotConfigureTransaction, nativeSlotsAreConfiguring, nativeOutputIndexMap, restoreNativeSlotOrder, serializeNativeSlotIdentities, validateConnectedSlotIdentities, validateNativeOutputLinks, validateSavedSlotIdentities} from "./bv_node_slots.js";
 import { moveMarkedPortToEnd, nextFreeOrdinal, promoteConnectedInheritedSlots, promoteInheritedSlot, resolveLocalSlotNameCollisions, retainedMissingSlots, reusableSmartPipePortIndex, smartPipeSlotName, uniqueSmartPipeSlotName, updateSmartPipePort } from "./bv_smart_pipe_slots.js";
 import { mergePipeSchemas, SMART_PIPE_DEFAULT_TITLE } from "./bv_smart_pipe_merge_model.js";
 import {
@@ -208,30 +209,20 @@ export function collectExpandedPipeAddresses(rootGraph) {
 
 const relocationHooks = new WeakMap();
 export function restoreSerializedPipeSlots(node, data) {
-  const prepared = {};
-  for (const field of ["inputs", "outputs"]) {
-    if (!Array.isArray(data?.[field])) continue;
-    const slots = node[field] || [];
-    const names = new Set();
-    prepared[field] = data[field].map(saved => {
-      const matches = slots.filter(slot => slot.name === saved.name);
-      const nativeAction = field === "inputs" && ((saved.name === "bv_add_pipe_source" && saved.type === "BV_SMART_PIPE") || (saved.name === "bv_add_slot" && saved.type === "*"));
-      if (names.has(saved.name) || matches.length > 1 || (!matches.length && (!nativeAction || typeof node.addInput !== "function"))) throw new Error(`Ambiguous or missing serialized ${field} slot: ${saved.name}`);
-      names.add(saved.name);
-      return matches[0] || { createNativeAction: saved };
-    });
-  }
-  for (const [field, slots] of Object.entries(prepared)) {
-    const resolved = slots.map(slot => {
-      if (!slot.createNativeAction) return slot;
-      const saved = slot.createNativeAction;
+  restoreNativeSlotOrder(node, data, (field, saved) => {
+    const nativeAction = field === "inputs" && ((saved.name === "bv_add_pipe_source" && saved.type === "BV_SMART_PIPE") || (saved.name === "bv_add_slot" && saved.type === "*"));
+    if (!nativeAction || typeof node.addInput !== "function") return null;
+    return () => {
       const action = node.addInput(saved.name, saved.type);
       action.label = saved.label;
       if (saved.name === "bv_add_slot") action.bvAddSlot = true;
       else action.bvAddPipeSource = true;
       return action;
-    });
-    node[field].splice(0, node[field].length, ...resolved);
+    };
+  });
+  for (const input of node.inputs || []) {
+    if (input.name === ADD_SLOT_NAME) input.bvAddSlot = true;
+    if (input.name === "bv_add_pipe_source") input.bvAddPipeSource = true;
   }
 }
 
@@ -443,15 +434,10 @@ function remapSmartPipeOutputLinks(apiPrompt, routing) {
   const outputIndexMaps = {};
   for (const descriptor of routing.descriptors) {
     const schema = routing.registry[descriptor.address]?.projection?.resolvedSlots || stateFor(descriptor.node).resolvedSlots || [];
-    const ordinalById = new Map(schema.map((slot) => [slot.id, slot.ordinal]));
-    const indexMap = { 0: 0 };
-    for (let index = 1; index < (descriptor.node.outputs?.length || 0); index++) {
-      const slotId = descriptor.node.outputs[index]?.bvSlotId;
-      const ordinal = ordinalById.get(slotId);
-      if (ordinal) indexMap[index] = ordinal;
-    }
+    const indexMap = nativeOutputIndexMap(descriptor.node.outputs, schema.map(slot => ({id: slot.id, name: `out_${String(slot.ordinal).padStart(3, "0")}`, executionIndex: slot.ordinal})));
     outputIndexMaps[descriptor.executionId] = indexMap;
   }
+  validateNativeOutputLinks(apiPrompt, outputIndexMaps);
   return remapPromptOutputLinks(apiPrompt, outputIndexMaps);
 }
 
@@ -769,6 +755,10 @@ function temporarilyRevealOutput(node, slot) {
 }
 
 function reconcilePorts(node, schema) {
+  // Validate connected identity collisions before any structural mutation.
+  for (const [field, linked] of [["inputs", port => port.link != null], ["outputs", port => Boolean(port.links?.length)]]) {
+    validateConnectedSlotIdentities(node[field], linked, port => port.name === "pipe" || port.bvAddSlot);
+  }
   const desiredInputs = new Set(schema.filter((slot) => !slot.dormant && (slot.showInput || slot.missing)).map((slot) => `v_${String(slot.ordinal).padStart(3, "0")}`));
   const desiredOutputs = new Set(schema.filter((slot) => !slot.dormant && (slot.showOutput || slot.missing || temporarilyRevealOutput(node, slot))).map((slot) => `out_${String(slot.ordinal).padStart(3, "0")}`));
 
@@ -807,21 +797,8 @@ function reconcilePorts(node, schema) {
 
   for (const kind of ["input", "output"]) {
     const ports = kind === "input" ? node.inputs || [] : node.outputs || [];
-    const indexesByName = new Map();
-    ports.forEach((port, index) => {
-      if (port.name === "pipe" || port.bvAddSlot) return;
-      const indexes = indexesByName.get(port.name) || [];
-      indexes.push(index);
-      indexesByName.set(port.name, indexes);
-    });
-    for (const indexes of indexesByName.values()) {
-      if (indexes.length < 2) continue;
-      const connected = indexes.find((index) => kind === "input" ? ports[index]?.link != null : Boolean(ports[index]?.links?.length));
-      const keep = connected ?? indexes[0];
-      for (const index of [...indexes].sort((left, right) => right - left)) {
-        if (index !== keep) removeSlot(node, kind, index);
-      }
-    }
+    const removals = duplicateNativeSlotRemovals(ports, port => kind === "input" ? port.link != null : Boolean(port.links?.length), port => port.name === "pipe" || port.bvAddSlot);
+    for (const index of removals) removeSlot(node, kind, index);
   }
   const addSlots = (node.inputs || []).filter((input) => input.bvAddSlot);
   const keepAddSlot = schema.length < MAX_SLOTS;
@@ -993,7 +970,7 @@ function updatePredecessorWidget(node) {
 }
 
 export function propagate(node, visited = new Set()) {
-  if (!node || visited.has(node)) return;
+  if (!node || visited.has(node) || nativeSlotsAreConfiguring(node)) return;
   visited.add(node);
   registerUpstream(node, effectiveUpstreamNode(node));
   const schema = resolveSchema(node);
@@ -1111,6 +1088,9 @@ function setupNode(node) {
   const originalConnectionsChange = node.onConnectionsChange;
   node.onConnectionsChange = function (type, index, connected, linkInfo) {
     originalConnectionsChange?.apply(this, arguments);
+    // Native configure replays connection notifications before onConfigure.
+    // These are restoration events, not user edits of schema visibility/types.
+    if (nativeSlotsAreConfiguring(this)) return;
     if (type === 1 && connected) {
       if (convertAddSlot(this, index, linkInfo)) {
         requestAnimationFrame(() => propagate(this));
@@ -1395,11 +1375,25 @@ app.registerExtension({
   },
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== NODE_CLASS) return;
+    installNativeSlotConfigureTransaction(nodeType, data => {
+      const schema = data?.properties?.bvSmartPipe?.resolvedSlots;
+      if (Array.isArray(schema) && schema.length) {
+        validateSavedSlotIdentities(data.outputs, schema.map(slot => ({id: slot.id, name: `out_${String(slot.ordinal).padStart(3, "0")}`})));
+        validateSavedSlotIdentities(data.inputs, schema.map(slot => ({id: slot.id, name: `v_${String(slot.ordinal).padStart(3, "0")}`})));
+      }
+    });
     const originalConfigure = nodeType.prototype.onConfigure;
-    nodeType.prototype.onConfigure = function () {
+    nodeType.prototype.onConfigure = function (data) {
       const result = originalConfigure?.apply(this, arguments);
+      if (data) restoreSerializedPipeSlots(this, data);
       setupNode(this);
       requestAnimationFrame(() => propagate(this));
+      return result;
+    };
+    const originalSerialize = nodeType.prototype.onSerialize;
+    nodeType.prototype.onSerialize = function (data) {
+      const result = originalSerialize?.apply(this, arguments);
+      serializeNativeSlotIdentities(this, data);
       return result;
     };
     const originalMenu = nodeType.prototype.getExtraMenuOptions;

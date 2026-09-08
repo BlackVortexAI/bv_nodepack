@@ -49,6 +49,8 @@ def validate_lora_resource_reference(reference: dict[str, Any]) -> None:
 def validate_lora_capability(payload: dict[str, Any]) -> None:
     version = payload.get("version")
     expected = {"version", "collector_id", "entries"} if version == 1 else ({"version", "entries"} if version == 2 else {"version", "entries", "scopes"})
+    if version == 3 and "automatic" in payload:
+        expected = expected | {"automatic"}
     if version not in {1, 2, 3} or set(payload) != expected:
         raise RegionalContextError("LoRA capability has unknown or missing fields")
     collector_id = payload.get("collector_id")
@@ -103,6 +105,8 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
     if version == 1 and needs_collector and collector_id is None:
         raise RegionalContextError("external LoRA entries require collector_id")
     if version == 3:
+        if "automatic" in payload:
+            validate_automatic_loras(payload["automatic"])
         scopes = payload["scopes"]
         if not isinstance(scopes, dict):
             raise RegionalContextError("LoRA capability scopes must be an object")
@@ -112,6 +116,26 @@ def validate_lora_capability(payload: dict[str, Any]) -> None:
             parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {
                 scope: {"id": scope, "name": scope, "stack": stack}
             }})
+
+
+def validate_automatic_loras(value):
+    if not isinstance(value, dict) or set(value) not in ({"version", "resources"}, {"version", "resources", "enabled"}) or value["version"] != 1 or not isinstance(value["resources"], list):
+        raise RegionalContextError("Automatic LoRA provenance requires version 1 resources")
+    if "enabled" in value and not isinstance(value["enabled"], bool):
+        raise RegionalContextError("Automatic LoRA enabled must be boolean")
+    seen = set()
+    for item in value["resources"]:
+        if not isinstance(item, dict) or set(item) != {"provider_id", "resource_id", "role", "entry_ids", "stack"}:
+            raise RegionalContextError("Automatic LoRA resource has unknown or missing fields")
+        provider = _required_uuid(item["provider_id"], "automatic provider_id")
+        resource = _required_uuid(item["resource_id"], "automatic resource_id")
+        identity = (provider, resource)
+        if identity in seen or item["role"] not in {"basis", "global"}:
+            raise RegionalContextError("Duplicate or invalid automatic LoRA resource")
+        seen.add(identity)
+        parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {
+            resource: {"id": resource, "name": resource, "stack": item["stack"], "origin_provider_id": provider, "entry_ids": item["entry_ids"]}
+        }})
 
 
 # BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): LoRA capability v1 -> v2.
@@ -149,11 +173,38 @@ def normalize_lora_capability(payload: Any) -> dict[str, Any]:
 
 def normalize_lora_prompt_config(payload: Any) -> dict[str, Any]:
     """Convert the shared frontend envelope into the persisted capability payload."""
+    payload = without_lora_provider_selection(payload)
     if isinstance(payload, dict) and payload.get("version") == 3:
         if set(payload) != {"version", "entries", "steps"} or payload.get("steps") != []:
             raise RegionalContextError("Regional Prompt LoRA config version 3 must contain entries and no steps")
         payload = {"version": 2, "entries": payload["entries"]}
     return normalize_lora_capability(payload)
+
+
+def without_lora_provider_selection(payload, providers=None):
+    """Validate explicit provider dependencies; resource state stays in the provider."""
+    if not isinstance(payload, dict):
+        return payload
+    if "apply_global" in payload and not isinstance(payload["apply_global"], bool):
+        raise RegionalContextError("LoRA apply_global must be boolean")
+    ids = payload.get("registry_ids", [])
+    if not isinstance(ids, list) or len(ids) > 20 or any(not isinstance(value, str) for value in ids) or len(set(ids)) != len(ids):
+        raise RegionalContextError("LoRA registry_ids requires up to 20 unique UUIDs")
+    for identifier in ids:
+        if _required_uuid(identifier, "LoRA registry_ids") != str(uuid.UUID(identifier)):
+            raise RegionalContextError("LoRA registry_ids must be canonical UUIDs")
+    sources = list(payload.get("entries", []))
+    for step in payload.get("steps", []):
+        if isinstance(step, dict):
+            sources.extend(step.get("entries", []))
+    dependencies = set(ids)
+    dependencies.update(entry.get("source", {}).get("collector_id") for entry in sources if isinstance(entry, dict) and isinstance(entry.get("source"), dict) and entry["source"].get("kind") == "external")
+    dependencies.discard(None)
+    if len(dependencies) > 20:
+        raise RegionalContextError("LoRA provider selection exceeds 20 providers")
+    if providers is not None and any(identifier not in providers for identifier in ids):
+        raise RegionalContextError("Selected LoRA Registry provider is missing; reconnect its Registry")
+    return {key: value for key, value in payload.items() if key not in {"registry_ids", "apply_global"}}
 
 
 def _replace_lora(_current: dict[str, Any], configured: Any) -> dict[str, Any]:
@@ -255,7 +306,10 @@ def reidentify_lora_provider(provider: Any, provider_id: str) -> dict[str, Any]:
 
 def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityRegistry, operation: str = "replace") -> RegionalContext:
     context = normalize_context(value, registry=registry)
+    automatic = context.capabilities.get(LORA_CAPABILITY, {}).get("automatic")
     if operation == "clear":
+        if automatic:
+            return context.with_capability(LORA_CAPABILITY, {"version": 3, "entries": [], "scopes": {}, "automatic": automatic})
         return context.without_capability(LORA_CAPABILITY)
     clean = normalize_lora_capability(payload)
     clean = {"version": 3, "entries": clean["entries"], "scopes": {}}
@@ -283,6 +337,8 @@ def transform_lora_capability(value: Any, payload: Any, *, registry: CapabilityR
         result = handler(current, clean)
         result = {"version": 3, "entries": result["entries"], "scopes": {}}
         validate_lora_capability(result)
+    if automatic:
+        result["automatic"] = automatic
     return context.with_capability(LORA_CAPABILITY, result)
 
 
@@ -331,9 +387,12 @@ def _transform_lora_scope(
         base = _without_lora_target(current_entries, target) if operation == "replace" else current_entries
         incoming_ids = {entry["id"] for entry in incoming}
         entries = [entry for entry in base if entry["id"] not in incoming_ids] + incoming
-    if not entries:
+    automatic = current.get("automatic") if current else None
+    if not entries and not automatic:
         return context.without_capability(LORA_CAPABILITY)
     payload = {"version": 3, "entries": entries, "scopes": {}}
+    if automatic:
+        payload["automatic"] = automatic
     validate_lora_capability(payload)
     return context.with_capability(LORA_CAPABILITY, payload)
 
@@ -348,6 +407,7 @@ def transform_lora_sequence(
     """Apply a transformer config as one or more ordinary LoRA capability operations."""
     if not isinstance(config, dict):
         raise RegionalContextError("LoRA transformer config must be an object")
+    config = without_lora_provider_selection(config)
     if config.get("version") == 1:
         return transform_lora_capability(value, config, registry=registry, operation=fallback_operation)
     version = config.get("version")
@@ -429,8 +489,9 @@ def resolve_lora_capability(value: Any, provider: Any = None, *, registry: Capab
                 raise RegionalContextError(
                     f"LoRA resource is unresolved: {source['resource_id']!r} in collector {collector_id!r}"
                 )
-            if resource.get("role") == "basis":
-                raise RegionalContextError("Basis LoRA stacks belong in BV Model Patcher; remove their global/regional assignments")
+            if resource.get("role") in {"basis", "global"}:
+                # Automatic resources cannot be selected a second time through stale pickers.
+                continue
             stack = parse_registry({"schema": "bv.lora_stack_registry", "version": 1, "stacks": {source["resource_id"]: resource}})["stacks"][source["resource_id"]]["stack"]
         for target in entry["targets"]:
             key = "global" if target["scope"] == "global" else target["region_id"]
@@ -449,13 +510,43 @@ def resolve_lora_capability(value: Any, provider: Any = None, *, registry: Capab
     return scopes
 
 
-def materialize_lora_capability(value: Any, provider: Any = None, *, registry: CapabilityRegistry) -> RegionalContext:
+def materialize_lora_capability(value: Any, provider: Any = None, *, registry: CapabilityRegistry, apply_global: bool | None = None) -> RegionalContext:
     context = normalize_context(value, registry=registry)
-    if LORA_CAPABILITY not in context.capabilities:
+    payload = context.capabilities.get(LORA_CAPABILITY, {"version": 3, "entries": [], "scopes": {}})
+    enabled = payload.get("automatic", {}).get("enabled", True) if apply_global is None else apply_global
+    providers = provider if isinstance(provider, dict) and provider.get("schema") != "bv.runtime_resource_provider" else ({provider.get("provider_id"): provider} if isinstance(provider, dict) else {})
+    automatic = {(item["provider_id"], item["resource_id"]): item for item in payload.get("automatic", {}).get("resources", [])}
+    incoming = {}
+    refreshed_origins = set()
+    for raw in providers.values():
+        clean = normalize_lora_provider(raw)
+        refreshed_origins.add(clean["provider_id"])
+        for resource_id, resource in clean["resources"].items():
+            origin = resource.get("origin_provider_id", clean["provider_id"])
+            refreshed_origins.add(origin)
+            if resource.get("role") not in {"basis", "global"}:
+                continue
+            if resource.get("global_enabled", True) is False:
+                continue
+            # Old external providers have no entry IDs; stable per-stack ordinals retain occurrences.
+            ids = resource.get("entry_ids", [str(uuid.uuid5(uuid.UUID(origin), f"{resource_id}:{index}")) for index in range(len(resource["stack"]))])
+            item = {"provider_id": origin, "resource_id": resource_id, "role": resource["role"], "entry_ids": ids, "stack": [list(entry) for entry in resource["stack"]]}
+            identity = (origin, resource_id)
+            if identity in incoming and incoming[identity] != item:
+                raise RegionalContextError("Conflicting automatic LoRA resource copies")
+            incoming[identity] = item
+    automatic = {identity: item for identity, item in automatic.items() if identity[0] not in refreshed_origins}
+    automatic.update(incoming)
+    if enabled and len({identity[0] for identity in automatic}) > 1:
+        raise RegionalContextError("Multiple active Global LoRA Registries in this workflow. Turn the intended Registry Global switch off and on again, or disable the other Global switches.")
+    if LORA_CAPABILITY not in context.capabilities and not automatic and enabled:
         return context
+    context = context.with_capability(LORA_CAPABILITY, payload)
     scopes = resolve_lora_capability(context, provider, registry=registry)
-    payload = context.require_capability(LORA_CAPABILITY)
-    return context.with_capability(LORA_CAPABILITY, {"version": 3, "entries": payload["entries"], "scopes": scopes})
+    result = {"version": 3, "entries": payload["entries"], "scopes": scopes}
+    if automatic or not enabled:
+        result["automatic"] = {"version": 1, "resources": list(automatic.values()), **({"enabled": False} if not enabled else {})}
+    return context.with_capability(LORA_CAPABILITY, result)
 
 
 def materialized_lora_scopes(value: Any, *, registry: CapabilityRegistry) -> dict[str, list[list[Any]]]:

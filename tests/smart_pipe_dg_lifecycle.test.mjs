@@ -263,7 +263,7 @@ test('serialized dynamic port order is restored before native reconnect, preserv
  mod.restoreSerializedPipeSlots(node,{inputs:[{name:'pipe_003'}],outputs:[{name:'pipe'}]});
  assert.deepEqual(node.inputs,[third]);assert.equal(node.inputs[0],third);assert.equal(node.outputs[0],output);assert.equal(node.outputs.length,1);
  const original=[...node.inputs];
- assert.throws(()=>mod.restoreSerializedPipeSlots(node,{inputs:[{name:'missing'}],outputs:[]}),/serialized.*slot/i);
+ assert.throws(()=>mod.restoreSerializedPipeSlots(node,{inputs:[{name:'missing'}],outputs:[]}),/(?:serialized|saved).*slot/i);
  assert.deepEqual(node.inputs,original);
 });
 

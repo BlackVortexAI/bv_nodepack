@@ -9,17 +9,24 @@ export type LoraCatalogItem={
     size:number;
     preview_url:string|null;
     preview_safe:boolean;
+    preview_media_type?:"image"|"video";
     metadata_sources:string[];
     type:string;
     category:string;
     directory:string;
+    civitai_url?:string|null;
+    compatibility?:{status:"unknown"|"multipass"|"token_candidate";family:string|null;reason:string;target_model:"unknown"};
 };
 export type LoraCatalog={schema:"bv.lora_catalog";version:1;items:LoraCatalogItem[]};
 export type LoraRegistryEntry={id:string;lora_name:string;enabled:boolean;model_strength:number;clip_strength:number};
-export type LoraRegistryStack={id:string;name:string;enabled:boolean;role?:"normal"|"basis";entries:LoraRegistryEntry[]};
-export type LoraRegistryConfig={schema:"bv.lora_registry_config";version:1;registry_id:string;stacks:LoraRegistryStack[]};
+export type LoraRegistryStack={id:string;name:string;enabled:boolean;role?:"normal"|"basis"|"global";entries:LoraRegistryEntry[]};
+export type LoraRegistryConfig={schema:"bv.lora_registry_config";version:1|2;registry_id:string;stacks:LoraRegistryStack[]};
 
 const freshId=()=>crypto.randomUUID();
+export const safeCivitaiUrl=(value:unknown):string|null=>{
+    if(typeof value!=="string"||/[\s\u0000-\u001f]/.test(value))return null;
+    try{const url=new URL(value);return["http:","https:"].includes(url.protocol)&&["civitai.com","www.civitai.com"].includes(url.hostname)&&!url.username&&!url.password&&["","80","443"].includes(url.port)&&/^\/models\/[1-9]\d*(?:\/[A-Za-z0-9_-]+)?\/?$/.test(url.pathname)?url.href:null}catch{return null}
+};
 const finite=(value:unknown,fallback:number)=>{
     if(value===undefined)return fallback;
     if(typeof value==="string"&&!value.trim())return Number.NaN;
@@ -34,14 +41,25 @@ const exactKeys=(value:Record<string,unknown>,allowed:string[])=>Object.keys(val
 const optionalBoolean=(value:Record<string,unknown>,key:string)=>!(key in value)||typeof value[key]==="boolean";
 const optionalFiniteNumber=(value:Record<string,unknown>,key:string)=>!(key in value)||(typeof value[key]==="number"&&Number.isFinite(value[key]));
 const rawEntryShape=(entry:unknown)=>record(entry)&&exactKeys(entry,["id","lora_name","enabled","model_strength","clip_strength"])&&typeof entry.id==="string"&&typeof entry.lora_name==="string"&&optionalBoolean(entry,"enabled")&&optionalFiniteNumber(entry,"model_strength")&&optionalFiniteNumber(entry,"clip_strength");
-const rawStackShape=(stack:unknown)=>record(stack)&&exactKeys(stack,["id","name","enabled","entries","role"])&&(!("role" in stack)||stack.role==="normal"||stack.role==="basis")&&typeof stack.id==="string"&&typeof stack.name==="string"&&optionalBoolean(stack,"enabled")&&Array.isArray(stack.entries)&&stack.entries.every(rawEntryShape);
-const rawConfigShape=(value:unknown):value is Record<string,unknown>=>record(value)&&exactKeys(value,["schema","version","registry_id","stacks"])&&value.schema==="bv.lora_registry_config"&&value.version===1&&typeof value.registry_id==="string"&&Array.isArray(value.stacks)&&value.stacks.every(rawStackShape);
+const rawStackShape=(stack:unknown)=>record(stack)&&exactKeys(stack,["id","name","enabled","entries","role"])&&(!("role" in stack)||stack.role==="normal"||stack.role==="basis"||stack.role==="global")&&typeof stack.id==="string"&&typeof stack.name==="string"&&optionalBoolean(stack,"enabled")&&Array.isArray(stack.entries)&&stack.entries.every(rawEntryShape);
+const rawConfigShape=(value:unknown):value is Record<string,unknown>=>record(value)&&exactKeys(value,["schema","version","registry_id","stacks"])&&value.schema==="bv.lora_registry_config"&&(value.version===1||value.version===2)&&typeof value.registry_id==="string"&&Array.isArray(value.stacks)&&value.stacks.every(rawStackShape);
 const safeLoraName=(value:string)=>{
     const name=logicalName(value),parts=name.split("/");
     return Boolean(name)&&!name.startsWith("/")&&!parts.some(part=>!part||part==="."||part==="..")&&!parts[0].includes(":")&&name.toLocaleLowerCase().endsWith(".safetensors");
 };
 
-export const emptyLoraRegistryConfig=():LoraRegistryConfig=>({schema:"bv.lora_registry_config",version:1,registry_id:freshId(),stacks:[]});
+export const automaticLoraStack=(stack:LoraRegistryStack)=>stack.role==="global"||stack.role==="basis";
+export const loraStackLabel=(stack:LoraRegistryStack)=>stack.role==="global"?"Global · Automatically applied":stack.role==="basis"?`${stack.name} · Global (migrated basis)`:stack.name;
+export const GLOBAL_LORA_DESCRIPTION="Applied to the entire generation. Regional stacks are added on top.";
+const ensureGlobal=(config:LoraRegistryConfig):LoraRegistryConfig=>{
+    if(config.stacks.some(stack=>stack.role==="global"))return{...config,version:2};
+    const id=config.registry_id.slice(0,-1)+(parseInt(config.registry_id.slice(-1),16)^1).toString(16);
+    if(config.stacks.some(stack=>stack.id===id))return{...config,registry_id:""};
+    let name="Global";const names=new Set(config.stacks.map(stack=>stack.name.toLocaleLowerCase()));while(names.has(name.toLocaleLowerCase()))name+=" · Automatically applied";
+    const enabled=config.version===1&&config.stacks.some(stack=>stack.role==="basis"&&stack.enabled&&stack.entries.some(entry=>entry.enabled));
+    return{...config,version:2,stacks:[{id,name,enabled,role:"global",entries:[]},...config.stacks]};
+};
+export const emptyLoraRegistryConfig=():LoraRegistryConfig=>ensureGlobal({schema:"bv.lora_registry_config",version:2,registry_id:freshId(),stacks:[]});
 export const newLoraRegistryStack=(name="LoRA Stack"):LoraRegistryStack=>({id:freshId(),name,enabled:true,entries:[]});
 export const newLoraRegistryEntry=(loraName:string):LoraRegistryEntry=>({id:freshId(),lora_name:logicalName(loraName),enabled:true,model_strength:1,clip_strength:1});
 export const addLoraEntryToStack=(config:LoraRegistryConfig,targetStackId:string,loraName:string):{config:LoraRegistryConfig;added:boolean;entryId?:string}=>{
@@ -86,16 +104,16 @@ export function parseLoraRegistryConfig(value:unknown):LoraRegistryConfig{
         const parsed=typeof value==="string"?JSON.parse(value):structuredClone(value);
         if(!rawConfigShape(parsed))return{schema:"bv.lora_registry_config",version:1,registry_id:"",stacks:[]};
         const stacks:LoraRegistryStack[]=(parsed.stacks as any[]).map((source:any)=>({
-            id:normalizedUuid(source.id),name:String(source.name??"").trim(),enabled:source.enabled!==false,...(source.role==="basis"?{role:"basis" as const}:{}),
+            id:normalizedUuid(source.id),name:String(source.name??"").trim(),enabled:source.enabled!==false,...(source.role==="basis"||source.role==="global"?{role:source.role as "basis"|"global"}:{}),
             entries:source.entries.map((item:any)=>({id:normalizedUuid(item.id),lora_name:logicalName(item.lora_name),enabled:item.enabled!==false,model_strength:finite(item.model_strength,1),clip_strength:finite(item.clip_strength,1)})),
         }));
-        return{schema:"bv.lora_registry_config",version:1,registry_id:normalizedUuid(parsed.registry_id),stacks};
+        return ensureGlobal({schema:"bv.lora_registry_config",version:parsed.version as 1|2,registry_id:normalizedUuid(parsed.registry_id),stacks});
     }catch{return{schema:"bv.lora_registry_config",version:1,registry_id:"",stacks:[]}}
 }
 
 export const serializeLoraRegistryConfig=(value:LoraRegistryConfig)=>JSON.stringify(value);
 export const freshenLoraRegistryIdentities=(value:LoraRegistryConfig):LoraRegistryConfig=>({...structuredClone(value),registry_id:freshId(),stacks:value.stacks.map(stack=>({...structuredClone(stack),id:freshId(),entries:stack.entries.map(entry=>({...entry,id:freshId()}))}))});
-export const clearLoraRegistryStacks=(value:LoraRegistryConfig):LoraRegistryConfig=>({...structuredClone(value),stacks:[]});
+export const clearLoraRegistryStacks=(value:LoraRegistryConfig):LoraRegistryConfig=>ensureGlobal({...structuredClone(value),stacks:value.stacks.filter(stack=>stack.role==="global").map(stack=>({...stack,entries:[]}))});
 export const needsFreshLoraRegistryId=(nodeId:string,registryId:string,registries:Array<{nodeId:string;registryId:string}>)=>{
     const duplicates=registries.filter(item=>item.registryId===registryId);
     return Boolean(registryId)&&duplicates.length>1&&duplicates[0].nodeId!==nodeId;
@@ -107,7 +125,7 @@ export const loraRegistryValidation=(config:LoraRegistryConfig)=>{
     const duplicateName=config.stacks.find((_stack,index)=>names.indexOf(names[index])!==index)?.name;
     const incomplete=config.stacks.some(stack=>!stack.name.trim()||stack.entries.some(entry=>!entry.lora_name.trim()));
     const stackIds=config.stacks.map(stack=>stack.id),duplicateId=stackIds.some((id,index)=>stackIds.indexOf(id)!==index)||config.stacks.some(stack=>{const ids=stack.entries.map(entry=>entry.id);return ids.some((id,index)=>ids.indexOf(id)!==index)});
-    const invalidId=duplicateId||!canonicalUuid.test(config.registry_id)||config.stacks.some(stack=>!canonicalUuid.test(stack.id)||stack.entries.some(entry=>!canonicalUuid.test(entry.id)));
+    const invalidId=config.stacks.filter(stack=>stack.role==="global").length!==1||duplicateId||!canonicalUuid.test(config.registry_id)||config.stacks.some(stack=>!canonicalUuid.test(stack.id)||stack.entries.some(entry=>!canonicalUuid.test(entry.id)));
     const invalidPath=config.stacks.some(stack=>stack.entries.some(entry=>!safeLoraName(entry.lora_name)));
     const invalidStrength=config.stacks.some(stack=>stack.entries.some(entry=>!Number.isFinite(entry.model_strength)||!Number.isFinite(entry.clip_strength)));
     return{valid:!duplicateName&&!incomplete&&!invalidId&&!invalidPath&&!invalidStrength,duplicateName,incomplete,duplicateId,invalidId,invalidPath,invalidStrength};

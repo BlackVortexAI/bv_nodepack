@@ -1,3 +1,5 @@
+import {workflowGlobalLoraSelection} from "./loraGlobalRegistry";
+import {loraV3CollectorIds} from "./loraV3Config";
 import { getApp } from "../appHelper.js";
 import type { ResourcePickerCollector } from "../ui/components";
 import { withoutLoraV3Target, type LoraV3Config, type LoraV3Target, type LoraV3TargetOption } from "./LoraV3ResourcePickerPanel";
@@ -7,7 +9,7 @@ import { installM0CanvasVisibility } from "./m0VisualProjection";
 import { requestRegionalWindow } from "./windowRequests";
 import { migrateRegionalNode, queueRegionalMigrationReport } from "./milestoneE";
 import { applyClassicNodePresentation, removeNodePresentation } from "./classicNodePresentation";
-import { notifyLoraV3InventoryChanged } from "./loraV3Inventory";
+import { LORA_V3_INVENTORY_CHANGED_EVENT, notifyLoraV3InventoryChanged } from "./loraV3Inventory";
 import { activateDgReceiver, deactivateDgReceiver, invalidateDgReceiverWork, dgSenderChoices, dgSenderIdentity, queueDgUpgrade, scheduleDgUpgrade } from "./dgRouting";
 import { activateNewRegistryDgConsumer, restoreRegistryDgActivation, isLoraRegistry, isRegistryDgPilot } from "./loraRegistryDgAdapter";
 import { applyProjectedSlotLabel } from "./portProjection";
@@ -29,12 +31,14 @@ export function loraV3Catalog(node:any):LoraV3CollectorChoice[]{
     // Domain identity collisions are unresolved, never a first-match choice.
     return pilot?result.filter(item=>result.filter(other=>other.id===item.id).length===1):result;
 }
-export function loraV3CollectorIds(config:LoraV3Config){const ids:string[]=[];for(const entry of [...config.entries,...(config.steps??[]).flatMap(step=>step.entries)])if(entry.source.kind==="external"&&entry.source.collector_id&&!ids.includes(entry.source.collector_id))ids.push(entry.source.collector_id);return ids;}
+export {loraV3CollectorIds} from "./loraV3Config";
 export function readNodeLoraV3Config(node:any,name=nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json"){
     try{
         let config=parseLoraV3Config(widget(node,name)?.value),linked=linkedLocalLoraCollectors(node),changed=false;
+        if(nodeClass(node)==="BV Regional Prompt"&&"registry_ids" in config){delete config.registry_ids;changed=true;}
         const remap=(entry:any)=>{if(entry.source.kind!=="external")return entry;const sourceNode=linked.find(item=>item?.__bvLoraCollectorIdRemap?.[entry.source.collector_id]||loraProviderIdentity(item)===entry.source.collector_id),collectorId=sourceNode?.__bvLoraCollectorIdRemap?.[entry.source.collector_id]??entry.source.collector_id,resourceRemaps=Object.assign({},sourceNode?.__bvLoraResourceIdRemap??{},...loraProviderResources(sourceNode).map((item:any)=>item.node?.__bvLoraResourceIdRemap??{})),resourceId=resourceRemaps[entry.source.resource_id]??entry.source.resource_id;changed||=collectorId!==entry.source.collector_id||resourceId!==entry.source.resource_id;return {...entry,source:{...entry.source,collector_id:collectorId,resource_id:resourceId}};};
-        config={...config,entries:config.entries.map(remap),steps:config.steps?.map(step=>({...step,entries:step.entries.map(remap)}))};if(changed)writeNodeLoraV3Config(node,config,name);
+        const registryIds=config.registry_ids?.map(id=>{const source=linked.find(item=>item?.__bvLoraCollectorIdRemap?.[id]||loraProviderIdentity(item)===id),next=source?.__bvLoraCollectorIdRemap?.[id]??id;changed||=next!==id;return next});
+        config={...config,...(registryIds?{registry_ids:registryIds}:{}),entries:config.entries.map(remap),steps:config.steps?.map(step=>({...step,entries:step.entries.map(remap)}))};if(changed)writeNodeLoraV3Config(node,config,name);
         return config;
     }catch{return emptyLoraV3Config();}
 }
@@ -48,7 +52,7 @@ const linkedLoraCollectorIds=(node:any)=>new Set(linkedLocalLoraCollectors(node)
 export function loraV3Resolved(node:any,config:LoraV3Config){const linkedIds=linkedLoraCollectorIds(node);return loraV3CollectorIds(config).every(id=>linkedIds.has(id));}
 export function loraV3EntryResolved(node:any,_config:LoraV3Config,entry:any){return entry.source.kind!=="external"||linkedLoraCollectorIds(node).has(entry.source.collector_id);}
 export function commitLoraV3Config(node:any,next:LoraV3Config){
-    writeNodeLoraV3Config(node,next);scheduleConfiguredLoraWriterTree(node,next);return next;
+    next=parseLoraV3Config(next);writeNodeLoraV3Config(node,next);scheduleConfiguredLoraWriterTree(node,next);return next;
 }
 export function setLoraV3Collector(node:any,config:LoraV3Config,entryId:string,collectorId:string){const choice=loraV3Catalog(node).find(item=>item.id===collectorId),resourceId=choice?.resources[0]?.id??"";return commitLoraV3Config(node,updateLoraV3EntryCollector(config,entryId,collectorId,resourceId));}
 export function setLoraV3EntryResource(node:any,config:LoraV3Config,entryId:string,resourceId:string){const map=(entry:any)=>entry.id===entryId&&entry.source.kind==="external"?{...entry,source:{...entry.source,resource_id:resourceId}}:entry;return commitLoraV3Config(node,{...config,entries:config.entries.map(map),steps:config.steps?.map(step=>({...step,entries:step.entries.map(map)}))});}
@@ -58,12 +62,18 @@ export function removeLoraV3TargetEntry(node:any,config:LoraV3Config,entryId:str
 export function clearLoraV3Target(node:any,config:LoraV3Config,target:LoraV3Target){return commitLoraV3Config(node,withoutLoraV3Target(config,target));}
 
 function installCollector(node:any){ensureCanvasVisibility();node.__bvPresentationManaged=true;const id=widget(node,"collector_id");ensureId(id);const current=String(id?.value??"").trim(),graph=loraV3GraphOf(node),duplicate=(graph?._nodes??graph?.nodes??[]).find((item:any)=>item!==node&&loraV3GraphOf(item)===graph&&nodeClass(item)==="BV LoRA Stack Collector"&&String(widget(item,"collector_id")?.value??"").trim()===current);if(id&&current&&duplicate){const next=crypto.randomUUID();id.value=next;node.__bvLoraCollectorIdRemap={[current]:next};}hideLoraV3Widget(id);ensureLoraCollectorOutput(node);node.__bvRuntimeResourceProvider=true;applyClassicNodePresentation(node,"BV LoRA Stack Collector");}
-function configuredCollectorCount(node:any){try{const name=nodeClass(node)==="BV Regional Prompt"?"lora_v3_config_json":"config_json",config=JSON.parse(String(widget(node,name)?.value??"{}")),entries=[...(config.entries??[]),...(config.steps??[]).flatMap((step:any)=>step.entries??[])],ids:string[]=[];for(const entry of entries)if(entry?.source?.kind==="external"&&entry.source.collector_id&&!ids.includes(entry.source.collector_id))ids.push(entry.source.collector_id);return ids.length;}catch{return 0;}}
+function configuredCollectorCount(node:any){try{return loraV3CollectorIds(readNodeLoraV3Config(node)).length}catch{return 0;}}
+function configuredLoraSources(node:any,config:LoraV3Config){
+    const catalog=loraV3Catalog(node),local=loraV3CollectorIds(config).map(id=>catalog.find(item=>item.id===id)?.node??null);
+    if(nodeClass(node)==="BV Regional Prompt"&&config.apply_global!==false)for(const item of workflowGlobalLoraSelection(node).active)if(!local.includes(item.node))local.push(item.node);
+    if(local.length>20)throw new Error("Global and manual LoRA providers exceed 20; resolve Registry selection");
+    return local;
+}
 function reconcileConfiguredLoraWriterCollectors(node:any,config?:LoraV3Config){
-    const localConfig=config??readNodeLoraV3Config(node),catalog=loraV3Catalog(node),local=loraV3CollectorIds(localConfig).map(id=>catalog.find(item=>item.id===id)?.node??null);
+    const local=configuredLoraSources(node,config??readNodeLoraV3Config(node));
     return reconcileLoraWriterCollectors(node,local);
 }
-function configuredLoraCollectorNodes(node:any){const config=readNodeLoraV3Config(node),catalog=loraV3Catalog(node);return loraV3CollectorIds(config).map(id=>catalog.find(item=>item.id===id)?.node??null);}
+function configuredLoraCollectorNodes(node:any){return configuredLoraSources(node,readNodeLoraV3Config(node));}
 function reconcileConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
     const current=reconcileConfiguredLoraWriterCollectors(node,config);reconcileDownstreamLoraWriters(node,configuredLoraCollectorNodes);return current;
 }
@@ -72,7 +82,12 @@ function scheduleConfiguredLoraWriterTree(node:any,config?:LoraV3Config){
     node.__bvLoraReconcileScheduled=true;const run=()=>{const pending=node.__bvLoraPendingConfig;delete node.__bvLoraPendingConfig;node.__bvLoraReconcileScheduled=false;reconcileConfiguredLoraWriterTree(node,pending);notifyLoraV3InventoryChanged(node)};
     scheduleDgUpgrade(node,run);
 }
-export function installLoraV3ConsumerSlot(node:any){ensureCanvasVisibility();scheduleConfiguredLoraWriterTree(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;applyProjectedSlotLabel(input);input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
+export function installLoraV3ConsumerSlot(node:any){
+    if(!node.__bvGlobalLoraInventoryListener&&typeof window!=="undefined"){
+        const listener=(event:any)=>{if(nodeClass(event.detail?.node)==="BV LoRA Registry")scheduleConfiguredLoraWriterTree(node)};
+        node.__bvGlobalLoraInventoryListener=listener;window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,listener);
+    }
+    ensureCanvasVisibility();scheduleConfiguredLoraWriterTree(node);const linked=linkedLocalLoraCollectors(node),lastLinked=linked.reduce((last,item,index)=>item?index+1:last,0),count=Math.max(configuredCollectorCount(node),lastLinked);trimUnusedLoraConsumerInputs(node,count);for(const index of ensureLoraConsumerInputs(node,count)){const input=node.inputs?.[index];if(input){input.hidden=true;applyProjectedSlotLabel(input);input.__bvM0VisualHidden=true;input.__bvM0PortHidden=true;input.__bvM0ResourceSlot=true;}}scheduleCompactLoraConsumerNode(node);}
 function installTransformer(node:any){node.__bvPresentationManaged=true;installLoraV3ConsumerSlot(node);if(!node.widgets?.find((item:any)=>item.name==="open_lora_editor")){const button=node.addWidget?.("button","open_lora_editor",null,()=>requestRegionalWindow("lora",node),{serialize:false});if(button){button.label="Open LoRA Editor";button.serialize=false;}}applyClassicNodePresentation(node,"BV Regional LoRA");}
 
 export {compactLoraConsumerNode};
@@ -87,5 +102,5 @@ export function installLoraV3Ui(nodeType:any,nodeData:any,graphOwner:(node:any)=
         if(transformer||consumer){resetRegistryScheduledWork(this);delete this.__bvLoraPendingConfig;this.__bvLoraReconcileScheduled=false;restoreRegistryDgActivation(this,data);}
         const result=configured?.apply(this,arguments);queued(this,()=>{if(transformer||consumer)queueRegionalMigrationReport(migrateRegionalNode(this));upgrade.call(this)});return result;
     };
-    nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queued(this,()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(transformer||consumer){deactivateDgReceiver(this);delete this.__bvLoraPendingConfig;this.__bvLoraReconcileScheduled=false;}if(transformer||collector)removeNodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
+    nodeType.prototype.onConnectionsChange=function(){const result=changed?.apply(this,arguments);queued(this,()=>upgrade.call(this));return result;};nodeType.prototype.onRemoved=function(){if(this.__bvGlobalLoraInventoryListener){window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,this.__bvGlobalLoraInventoryListener);delete this.__bvGlobalLoraInventoryListener;}if(transformer||consumer){deactivateDgReceiver(this);delete this.__bvLoraPendingConfig;this.__bvLoraReconcileScheduled=false;}if(transformer||collector)removeNodePresentation(this);const result=removed?.apply(this,arguments);if(transformer||collector)queueMicrotask(()=>notifyLoraV3InventoryChanged(this));return result;};return true;
 }

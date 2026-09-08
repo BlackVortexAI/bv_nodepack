@@ -12,7 +12,7 @@ test("menu-created inputs remain above the Add Slot connector", () => {
   assert.deepEqual(ports, [pipe, newSlot, addSlot]);
 });
 
-test("resolved inherited slot replaces its stale missing presentation", () => {
+test("resolved inherited slot updates its stale presentation without replacing native identity", () => {
   const missing = {
     name: "v_001",
     label: "⚠ Missing: new_slot 1",
@@ -24,13 +24,13 @@ test("resolved inherited slot replaces its stale missing presentation", () => {
 
   const resolved = updateSmartPipePort(missing, "new_slot 1", "STRING", "slot-1");
 
-  assert.notStrictEqual(resolved, missing);
+  assert.strictEqual(resolved, missing);
   assert.equal(resolved.label, "new_slot 1");
   assert.equal(resolved.localized_name, "new_slot 1");
   assert.equal(resolved.link, 42);
 });
 
-test("copied connected ports with localized names are adopted instead of duplicated", () => {
+test("canonical ordinal wins over a connected port with only an ambiguous matching label", () => {
   const ports = [
     { name: "pipe", type: "BV_SMART_PIPE" },
     { name: "out_001", label: "string", localized_name: "out_001", type: "*", links: [42] },
@@ -38,7 +38,7 @@ test("copied connected ports with localized names are adopted instead of duplica
   ];
   assert.equal(reusableSmartPipePortIndex(ports, {
     slotId: "slot-1", portName: "out_002", label: "string", type: "STRING",
-  }), 1);
+  }), 2);
 });
 
 test("removed upstream slots remain only when used downstream", () => {

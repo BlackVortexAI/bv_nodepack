@@ -29,42 +29,37 @@ def provider(identifier=A, strength=1.):
         S:{"id":S,"name":"Base","role":"basis","stack":[("base.safetensors",strength,.25)]},
         "normal":{"id":"normal","name":"Style","stack":[("style.safetensors",1.,1.)]}})
 
-class BasisPatcherTests(unittest.TestCase):
+class AutomaticLoraServiceTests(unittest.TestCase):
     def setUp(self):
         self.model,self.clip=Model(),Clip()
         resolve=patch.object(subject,"resolve_stack_paths",side_effect=lambda stacks:stacks)
         resolve.start();self.addCleanup(resolve.stop)
         apply=patch.object(subject,"apply_static_lora_stack",side_effect=lambda model,clip,entries:(model.clone(),clip.clone() if clip else None))
         self.apply=apply.start();self.addCleanup(apply.stop)
-    def run_patcher(self,ids,providers,model=None,clip=True):
-        return subject.apply_basis_patches(model or self.model,self.clip if clip is True else clip,{"version":1,"collector_ids":ids},providers)
-    def test_empty_passthrough_and_disabled_basis(self):
-        self.assertEqual(self.run_patcher([],{}),(self.model,self.clip))
-        value=provider();value["resources"][S]["stack"]=[]
-        self.assertEqual(self.run_patcher([A],{"p":value}),(self.model,self.clip))
+    def test_empty_passthrough(self):
+        self.assertEqual(subject.apply_automatic_resources(self.model,self.clip,[]),(self.model,self.clip))
         self.apply.assert_not_called()
-    def test_order_and_basis_only(self):
-        output=self.run_patcher([B,A],{"first":provider(A),"second":provider(B,-.5)})
+    def resources(self):
+        return [{"provider_id":A,"resource_id":S,"role":"global","entry_ids":[A,B],
+                 "stack":[("base.safetensors",-.5,.25),("base.safetensors",1.,.25)]}]
+    def test_occurrence_order_and_original_inputs(self):
+        output=subject.apply_automatic_resources(self.model,self.clip,self.resources())
         self.assertEqual(self.apply.call_args.args[2],[("base.safetensors",-.5,.25),("base.safetensors",1.,.25)])
         self.assertIsNot(output[0],self.model)
         self.assertEqual(self.model.attachments,{})
         self.assertEqual(self.clip.patcher.attachments,{})
-    def test_no_clip_and_model_clip_markers_are_separate(self):
-        model,_=self.run_patcher([A],{"p":provider()},clip=None)
-        self.assertEqual(self.apply.call_args.args[2],[('base.safetensors',1.,0.)])
-        with self.assertRaisesRegex(ValueError,"already applied"):
-            self.run_patcher([A],{"p":provider()},model=model,clip=None)
-        self.run_patcher([A],{"p":provider()}) # Independent branch from original is valid.
-        self.run_patcher([A],{"p":provider(strength=0.)},model=model) # CLIP-only is valid.
-    def test_missing_extra_duplicate_providers_fail(self):
-        for ids,providers in [([A],{}),([],{"p":provider()}),([A],{"p":provider(),"q":provider()})]:
-            with self.assertRaises(ValueError): self.run_patcher(ids,providers)
-        with self.assertRaises(ValueError): subject.parse_patcher_config({"version":1,"collector_ids":[A,A]})
+    def test_model_clip_markers_are_separate(self):
+        resources=self.resources()
+        model,_=subject.apply_automatic_resources(self.model,None,resources)
+        self.assertEqual(self.apply.call_args.args[2],[("base.safetensors",-.5,0.),("base.safetensors",1.,0.)])
+        self.assertIs(subject.apply_automatic_resources(model,None,resources)[0],model)
+        subject.apply_automatic_resources(model,self.clip,resources)
+        self.assertEqual(self.apply.call_args.args[2],[("base.safetensors",0.,.25),("base.safetensors",0.,.25)])
     def test_role_roundtrip_and_collector_reidentification(self):
         config={"schema":"bv.lora_registry_config","version":1,"registry_id":A,"stacks":[{"id":S,"name":"Base","enabled":True,"entries":[]}]}
-        self.assertNotIn("role",parse_lora_registry_config(config)["stacks"][0])
+        self.assertNotIn("role",next(stack for stack in parse_lora_registry_config(config)["stacks"] if stack["id"]==S))
         config["stacks"][0]["role"]="basis"
-        self.assertEqual(parse_lora_registry_config(config)["stacks"][0]["role"],"basis")
+        self.assertEqual(next(stack for stack in parse_lora_registry_config(config)["stacks"] if stack["id"]==S)["role"],"basis")
         materialized,_=materialize_lora_registry(config)
         self.assertEqual(build_lora_provider(A,materialized["stacks"])["resources"][S]["role"],"basis")
         self.assertEqual(reidentify_lora_provider(provider(),B)["resources"][S]["role"],"basis")
@@ -74,12 +69,11 @@ class BasisPatcherTests(unittest.TestCase):
         bindings=default_bindings();bindings["global_stack_id"]=S
         with self.assertRaisesRegex(ValueError,"Basis"):
             resolve_scope_stacks({"schema":"bv.lora_stack_registry","version":1,"stacks":provider()["resources"]},bindings,{"regions":[]})
-    def test_persisted_v3_assignment_rejects_new_basis_role(self):
+    def test_persisted_v3_assignment_does_not_duplicate_automatic_basis(self):
         capabilities,_=register_lora_contracts()
         context=transform_lora_capability(normalize_context(default_document()),
             {"version":2,"entries":[{"id":B,"source":{"kind":"external","collector_id":A,"resource_id":S},"targets":[{"scope":"global"}]}]},
             operation="replace",registry=capabilities)
-        with self.assertRaisesRegex(ValueError,"Basis"):
-            resolve_lora_capability(context,provider(),registry=capabilities)
+        self.assertEqual(resolve_lora_capability(context,provider(),registry=capabilities), {})
 
 if __name__=="__main__": unittest.main()

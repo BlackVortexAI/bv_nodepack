@@ -81,7 +81,7 @@ def build_token_lora_specs(scope_stacks: dict[str, Any]) -> list[TokenLoRASpec]:
     ]
 
 
-def _normalize_lora_state(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _normalize_lora_state(state: dict[str, Any], diffusion_model=None) -> dict[str, dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
     for raw_key, value in state.items():
         key = str(raw_key)
@@ -140,6 +140,20 @@ def _normalize_lora_state(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 break
         adapter["original_key"] = raw_key
         normalized[key] = adapter
+    if diffusion_model is not None:
+        # Use Comfy's complete official naming contract for Diffusers exports.
+        # The same resolver is shared by routing and actual token injection.
+        from .krea2_lora_names import canonical_krea2_targets
+        layers = max((int(name.split(".")[1]) + 1 for name, _ in diffusion_model.named_modules()
+                      if re.match(r"^blocks\.\d+(?:\.|$)", name)), default=0)
+        names = canonical_krea2_targets([adapter["original_key"] for adapter in normalized.values()], layers)
+        resolved = {}
+        for adapter in normalized.values():
+            mapped = names[adapter["original_key"]]
+            if mapped in resolved:
+                raise ValueError(f"Krea LoRA contains duplicate native/Diffusers target: {mapped}")
+            resolved[mapped] = adapter
+        normalized = resolved
     return normalized
 
 
@@ -276,8 +290,8 @@ def _inject_adapter(
     spec: TokenLoRASpec,
     excluded_fragments: tuple[str, ...] = (),
 ) -> tuple[int, list[str], list[str]]:
-    normalized = _normalize_lora_state(state)
     diffusion_model = model.get_model_object("diffusion_model")
+    normalized = _normalize_lora_state(state, diffusion_model)
     maskable, all_linear = _module_lookup(diffusion_model, excluded_fragments)
     patched_count = 0
     unmatched: list[str] = []
@@ -438,6 +452,8 @@ def apply_krea2_token_lora_patch(
     aspect_ratio: float,
     document: dict[str, Any],
     scope_stacks: dict[str, Any],
+    *,
+    loaded_states: dict[str, Any] | None = None,
 ) -> Any:
     specs = build_token_lora_specs(scope_stacks)
     if not specs:
@@ -450,7 +466,7 @@ def apply_krea2_token_lora_patch(
 
     result = model.clone()
     report = TokenLoRAReport(adapters=len(specs))
-    loaded: dict[str, dict[str, Any]] = {}
+    loaded: dict[str, dict[str, Any]] = dict(loaded_states or {})
     for spec in specs:
         state = loaded.get(spec.path)
         if state is None:

@@ -186,10 +186,6 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
         ports:[{role:"fanIn",prefixes:["media."],directions:["input"]},{role:"provider",names:["resource_provider"]}],
         widgets:[{role:"internalState",names:["config_json"]}],
     },
-    "BV Model Patcher":{
-        ports:[{role:"provider",prefixes:["base_resource_provider_"]}],
-        widgets:[{role:"internalState",names:["config_json"]}],
-    },
     "BV LoRA Registry":{
         ports:[{role:"provider",names:["resource_provider"]}],
         widgets:[{role:"internalState",names:["config_json"]},{role:"nativeAction",names:["open_lora_registry"]}],

@@ -83,5 +83,32 @@ class LoraRouteTests(unittest.TestCase):
             self.module.lora_preview_path = original
 
 
+    def test_video_preview_http_content_type_and_byte_range(self):
+        import asyncio
+        from tempfile import TemporaryDirectory
+        from aiohttp.test_utils import TestClient, TestServer
+        from unittest.mock import patch
+        from tests.test_lora_preview_media import Folders
+
+        async def exercise():
+            with TemporaryDirectory() as directory:
+                model = Path(directory) / "sample.safetensors"
+                model.write_bytes(b"model")
+                payload = b"synthetic-video-bytes-only"
+                model.with_suffix(".mp4").write_bytes(payload)
+                app = web.Application()
+                app.router.add_get("/preview", self.module.lora_preview)
+                with patch.object(self.module, "folder_paths", Folders(model)):
+                    async with TestClient(TestServer(app)) as client:
+                        response = await client.get("/preview?name=sample.safetensors")
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.content_type, "video/mp4")
+                        self.assertEqual(await response.read(), payload)
+                        response = await client.get("/preview?name=sample.safetensors", headers={"Range": "bytes=2-6"})
+                        self.assertEqual(response.status, 206)
+                        self.assertEqual(response.headers["Content-Range"], f"bytes 2-6/{len(payload)}")
+                        self.assertEqual(await response.read(), payload[2:7])
+        asyncio.run(exercise())
+
 if __name__ == "__main__":
     unittest.main()

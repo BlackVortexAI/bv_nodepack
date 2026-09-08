@@ -1,8 +1,69 @@
 # BV node presentation architecture
 
+## Automatic Global Registry presentation
+
+The shared BVUI Registry node and editor render the fixed automatic Global stack
+with the label `Global · Automatically applied` and explanation `Applied to the
+entire generation. Regional stacks are added on top.` The fixed group cannot be
+renamed, duplicated or removed; its switch and each entry remain editable.
+Migrated basis groups retain their identities and enabled state, are labeled as
+Global migration groups and cannot create additional basis groups by duplication.
+`loraV3Graph.ts` excludes both automatic roles from ordinary stack pickers only;
+their resources remain in the existing provider contract.
+
+`loraGlobalRegistry.ts` reads the existing workflow Registry inventory and owns
+exclusive Global switch-change planning. Saved conflicts remain visible. Inventory
+storage applies an explicit activation to all affected Registry widgets; their
+inline BVUI views refresh, and open workbenches synchronize the Global flag while
+preserving other draft fields. Configure does not choose a winning Registry.
+
+`GlobalLoraApplyControl` uses the shared `CheckboxField` with exactly
+`Globalen Stack anwenden`, default checked. `OptionsPanel` places it immediately
+above Global prompt editing; Quick Edit uses the same component. No Registry
+names or IDs accompany it. The old large provider block is absent from Regional
+Editor. `loraV3Ui.tsx` unions the active workflow Registry with existing manual
+provider dependencies through the existing DG lifecycle. Inventory subscriptions
+are removed on node removal. No new ports, hover, geometry or resize exception is
+introduced. Native Conditioning still appends MODEL after its sidecar inputs and
+output MODEL at index 2; positive/negative remain 0/1.
+
 This document is the authoritative contract for BV node and widget presentation.
 The machine-readable exception registry is `PRESENTATION_EXCEPTIONS` in
 `ui/src/regional/nodePresentation.ts`.
+
+## Native slot identity and configure transactions
+
+`js/bv_node_slots.js` owns the shared native-slot mechanics used by the
+Smart Pipe domain adapter: in-place updates, deterministic identity reuse,
+saved physical order, explicit identity serialization, duplicate-removal planning,
+and validation of physical-to-execution output mappings. Native slot objects and
+their prototypes remain intact. Labels and compatible types are not identity.
+
+Smart Pipe supplies stable schema IDs and canonical `v_NNN` / `out_NNN` names.
+Old snapshots without custom IDs can resolve through an exact canonical name.
+Unknown or conflicting identities and multiply connected duplicate ports fail
+explicitly; reconciliation does not choose a connection to discard. Unconnected
+duplicate removal uses one descending index plan per direction.
+
+Native `configure` replays connection notifications before `onConfigure`.
+The shared synchronous configure transaction distinguishes those notifications
+from user actions. Smart Pipe does not promote slots, change visibility, or
+propagate during replay. Its configure adapter restores serialized physical slot
+order, rehydrates reserved native action markers, and schedules propagation after
+the transaction. The transaction flag is restored in `finally`, including errors.
+Native array merging can retain trailing factory slots after copying a compact
+snapshot. During that transaction only, a complete prefix matching the saved
+names and link references is authoritative; restoration retains those native
+objects and removes the unsaved tail from the array without disconnecting links.
+Duplicate names inside the snapshot itself remain an error. Missing serialized
+custom IDs are cleared from reused prefix objects before canonical-name recovery.
+
+Visible output indices are not backend ordinals. Before publishing an API prompt,
+every referenced Smart Pipe output index must have a unique schema mapping;
+missing mappings fail instead of silently passing a compact UI index to the
+backend. The reserved `pipe` output remains unique at index zero. The existing
+LoRA Registry released-order migration in `nodeOutputCompatibility.ts` retains
+its separate, explicitly recognized migration contract.
 
 ## Non-negotiable rules
 
@@ -47,7 +108,25 @@ or input reordering are involved.
 
 Node-specific code may request these operations. It must not reimplement them.
 
+## Shared media previews
+
+LoRA catalog cards, editor entries and native node rows share BVUI media
+previews. Local PNG/JPEG/WebP images retain priority; MP4 is supported when no
+image exists. The optional catalog `preview_media_type` defaults to image for
+older catalog consumers. Hover previews apply the same live mature/unrated
+visibility preference everywhere. Videos play muted and inline only in an open
+hover preview; catalog thumbnails remain paused and display a video marker.
+Media errors show an explicit unavailable state, reset when the source changes.
+
 ## User-controlled height contract
+
+Automatic content refreshes also preserve the current node width while allowing
+content-driven growth. JavaScript extensions use `js/bv_node_resize.js`; its
+presentation bridge delegates height handling to `presentationSize.ts`. Seed
+controls and promoted subgraph widget refreshes use this same entry point.
+Never follow native `expandToFitContent()` with an unguarded
+`setSize(computeSize())`: that replaces the preserved width with the minimum
+content width during reload. Manual resizing remains a native user action.
 
 `presentationSize.ts` is the single owner of persistent user-height state for
 Classic, Nodes 2.0 and projected-port layout. A height is persisted when
@@ -432,3 +511,11 @@ invisible, non-interactive and `aria-hidden`; only one Media port is presented.
 The native renderer retains its canonical slot keys and layouts. Shadow classes
 and scoped CSS variables are removed on ownership cleanup. Replace this bridge
 with native slot-layout invalidation when an official API becomes available.
+
+### LoRA Registry content growth
+
+The shared React node widget host supports opt-in `growWithContent`. The LoRA
+Registry grows from its measured content to a 340 px content limit (approximately
+440 px including node controls), then scrolls. Explicit user height disables this
+intrinsic minimum; existing presentation sizing preserves user width and height.
+Other widget hosts retain their existing sizing policy.

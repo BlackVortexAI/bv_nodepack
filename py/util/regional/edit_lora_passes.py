@@ -3,19 +3,14 @@
 Uses the public sampler wrapper and model loading seams, never conditional
 WeightHooks. See docs/design/krea2-identity-edit.md for supported boundaries.
 """
-import contextvars
-import threading
 import uuid
 
-import torch
-
 from .lora_hooks import apply_static_lora_stack
+from .static_lora_passes import StaticLoRAPassRouter, prepare_static_models
 
 WRAPPER_KEY = "bv_edit_lora_passes"
 PASS_KEY = "bv_edit_lora_pass"
 OWNER_KEY = "bv_edit_lora_owner"
-_LOCK = threading.RLock()
-_ACTIVE = contextvars.ContextVar("bv_edit_lora_active", default=False)
 
 
 class EditLoRAPasses:
@@ -52,11 +47,7 @@ class EditLoRAPasses:
         a full checkpoint copy per region. Single MODEL stacks retain AIMDO.
         """
         self.variant("global")
-        baseline = self.models[0]
-        if len(self.models) > 1 and getattr(baseline, "is_dynamic", lambda: False)():
-            delegate = baseline.get_non_dynamic_delegate()
-            shared = delegate.get_clone_model_override()
-            self.models = [delegate] + [variant.clone(disable_dynamic=True, model_override=shared) for variant in self.models[1:]]
+        self.models = prepare_static_models(self.models)
         return self.models[0]
 
     def encode(self, scope, text, *, entries=None):
@@ -84,62 +75,8 @@ class EditLoRAPasses:
         return result
 
 
-class StaticEditPassRouter:
+class StaticEditPassRouter(StaticLoRAPassRouter):
     def __init__(self, models, owner):
-        self.models = models
-        self.owner = owner
-        self.patch_id = models[0].patches_uuid
-        self.object_patches = {key: id(value) for key, value in models[0].object_patches.items()}
-
-    def __call__(self, executor, model, conds, x, timestep, model_options):
-        import comfy.model_management
-        from comfy.samplers import get_area_and_mult
-        if _ACTIVE.get():
-            raise ValueError("Regional edit LoRAs do not support recursive sampler calls")
-        original = model.current_patcher
-        if original.patches_uuid != self.patch_id or {key: id(value) for key, value in original.object_patches.items()} != self.object_patches:
-            raise ValueError("Apply additional MODEL LoRAs and model patches before the Identity Edit Attention node, or select them in the Regional Editor")
-        if model_options.get("multigpu_clones") or model_options.get("context_handler") or model_options.get("model_function_wrapper"):
-            raise ValueError("Regional edit LoRAs currently require single-device, full-image sampling")
         from .krea2_identity_edit import require_compatible_patches
-        require_compatible_patches(model_options.get("transformer_options", {}), installed=True)
-        groups = {}
-        for branch_index, branch in enumerate(conds):
-            for cond in branch or []:
-                if any(cond.get(key) is not None for key in ("default", "area", "control", "hooks", "gligen", "additional_models")):
-                    raise ValueError("Regional edit LoRAs require full-image BV conditioning without ControlNet, default areas or weight hooks")
-                index = cond.get(PASS_KEY)
-                if cond.get(OWNER_KEY) != self.owner or type(index) is not int or not 0 <= index < len(self.models):
-                    raise ValueError("Regional edit LoRAs need the positive and negative outputs from the same Attention node")
-                group = groups.setdefault(index, [[] if branch is not None else None for branch in conds])
-                group[branch_index].append(cond)
-        with _LOCK:
-            token = _ACTIVE.set(True)
-            sums = [torch.zeros_like(x, dtype=torch.float32) for _ in conds]
-            counts = [torch.zeros_like(x[:, :1], dtype=torch.float32) for _ in conds]
-            def activate(patcher):
-                memory = model.memory_required(list(x.shape))
-                comfy.model_management.load_models_gpu([patcher], memory_required=memory)
-                patcher.pre_run()
-            try:
-                for index, group in groups.items():
-                    weights = [torch.zeros_like(x[:, :1], dtype=torch.float32) for _ in conds]
-                    for b, branch in enumerate(group):
-                        for cond in branch or []:
-                            area = get_area_and_mult(cond, x, timestep)
-                            if area is not None:
-                                # Native mask multipliers are identical across channels.
-                                weights[b].add_(area.mult[:, :1].float())
-                    if not any(torch.any(weight != 0) for weight in weights):
-                        continue
-                    activate(self.models[index])
-                    outputs = executor(model, group, x, timestep, model_options)
-                    for b, output in enumerate(outputs):
-                        sums[b].add_(output.float() * weights[b])
-                        counts[b].add_(weights[b])
-                return [(total / count.clamp_min(1e-37)).to(x.dtype) for total, count in zip(sums, counts)]
-            finally:
-                try:
-                    activate(original)
-                finally:
-                    _ACTIVE.reset(token)
+        super().__init__(models, owner, pass_key=PASS_KEY, owner_key=OWNER_KEY,
+                         validate_options=lambda options: require_compatible_patches(options, installed=True), label="Identity Edit")

@@ -50,8 +50,8 @@ export function applyClassicSubgraphLayout(node:any,widgetStartY=8){
     node.widgets_start_y=widgetStartY;
     const original=node.__bvPresentationOriginalComputeSize??node.computeSize;
     const computed=original.apply(measurementView(node,true));
-    const next=presentationSize(node,[Math.max(220,Number(node.size?.[0]??computed?.[0]??220)),Math.max(60,Number(computed?.[1]??60))]);
-    if(Number(node.size?.[1]??0)!==next[1])setAutomaticPresentationSize(node,next);
+    const next=presentationSize(node,[Math.max(220,Number(node.size?.[0]??0),Number(computed?.[0]??0)),Math.max(60,Number(computed?.[1]??60))]);
+    if(Number(node.size?.[0]??0)!==next[0]||Number(node.size?.[1]??0)!==next[1])setAutomaticPresentationSize(node,next);
     node.setDirtyCanvas?.(true,true);
     node.graph?.setDirtyCanvas?.(true,true);
     return next;

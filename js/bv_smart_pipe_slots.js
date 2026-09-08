@@ -1,6 +1,8 @@
+import {reusableNativeSlotIndex, updateNativeSlot} from "./bv_node_slots.js";
+
 export function updateSmartPipePort(port, label, type, slotId) {
   if (port.label === label && port.localized_name === label && port.type === type && port.bvSlotId === slotId) return port;
-  return { ...port, label, localized_name: label, type, bvSlotId: slotId };
+  return updateNativeSlot(port, {label, localized_name: label, type, bvSlotId: slotId});
 }
 
 export function moveMarkedPortToEnd(ports, predicate) {
@@ -11,26 +13,7 @@ export function moveMarkedPortToEnd(ports, predicate) {
 }
 
 export function reusableSmartPipePortIndex(ports, { slotId, portName, label, type }) {
-  let index = ports?.findIndex((item) => item.bvSlotId === slotId) ?? -1;
-  if (index >= 0) return index;
-  const candidates = (ports || []).map((item, candidateIndex) => ({ item, candidateIndex })).filter(({ item }) =>
-    !item.bvSlotId && item.name !== "pipe" && !item.bvAddSlot && smartPipeTypesAreCompatible(item.type, type)
-    && (item.name === portName || item.label === label || item.localized_name === label || item.name === label));
-  const connected = candidates.find(({ item }) => item.link != null || Boolean(item.links?.length));
-  if (connected) return connected.candidateIndex;
-  const exact = candidates.find(({ item }) => item.name === portName);
-  if (exact) return exact.candidateIndex;
-  index = candidates[0]?.candidateIndex ?? -1;
-  if (index < 0) index = ports?.findIndex((item) => !item.bvSlotId && item.name !== "pipe" && !item.bvAddSlot
-    && (item.label === label || item.localized_name === label || item.name === label)
-    && smartPipeTypesAreCompatible(item.type, type)) ?? -1;
-  return index;
-}
-
-function smartPipeTypesAreCompatible(left, right) {
-  const leftTypes = String(left || "*").split(",").map((value) => value.trim()).filter(Boolean);
-  const rightTypes = String(right || "*").split(",").map((value) => value.trim()).filter(Boolean);
-  return leftTypes.includes("*") || rightTypes.includes("*") || leftTypes.some((candidate) => rightTypes.includes(candidate));
+  return reusableNativeSlotIndex(ports, slotId, portName);
 }
 
 export function retainedMissingSlots(previous, upstreamIds, isUsed) {

@@ -138,3 +138,16 @@ test("central React node widget host caps intrinsic height against both pixels a
   assert.match(content.className,/bv-react-node-widget-scroll/);
   assert.equal(options.margin,10);assert.equal(options.getHeight,undefined);assert.equal(content.style.maxHeight,"min(420px, 60vh, 100%)");assert.equal(content.style.overflowY,"auto");
 });
+
+test("opt-in content growth caps intrinsic height and yields to explicit user height",()=>{
+ let resize,options;const content={className:"",style:{}};
+ configureReactNodeWidgetHost({createHost:()=>({className:"",dataset:{},remove(){}}),createContentHost:()=>content,createRoot:()=>({render(){},unmount(){}}),schedule:action=>action(),applyPresentation:()=>{},viewportHeight:()=>1000,observeHost:(_host,measure)=>{resize=measure;return()=>{}}});
+ function NodeType(){}
+ installReactNodeWidgetHost(NodeType,"BV LoRA Registry",{id:"grow",name:"grow",minHeight:72,maxHeight:340,growWithContent:true,render:()=>null});
+ const node=new NodeType();node.addDOMWidget=(_name,_type,_host,value)=>{options=value;return{}};node.onNodeCreated();
+ resize(180);assert.equal(options.getMinHeight(),180);
+ resize(700);assert.equal(options.getMinHeight(),340);
+ node.properties={bvPresentationSizeVersion:1,bvPresentationUserHeight:300};
+ resize(800);assert.equal(options.getMinHeight(),72);assert.equal(options.getMaxHeight(),Infinity);assert.equal(content.style.maxHeight,"100%");
+ node.onRemoved();
+});
