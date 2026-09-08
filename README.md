@@ -250,7 +250,7 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
-### 1.4.2 — unreleased
+### 1.4.2 — 2026-09-08
 
 - Store Remote LLM settings and API keys, the response cache, LUT working
   catalogs and the LoRA header cache in ComfyUI's private System User directory
