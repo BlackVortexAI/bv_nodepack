@@ -33,3 +33,6 @@ BV_DOCS_PLAN.local.md
 
 # Isolated local ComfyUI audit user roots
 /.tmp/codex-node-audit-*/
+
+# Local build, browser regression and acceptance artifacts
+/.tmp/

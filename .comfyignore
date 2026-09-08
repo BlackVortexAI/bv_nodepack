@@ -2,3 +2,4 @@
 .comfyignore
 tests/
 ui/
+.tmp/

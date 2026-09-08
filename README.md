@@ -11,8 +11,9 @@ tools, Subgraph controls and deterministic workflow utilities to ComfyUI.
 > direction, architecture, review and real-workflow validation remain human-led.
 
 > [!IMPORTANT]
-> **BV Node Pack 1.3.0** adds unified Regional negative-prompt policies, local embedding
-> completion, catalog and UI improvements, and Subgraph-aware routing.
+> **BV Node Pack 1.4.0 is prepared locally; publication is pending.** It adds
+> reference-driven regional editing, one workflow-wide Global LoRA Registry,
+> automatic MODEL/CLIP preparation and improved Registry, catalog and Quick Edit UI.
 > The [Wiki](https://blackvortexai.github.io/bv_nodepack_wiki/) contains the full
 > node reference and task-oriented guides.
 >
@@ -39,7 +40,30 @@ Registry review remains open in [issue #217](https://github.com/Comfy-Org/regist
 Registry publication, security-review status and the version offered by Manager are
 separate states; Manager may offer an older version while review is pending.
 
-### Updating to 1.3.0
+### Updating to 1.4.0
+
+- Enable **Global** in the intended LoRA Registry. Only one Registry may be active
+  across the workflow and its Subgraphs. New Registries start with Global off;
+  conflicting saved selections require an explicit choice, never a load-order winner.
+- The Regional Editor's **Globalen Stack anwenden** checkbox defaults to on.
+  Turning it off skips automatic Global LoRAs for that editor while preserving
+  manually selected normal stacks. Supply original MODEL/CLIP inputs when opting
+  out; already applied weights cannot be undone by this checkbox.
+- With **BV Regional Native Conditioning**, connect the source MODEL input and
+  use its **MODEL output (slot 2)** for the sampler when applying Global LoRAs.
+  Positive and negative outputs remain in slots 0 and 1. Model-specific attention
+  nodes prepare their own MODEL/CLIP through the same automatic service.
+- Existing basis groups retain their identities, order, strengths and enabled
+  states inside the Global area. Existing manual global assignments remain
+  separate; they are not copied into the fixed Global stack.
+- Registry dialog changes save immediately to the node configuration, including
+  Undo/Redo and catalog additions. Invalid drafts keep the last valid saved state.
+  Save the workflow separately to persist changes to disk.
+- Restart ComfyUI and reload the browser after updating both backend and frontend.
+  The catalog identifies an older running backend instead of presenting missing
+  routing fields as a compatibility result.
+
+The following safeguards from 1.3.0 still apply:
 
 - Re-enter existing API keys for custom OpenAI-compatible providers through
   **Configure API Key** and confirm the displayed destination. Keys are bound to
@@ -152,6 +176,28 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.4.0 — 2026-09-08 (prepared locally; publication pending)
+
+- Add reference-driven regional editing with **BV Reference Registry**, inline
+  `@` references, regional tool controls and the Krea 2 Identity Edit path.
+- Add an exclusive workflow-wide Global LoRA Registry and per-editor opt-out,
+  preserving legacy groups and manual selections. Share occurrence-aware automatic
+  MODEL/CLIP preparation across attention and Native Conditioning consumers.
+- Append Native Conditioning's MODEL input/output while retaining positive and
+  negative output ordinals; use the returned MODEL with the sampler.
+- Support official Krea 2 LoRA key mappings and header-based routing evidence.
+  Catalog routing distinguishes token candidates, multipass and unknown files;
+  target-model compatibility remains unknown without a concrete model check.
+- Autosave valid Registry edits, catalog additions and Undo/Redo. Keep peer Global
+  changes synchronized and preserve invalid drafts without replacing valid state.
+- Grow Registry nodes to a bounded content height before scrolling, respecting
+  manual dimensions. Enlarge the catalog and its preview pane and automatically
+  fill and paginate results. Persist header-check results across restarts, invalidate
+  them when a file changes, and continue reading local metadata and previews fresh.
+- Show validated Civitai links from local metadata and concise routing information.
+- Fix Quick Edit spacing and textarea resize reachability through whole-content
+  scrolling, and improve Smart Pipe/Subgraph lifecycle and sizing behavior.
+
 ### 1.3.0 — 2026-09-05
 
 - Unify Regional negative-prompt policies (`auto`, `prompt`, `zero_out`) across
@@ -186,13 +232,3 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
   for strength scrubbing.
 - Remove the temporary titlebar-port Canary after the shared production path
   passed the complete regression suite.
-
-### 1.2.1 — 2026-08-30
-
-- Add `BV Inspect Any` for readable in-node previews and string pass-through of
-  arbitrary values.
-- Make BV node widgets follow the active ComfyUI light or dark theme through the
-  shared widget UI layer.
-- Extend `BV Regional Image Save` with an optional Regional Context input and
-  Civitai-compatible prompt, sampler, model, LoRA and hash metadata while
-  preserving existing workflows when the input is disconnected.
