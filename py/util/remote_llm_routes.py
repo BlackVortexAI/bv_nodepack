@@ -3,6 +3,8 @@ from __future__ import annotations
 from aiohttp import web
 from server import PromptServer
 
+from .admin_gate import management_state, require_management
+from .user_storage import private_root
 from .remote_llm import (
     RemoteLLMConfigurationError,
     delete_remote_api_key,
@@ -33,6 +35,8 @@ async def remote_llm_providers(_request):
     configured = remote_api_key_status()
     return web.json_response({
         "version": 1,
+        "management": management_state(),
+        "private_storage": private_root() is not None,
         "profiles": [
             {
                 "id": profile.id,
@@ -52,6 +56,9 @@ async def remote_llm_providers(_request):
 
 @routes.post("/bv_nodepack/remote_llm/api_key")
 async def remote_llm_set_api_key(request):
+    denied = require_management(request)
+    if denied is not None:
+        return denied
     try:
         body = await request.json()
         profile_id = str(body.get("profile_id") or "").strip()
@@ -70,6 +77,9 @@ async def remote_llm_set_api_key(request):
 
 @routes.delete("/bv_nodepack/remote_llm/api_key/{profile_id}")
 async def remote_llm_delete_api_key(request):
+    denied = require_management(request)
+    if denied is not None:
+        return denied
     profile_id = str(request.match_info.get("profile_id") or "").strip()
     if profile_id not in _profiles_by_id():
         return web.json_response({"error": "Unknown remote LLM provider profile"}, status=404)

@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+from py.util import admin_gate
 from py.util.lut_catalog import LutCatalogConflictError, LutCatalogError
 
 
@@ -31,9 +32,10 @@ class RouteTable:
 
 
 class Request:
-    def __init__(self, body=None, query=None):
+    def __init__(self, body=None, query=None, remote="127.0.0.1"):
         self.body = body or {}
         self.query = query or {}
+        self.remote = remote
 
     async def json(self):
         return self.body
@@ -63,9 +65,40 @@ class LutRouteTests(unittest.TestCase):
     def tearDownClass(cls):
         sys.modules.pop("py.util._lut_routes_contract_test", None)
 
+    def setUp(self):
+        # Local mode for the contract tests: loopback listener, no operator opt-in file.
+        for target, value in (("listen_addresses", ["127.0.0.1"]), ("default_admin_settings_path", None)):
+            patcher = patch.object(admin_gate, target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
     @staticmethod
     def body(response):
         return json.loads(response.text)
+
+    def test_management_routes_refuse_remote_peers_and_network_listeners(self):
+        channel = self.routes.handlers[("PUT", "/bv_nodepack/luts/catalog/channel")]
+        install = self.routes.handlers[("POST", "/bv_nodepack/luts/install")]
+        with patch.object(self.module, "select_lut_catalog_channel") as select, patch.object(self.module, "install_catalog_lut", new=AsyncMock()) as installer:
+            response = asyncio.run(channel(Request({"channel": "experimental"}, remote="192.168.1.20")))
+            self.assertEqual(response.status, 403)
+            response = asyncio.run(install(Request({"id": "x", "channel": "stable", "catalog_version": 1}, remote="192.168.1.20")))
+            self.assertEqual(response.status, 403)
+            with patch.object(admin_gate, "listen_addresses", return_value=["0.0.0.0", "::"]):
+                response = asyncio.run(channel(Request({"channel": "experimental"})))
+                self.assertEqual(response.status, 403)
+            select.assert_not_called()
+            installer.assert_not_awaited()
+        self.assertIn("loopback", self.body(response)["error"])
+
+    def test_refresh_and_reads_stay_open_for_remote_peers(self):
+        refresh = self.routes.handlers[("POST", "/bv_nodepack/luts/catalog/refresh")]
+        status = self.routes.handlers[("GET", "/bv_nodepack/luts/catalog/status")]
+        with patch.object(self.module, "request_lut_catalog_refresh", return_value={"accepted": True}), patch.object(self.module, "lut_catalog_status", return_value={"version": 1}):
+            self.assertEqual(asyncio.run(refresh(EmptyPostRequest(remote="192.168.1.20"))).status, 202)
+            response = asyncio.run(status(Request(remote="192.168.1.20")))
+        self.assertEqual(response.status, 200)
+        self.assertEqual(self.body(response)["management"], {"allowed": True, "local_server": True, "remote_management": False})
 
     def test_channel_catalog_and_status_routes_are_registered(self):
         expected = {

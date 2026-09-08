@@ -13,6 +13,7 @@ from unittest.mock import patch
 import urllib.request
 import urllib.response
 
+from py.util import admin_gate
 from py.util import remote_llm as remote
 from test_remote_llm_provider import request
 
@@ -228,16 +229,23 @@ class EndpointBindingTests(unittest.TestCase):
         routes = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {'server':server}):
             spec.loader.exec_module(routes)
-        async def invoke(body):
+        async def invoke(body, remote='127.0.0.1', listen=('127.0.0.1',)):
             async def read(): return body
-            return await routes.remote_llm_set_api_key(SimpleNamespace(json=read))
+            with patch.object(admin_gate, 'listen_addresses', return_value=list(listen)), \
+                    patch.object(admin_gate, 'default_admin_settings_path', return_value=None):
+                return await routes.remote_llm_set_api_key(SimpleNamespace(json=read, remote=remote))
         self.save()
         before = self.path.read_bytes()
         for body in [{'profile_id':'openai-compatible','endpoint':B},
                      {'profile_id':'openai-compatible','api_key':'dummy'}]:
             self.assertEqual(asyncio.run(invoke(body)).status, 400)
             self.assertEqual(self.path.read_bytes(), before)
-        response = asyncio.run(invoke({'profile_id':'openai-compatible','api_key':'new-dummy','endpoint':B}))
+        valid = {'profile_id':'openai-compatible','api_key':'new-dummy','endpoint':B}
+        # Management gate: remote peers and network listeners are refused before any parsing.
+        self.assertEqual(asyncio.run(invoke(valid, remote='192.168.1.20')).status, 403)
+        self.assertEqual(asyncio.run(invoke(valid, listen=('0.0.0.0', '::'))).status, 403)
+        self.assertEqual(self.path.read_bytes(), before)
+        response = asyncio.run(invoke(valid))
         self.assertEqual(response.status, 200)
         status = asyncio.run(routes.remote_llm_providers(None))
         self.assertNotIn('new-dummy', status.text)
