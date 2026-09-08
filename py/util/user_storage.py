@@ -13,8 +13,9 @@ need trusted storage report why they are unavailable instead of falling back.
 from __future__ import annotations
 
 import os
+import secrets
 import shutil
-import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -92,34 +93,76 @@ def legacy_root(folder_paths_module: Any = None) -> Path | None:
         return None
 
 
-def _atomic_copy(source: Path, target: Path) -> None:
+RECOVERY_SUFFIX = ".recovered"
+
+
+def _publish_exclusive(target: Path, payload: bytes) -> None:
+    """Create ``target`` with these bytes, or fail if anything already exists there.
+
+    Exclusive creation is the concurrency guard: two processes cannot both succeed,
+    so an existing private file is never overwritten. The written bytes are read back
+    before the caller may delete its source; on any failure the file this call
+    created is removed again so a retry starts from the same state.
+    """
     target.parent.mkdir(parents=True, exist_ok=True)
-    payload = source.read_bytes()
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
-    temporary = Path(temporary_name)
+    descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, target)
-    finally:
-        temporary.unlink(missing_ok=True)
-    if target.read_bytes() != payload:
-        raise OSError(f"verification failed for {target}")
+        if target.read_bytes() != payload:
+            raise OSError(f"verification failed for {target}")
+    except BaseException:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+def _recovery_path(target: Path) -> Path:
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    return target.with_name(f"{target.name}.legacy-{stamp}-{secrets.token_hex(4)}{RECOVERY_SUFFIX}")
+
+
+def _migrate_file(source: Path, target: Path) -> tuple[str, str]:
+    """Return (outcome, detail) for one public file; raises OSError on failure.
+
+    Outcomes: ``migrated`` (published privately, source removed), ``removed`` (private
+    file already held the same bytes, source removed), ``recovered`` (private file
+    differs or is not a regular file; source preserved as a private recovery file that
+    is never loaded automatically, then removed).
+    """
+    payload = source.read_bytes()
+    try:
+        _publish_exclusive(target, payload)
+    except FileExistsError:
+        pass
+    else:
+        source.unlink()
+        return "migrated", ""
+    if target.is_file() and not target.is_symlink() and target.read_bytes() == payload:
+        source.unlink()
+        return "removed", "private copy holds the same bytes"
+    recovery = _recovery_path(target)
+    _publish_exclusive(recovery, payload)
+    source.unlink()
+    return "recovered", f"private copy differs; public file kept as {recovery.name}"
 
 
 def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None = None) -> dict[str, list[str]]:
     """Move trusted files from the public tree into private storage, once and verifiably.
 
-    Contract: an existing private file is never overwritten by a public one. A public
-    file is removed only after its private copy was verified byte for byte, or when a
-    private file already exists (the public copy is then redundant and must not stay
-    readable). Regenerable caches are deleted, not copied. Symbolic links are left
-    alone and reported. A failure leaves the public file in place so the next start
-    retries. Never raises.
+    Contract: private files are never overwritten, not even by a concurrent
+    migration (exclusive creation). A public file is removed only after its bytes
+    are verified in private storage: as the new private file, as an identical
+    existing private file, or as a uniquely named recovery file that is never
+    loaded automatically. Regenerable caches are deleted, not copied. Symbolic links
+    are left alone and reported. Any failure leaves the public file in place and no
+    half-written private file behind, so the next start retries. Never raises.
     """
-    report: dict[str, list[str]] = {"migrated": [], "removed": [], "kept": [], "failed": []}
+    report: dict[str, list[str]] = {"migrated": [], "removed": [], "recovered": [], "kept": [], "failed": []}
     legacy = legacy if legacy is not None else legacy_root()
     private = private if private is not None else private_root()
     if legacy is None or private is None or not legacy.is_dir() or legacy.is_symlink():
@@ -138,13 +181,8 @@ def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None =
                 continue
             if not source.is_file():
                 continue
-            if target.exists():
-                source.unlink()
-                report["removed"].append(f"{relative}: private copy already present")
-                continue
-            _atomic_copy(source, target)
-            source.unlink()
-            report["migrated"].append(relative)
+            outcome, detail = _migrate_file(source, target)
+            report[outcome].append(relative if not detail else f"{relative}: {detail}")
         except OSError as error:
             report["failed"].append(f"{relative}: {error}")
     for relative in LEGACY_REGENERABLE_DIRS:
@@ -170,10 +208,10 @@ def run_startup_migration() -> dict[str, list[str]]:
         report = migrate_legacy_storage()
     except Exception as error:  # noqa: BLE001 - startup must not fail on storage problems
         print(f"BV Node Pack: private storage migration failed: {error}")
-        return {"migrated": [], "removed": [], "kept": [], "failed": [str(error)]}
+        return {"migrated": [], "removed": [], "recovered": [], "kept": [], "failed": [str(error)]}
     if private_root() is None:
         print(f"BV Node Pack: {UNAVAILABLE_MESSAGE}")
-    for kind in ("migrated", "removed", "kept", "failed"):
+    for kind in ("migrated", "removed", "recovered", "kept", "failed"):
         for entry in report[kind]:
             print(f"BV Node Pack: private storage {kind}: {entry}")
     return report

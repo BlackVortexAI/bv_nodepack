@@ -85,28 +85,90 @@ class MigrationTests(unittest.TestCase):
             self.assertFalse((self.legacy / relative).exists())
         self.assertFalse((self.legacy / "cache" / "remote_llm").exists())
         self.assertFalse(self.legacy.exists(), "empty public tree is removed")
-        self.assertEqual(migrate_legacy_storage(legacy=self.legacy, private=self.private), {"migrated": [], "removed": [], "kept": [], "failed": []})
+        self.assertEqual(migrate_legacy_storage(legacy=self.legacy, private=self.private), {"migrated": [], "removed": [], "recovered": [], "kept": [], "failed": []})
 
-    def test_existing_private_state_wins_and_public_secret_is_still_removed(self):
+    def test_identical_private_copy_makes_the_public_file_redundant(self):
         self.private.mkdir(parents=True)
-        (self.private / "remote_llm_secrets.json").write_bytes(b"private-newer")
+        (self.private / "remote_llm_secrets.json").write_bytes(self.files["remote_llm_secrets.json"])
         report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
-        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), b"private-newer")
         self.assertFalse((self.legacy / "remote_llm_secrets.json").exists())
         self.assertTrue(any(entry.startswith("remote_llm_secrets.json") for entry in report["removed"]))
+        self.assertEqual(report["recovered"], [])
+        self.assertEqual([p.name for p in self.private.glob("*.recovered")], [])
+
+    def test_differing_private_state_is_kept_and_public_bytes_land_in_a_recovery_file(self):
+        self.private.mkdir(parents=True)
+        (self.private / "remote_llm_secrets.json").write_bytes(b"private-newer")
+        (self.private / "lut_catalog.json").mkdir()  # a directory in the way must not be touched either
+        report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), b"private-newer")
+        self.assertTrue((self.private / "lut_catalog.json").is_dir())
+        for relative in ("remote_llm_secrets.json", "lut_catalog.json"):
+            self.assertFalse((self.legacy / relative).exists(), relative)
+            recoveries = list(self.private.glob(f"{relative}.legacy-*{user_storage.RECOVERY_SUFFIX}"))
+            self.assertEqual(len(recoveries), 1, relative)
+            self.assertEqual(recoveries[0].read_bytes(), self.files[relative])
+        self.assertEqual(len(report["recovered"]), 2)
         self.assertIn("remote_llm_settings.json", report["migrated"])
+        self.assertEqual(report["failed"], [])
 
-    def test_failed_copy_keeps_the_public_file_for_a_retry(self):
-        def broken_copy(source, target):
-            raise OSError("disk full")
-
-        with patch.object(user_storage, "_atomic_copy", broken_copy):
+    def test_failed_publish_leaves_no_private_file_and_keeps_the_public_file(self):
+        # The write reaches the disk partially (fsync fails after the data was written).
+        with patch.object(os, "fsync", side_effect=OSError("device error")):
             report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
         self.assertEqual(report["migrated"], [])
         self.assertEqual(len(report["failed"]), len(self.files))
         for relative in self.files:
-            self.assertTrue((self.legacy / relative).exists())
-        self.assertFalse((self.private / "remote_llm_secrets.json").exists())
+            self.assertTrue((self.legacy / relative).exists(), relative)
+        self.assertFalse((self.private / "remote_llm_secrets.json").exists(), "half-written private file was not removed")
+        # The retry after the failure succeeds from the same state.
+        report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertEqual(sorted(report["migrated"]), sorted(self.files))
+
+    def test_source_removal_failure_after_publish_is_safe_to_retry(self):
+        original_unlink = Path.unlink
+        public_secrets = self.legacy / "remote_llm_secrets.json"
+        state = {"failed": False}
+
+        def unlink_once(path, *args, **kwargs):
+            if path == public_secrets and not state["failed"]:
+                state["failed"] = True
+                raise OSError("locked")
+            return original_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", unlink_once):
+            first = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertTrue(any(entry.startswith("remote_llm_secrets.json") for entry in first["failed"]))
+        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), self.files["remote_llm_secrets.json"], "verified private copy stays")
+        self.assertTrue((self.legacy / "remote_llm_secrets.json").exists(), "public file stays until the retry")
+        second = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertTrue(any(entry.startswith("remote_llm_secrets.json") for entry in second["removed"]), "identical private copy makes the retry a plain removal")
+        self.assertFalse((self.legacy / "remote_llm_secrets.json").exists())
+        self.assertEqual(list(self.private.glob("*.recovered")), [])
+
+    def test_readback_mismatch_removes_the_created_file(self):
+        target = self.private / "remote_llm_secrets.json"
+        with patch.object(Path, "read_bytes", return_value=b"tampered"):
+            with self.assertRaisesRegex(OSError, "verification failed"):
+                user_storage._publish_exclusive(target, b"payload")
+        self.assertFalse(target.exists())
+
+    def test_concurrent_publication_never_overwrites_the_other_process(self):
+        original = user_storage._publish_exclusive
+
+        def racing_publish(target, payload):
+            if target.name == "remote_llm_secrets.json" and not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"published-by-other-process")  # lands between our checks and our create
+            return original(target, payload)
+
+        with patch.object(user_storage, "_publish_exclusive", racing_publish):
+            report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), b"published-by-other-process")
+        self.assertFalse((self.legacy / "remote_llm_secrets.json").exists())
+        recoveries = list(self.private.glob(f"remote_llm_secrets.json.legacy-*{user_storage.RECOVERY_SUFFIX}"))
+        self.assertEqual([r.read_bytes() for r in recoveries], [self.files["remote_llm_secrets.json"]])
+        self.assertEqual(len(report["recovered"]), 1)
 
     def test_symbolic_link_in_public_tree_is_left_alone(self):
         target = self.root / "outside.json"
