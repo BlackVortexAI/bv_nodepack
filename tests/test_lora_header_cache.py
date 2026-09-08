@@ -31,7 +31,7 @@ def measured(path,**kwargs):
  calls.append(1)
  return original(path,**kwargs)
 catalog._header_compatibility=measured
-folders=types.SimpleNamespace(get_filename_list=lambda _: [model.name],get_full_path=lambda kind,name:str(model))
+folders=types.SimpleNamespace(get_filename_list=lambda _: [model.name],get_full_path=lambda kind,name:str(model),get_folder_paths=lambda _: [str(model.parent)])
 result=catalog.discover_loras(folders,header_cache_path=pathlib.Path(sys.argv[3]))
 print(json.dumps({"calls":len(calls),"compatibility":result["items"][0]["compatibility"]}))'''
         def run():
@@ -82,7 +82,7 @@ print(json.dumps({"calls":len(calls),"compatibility":result["items"][0]["compati
     def test_unwritable_destination_keeps_catalog_available_and_metadata_fresh(self):
         from types import SimpleNamespace
         from py.util.lora_registry import discover_loras
-        folders = SimpleNamespace(get_filename_list=lambda _: [self.model.name], get_full_path=lambda *_: str(self.model))
+        folders = SimpleNamespace(get_filename_list=lambda _: [self.model.name], get_full_path=lambda *_: str(self.model), get_folder_paths=lambda _: [str(self.model.parent)])
         # A regular file cannot serve as a cache directory on any platform.
         blocked = self.directory / 'not-a-directory'
         blocked.write_text('occupied')

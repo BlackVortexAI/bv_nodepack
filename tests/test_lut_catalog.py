@@ -564,6 +564,25 @@ class LutCatalogTests(unittest.TestCase):
                 asyncio.run(download_bytes("https://raw.githubusercontent.com/x/y/main/a.cube"))
         self.assertEqual(sessions[0].calls[0][1], {"allow_redirects": False})
 
+    def test_install_root_must_stay_inside_models_dir(self):
+        from py.util.lut_catalog import _install_root
+
+        with tempfile.TemporaryDirectory() as directory:
+            models = Path(directory) / "models"
+            (models / "luts").mkdir(parents=True)
+            outside = Path(directory) / "elsewhere"
+            outside.mkdir()
+            try:
+                (models / "luts" / "downloaded").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                self.skipTest(f"Symlink privilege unavailable: {error}")
+            try:
+                with self.assertRaisesRegex(LutCatalogError, "resolves outside"):
+                    _install_root(SimpleNamespace(models_dir=str(models)))
+            finally:
+                (models / "luts" / "downloaded").unlink()
+            self.assertEqual(_install_root(SimpleNamespace(models_dir=str(models))), models / "luts" / "downloaded")
+
     def test_install_rejects_tampered_download_url_before_fetch(self):
         entry = deepcopy(load_lut_catalog(CATALOG_PATH, channel="stable")["entries"][0])
         entry["download_url"] = "https://evil.invalid/a.cube"

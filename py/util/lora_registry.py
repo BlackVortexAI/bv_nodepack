@@ -9,6 +9,8 @@ from typing import Any
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
+from .path_roots import configured_roots, contained_file, resolve_within_roots
+
 
 CONFIG_SCHEMA = "bv.lora_registry_config"
 CONFIG_VERSION = 2
@@ -156,6 +158,12 @@ def lora_registry_diagnostics(value: Any) -> tuple[int, str]:
     return active_total, "\n".join(summary)
 
 
+def lora_roots(folder_paths_module=None) -> list[str] | None:
+    if folder_paths_module is None:
+        import folder_paths as folder_paths_module
+    return configured_roots(folder_paths_module, "loras")
+
+
 def resolve_lora_path(logical_name: Any, folder_paths_module=None) -> tuple[str, Path]:
     logical = _logical_name(logical_name)
     if folder_paths_module is None:
@@ -166,7 +174,11 @@ def resolve_lora_path(logical_name: Any, folder_paths_module=None) -> tuple[str,
     path = Path(resolved)
     if not path.is_file() or path.suffix.casefold() != ".safetensors":
         raise ValueError(f"LoRA file not found through ComfyUI: {logical}")
-    return logical, path.resolve()
+    roots = lora_roots(folder_paths_module)
+    if roots is None:
+        raise ValueError("LoRA folders are unknown; ComfyUI folder registry unavailable")
+    # Links inside a LoRA folder must not lead outside it (same rule as loading).
+    return logical, resolve_within_roots(path, roots, "LoRA path")
 
 
 def materialize_lora_registry(value: Any, folder_paths_module=None) -> tuple[dict[str, Any], str]:
@@ -191,7 +203,11 @@ def materialize_lora_registry(value: Any, folder_paths_module=None) -> tuple[dic
     return {"schema": "bv.lora_stack_registry", "version": 1, "stacks": stacks}, config["registry_id"]
 
 
-def _load_sidecar(path: Path) -> dict[str, Any]:
+def _load_sidecar(path: Path, roots: list[str] | None = None) -> dict[str, Any]:
+    # Sidecars are read only from inside the LoRA folders; a link that leaves them is ignored.
+    path = contained_file(path, roots) if roots is not None else path
+    if path is None:
+        return {}
     try:
         if not path.is_file() or path.stat().st_size > MAX_SIDECAR_BYTES:
             return {}
@@ -223,17 +239,18 @@ def _plain_text(value: Any, limit: int = 2000) -> str:
     return re.sub(r"\s+", " ", text).strip()[:limit]
 
 
-def _preview_path(resolved_lora: Path) -> Path | None:
+def _preview_path(resolved_lora: Path, roots: list[str] | None) -> Path | None:
+    # Served over HTTP, so a preview must be a regular file that resolves inside the LoRA folders.
     for suffix in (*PREVIEW_SUFFIXES, *MANAGER_PREVIEW_SUFFIXES, *VIDEO_PREVIEW_SUFFIXES):
-        candidate = resolved_lora.with_name(f"{resolved_lora.stem}{suffix}")
-        if candidate.is_file():
-            return candidate.resolve()
+        candidate = contained_file(resolved_lora.with_name(f"{resolved_lora.stem}{suffix}"), roots)
+        if candidate is not None:
+            return candidate
     return None
 
 
 def lora_preview_path(logical_name: Any, folder_paths_module=None) -> Path | None:
     _logical, resolved = resolve_lora_path(logical_name, folder_paths_module)
-    return _preview_path(resolved)
+    return _preview_path(resolved, lora_roots(folder_paths_module))
 
 
 def _preview_is_safe(metadata: dict[str, Any], cm_info: dict[str, Any]) -> bool:
@@ -243,9 +260,9 @@ def _preview_is_safe(metadata: dict[str, Any], cm_info: dict[str, Any]) -> bool:
     return cm_info.get("Nsfw") is False
 
 
-def _catalog_item(logical: str, resolved: Path, compatibility_checker=None) -> dict[str, Any]:
-    metadata = _load_sidecar(resolved.with_name(f"{resolved.stem}.metadata.json"))
-    cm_info = _load_sidecar(resolved.with_name(f"{resolved.stem}.cm-info.json"))
+def _catalog_item(logical: str, resolved: Path, compatibility_checker=None, roots: list[str] | None = None) -> dict[str, Any]:
+    metadata = _load_sidecar(resolved.with_name(f"{resolved.stem}.metadata.json"), roots)
+    cm_info = _load_sidecar(resolved.with_name(f"{resolved.stem}.cm-info.json"), roots)
     civitai = metadata.get("civitai") if isinstance(metadata.get("civitai"), dict) else {}
     creator = civitai.get("creator") if isinstance(civitai.get("creator"), dict) else {}
     display_name = str(_first(metadata.get("model_name"), cm_info.get("ModelName"), resolved.stem))
@@ -258,7 +275,7 @@ def _catalog_item(logical: str, resolved: Path, compatibility_checker=None) -> d
         tags = model_tags
     author = str(_first(creator.get("username"), cm_info.get("AuthorUsername"), "") or "")
     description = _plain_text(_first(metadata.get("notes"), metadata.get("modelDescription"), cm_info.get("ModelDescription"), civitai.get("description")))
-    preview = _preview_path(resolved)
+    preview = _preview_path(resolved, roots)
     preview_safe = _preview_is_safe(metadata, cm_info)
     sources = [name for name, value in (("metadata", metadata), ("cm-info", cm_info)) if value]
     directory = PurePosixPath(logical).parent.as_posix()
@@ -401,6 +418,7 @@ def discover_loras(folder_paths_module=None, *, header_cache_path=None) -> dict[
     items: list[dict[str, Any]] = []
     seen_names: set[str] = set()
     seen_paths: set[Path] = set()
+    roots = lora_roots(folder_paths_module)
     for value in sorted(names, key=lambda item: str(item).casefold()):
         try:
             logical, resolved = resolve_lora_path(value, folder_paths_module)
@@ -411,6 +429,6 @@ def discover_loras(folder_paths_module=None, *, header_cache_path=None) -> dict[
             continue
         seen_names.add(key)
         seen_paths.add(resolved)
-        items.append(_catalog_item(logical, resolved, compatibility))
+        items.append(_catalog_item(logical, resolved, compatibility, roots))
     cache.save()
     return {"schema": CATALOG_SCHEMA, "version": CATALOG_VERSION, "items": items}

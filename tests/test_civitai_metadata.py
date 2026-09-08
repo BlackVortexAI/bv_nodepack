@@ -54,6 +54,7 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
         }
         paths = types.ModuleType("folder_paths")
         paths.get_full_path = Mock(return_value=__file__)
+        paths.get_folder_paths = lambda _kind: [str(Path(__file__).parent)]
         hasher = Mock(return_value="a" * 64)
         with patch.dict(sys.modules, {"folder_paths": paths}):
             _, metadata = build_regional_metadata(self.fixture(), prompt=graph, unique_id="s", hasher=hasher)
@@ -155,6 +156,40 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
         )
         self.assertEqual(resources, [])
         hasher.assert_not_called()
+
+    def test_model_hash_obeys_model_folder_containment(self):
+        graph = {
+            "s": {"class_type": "KSampler", "inputs": {"steps": 1, "model": ["m", 0]}},
+            "m": {"class_type": "UNETLoader", "inputs": {"unet_name": "same-name.safetensors"}},
+        }
+        hasher = Mock(return_value="a" * 64)
+        with tempfile.TemporaryDirectory() as directory:
+            models = Path(directory) / "diffusion_models"
+            models.mkdir()
+            inside = models / "same-name.safetensors"
+            inside.write_text("dummy")
+            outside = Path(directory) / "outside.safetensors"
+            outside.write_text("dummy")
+            link = models / "alias.safetensors"
+            try:
+                link.symlink_to(outside)
+            except OSError as error:
+                self.skipTest(f"Symlink privilege unavailable: {error}")
+            # Inside the configured folder: hashed. Link leaving it: not read. Unknown folders: not read.
+            _, metadata = build_regional_metadata(self.fixture(), prompt=graph, unique_id="s", hasher=hasher,
+                                                  model_resolver=lambda _n: str(inside), allowed_model_roots=[models])
+            self.assertEqual(metadata["model"]["sha256"], "a" * 64)
+            hasher.reset_mock()
+            _, metadata = build_regional_metadata(self.fixture(), prompt=graph, unique_id="s", hasher=hasher,
+                                                  model_resolver=lambda _n: str(link), allowed_model_roots=[models])
+            self.assertIsNone(metadata["model"]["sha256"])
+            hasher.assert_not_called()
+            paths = types.ModuleType("folder_paths")
+            paths.get_full_path = Mock(return_value=str(inside))
+            with patch.dict(sys.modules, {"folder_paths": paths}):
+                _, metadata = build_regional_metadata(self.fixture(), prompt=graph, unique_id="s", hasher=hasher)
+            self.assertIsNone(metadata["model"]["sha256"], "no folder registry means no read")
+            hasher.assert_not_called()
 
     def test_resolver_result_outside_lora_roots_is_skipped(self):
         hasher = Mock(return_value="a" * 64)
@@ -260,6 +295,7 @@ class CivitaiRegionalMetadataTests(unittest.TestCase):
             model_resolver=lambda name: __file__ if name == "anima.safetensors" else None,
             hasher=lambda _path: "a" * 64,
             allowed_lora_roots=[self.lora_root],
+            allowed_model_roots=[Path(__file__).parent],
         )
 
         self.assertIn('Lora hashes: "test_civitai_metadata: aaaaaaaaaa"', parameters)

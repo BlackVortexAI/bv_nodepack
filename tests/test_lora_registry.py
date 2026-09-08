@@ -40,6 +40,10 @@ class FakeFolderPaths:
         self.calls.append(("full", folder, name))
         return self.paths.get(name)
 
+    def get_folder_paths(self, folder):
+        # The configured LoRA folders are the parents of the registered files.
+        return sorted({str(Path(path).parent) for path in self.paths.values()})
+
 
 def config(stacks):
     return {"schema": "bv.lora_registry_config", "version": 1, "registry_id": REGISTRY_ID, "stacks": stacks}
@@ -220,6 +224,65 @@ class LoraRegistryTests(unittest.TestCase):
             item = discover_loras(folders)["items"][0]
             self.assertEqual(item["display_name"], "plain")
             self.assertEqual(item["metadata_sources"], [])
+
+    def _symlink(self, link, target):
+        try:
+            link.symlink_to(target)
+        except OSError as error:
+            self.skipTest(f"Symlink privilege unavailable: {error}")
+
+    def test_preview_and_sidecar_links_that_leave_the_lora_folders_are_ignored(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "loras"
+            root.mkdir()
+            outside = Path(directory) / "outside"
+            outside.mkdir()
+            model = root / "look.safetensors"
+            model.write_bytes(b"model")
+            secret_image = outside / "secret.png"
+            secret_image.write_bytes(b"png")
+            secret_meta = outside / "secret.json"
+            secret_meta.write_text(json.dumps({"model_name": "LEAKED"}))
+            self._symlink(root / "look.preview.png", secret_image)
+            self._symlink(root / "look.metadata.json", secret_meta)
+            folders = FakeFolderPaths(["look.safetensors"], {"look.safetensors": str(model)})
+            self.assertIsNone(lora_preview_path("look.safetensors", folders))
+            item = discover_loras(folders)["items"][0]
+            self.assertIsNone(item["preview_url"])
+            self.assertEqual(item["display_name"], "look", "sidecar behind the link was not read")
+            # A link that stays inside the folders keeps working.
+            inside_image = root / "real.png"
+            inside_image.write_bytes(b"png")
+            (root / "look.preview.png").unlink()
+            self._symlink(root / "look.preview.png", inside_image)
+            self.assertEqual(lora_preview_path("look.safetensors", folders), inside_image.resolve())
+
+    def test_lora_whose_link_leaves_the_folders_is_not_listed(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory) / "loras"
+            root.mkdir()
+            outside = Path(directory) / "outside.safetensors"
+            outside.write_bytes(b"model")
+            link = root / "alias.safetensors"
+            self._symlink(link, outside)
+            folders = FakeFolderPaths(["alias.safetensors"], {"alias.safetensors": str(link)})
+            folders.get_folder_paths = lambda _folder: [str(root)]
+            with self.assertRaisesRegex(ValueError, "resolves outside"):
+                lora_preview_path("alias.safetensors", folders)
+            self.assertEqual(discover_loras(folders)["items"], [])
+
+    def test_unknown_lora_folders_fail_closed(self):
+        with TemporaryDirectory() as directory:
+            model = Path(directory) / "look.safetensors"
+            model.write_bytes(b"model")
+            folders = FakeFolderPaths(["look.safetensors"], {"look.safetensors": str(model)})
+            del FakeFolderPaths.get_folder_paths
+            try:
+                with self.assertRaisesRegex(ValueError, "unknown"):
+                    lora_preview_path("look.safetensors", folders)
+                self.assertEqual(discover_loras(folders)["items"], [])
+            finally:
+                FakeFolderPaths.get_folder_paths = lambda self, folder: sorted({str(Path(path).parent) for path in self.paths.values()})
 
     def test_preview_is_bound_to_resolved_lora_stem_and_fixed_priority(self):
         with TemporaryDirectory() as directory:

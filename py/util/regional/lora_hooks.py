@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .document import region_used_for
+from ..path_roots import resolve_within_roots
 
 
 REGISTRY = "BV_LORA_STACK_REGISTRY"
@@ -187,16 +188,19 @@ def lora_path_approver(allowed_roots: Any = None) -> Callable[[Path], Path]:
     if allowed_roots is None:
         import folder_paths
         allowed_roots = folder_paths.get_folder_paths("loras")
-    configured_roots = [Path(root).absolute() for root in allowed_roots]
-    real_roots = [root.resolve() for root in configured_roots]
+    roots = list(allowed_roots)
 
     def approved_path(candidate: Path) -> Path:
-        # Reject unrelated absolute paths before filesystem resolution (including UNC).
-        if not any(candidate.absolute().is_relative_to(root) for root in configured_roots + real_roots):
-            raise ValueError("LoRA path is outside configured LoRA folders; register its folder in ComfyUI")
-        resolved = candidate.resolve()
-        if not any(resolved.is_relative_to(root) for root in real_roots):
-            raise ValueError("LoRA path resolves outside configured LoRA folders")
+        # Lexical check before filesystem resolution (including UNC), then real-path check.
+        try:
+            resolved = resolve_within_roots(candidate, roots, "LoRA path")
+        except ValueError as error:
+            message = str(error)
+            if "outside the configured" in message and "resolves" not in message:
+                raise ValueError("LoRA path is outside configured LoRA folders; register its folder in ComfyUI") from None
+            if "resolves outside" in message:
+                raise ValueError("LoRA path resolves outside configured LoRA folders") from None
+            raise
         # Only the safetensors container is loaded; pickle-based checkpoints never reach torch.load.
         if resolved.suffix.casefold() != ".safetensors":
             raise ValueError(f"LoRA files must be .safetensors; convert '{candidate.name}' before using it")

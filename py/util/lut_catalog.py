@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from urllib.request import Request
 
 from .lut_prototype import parse_cube
+from .path_roots import resolve_within_roots
 from .user_storage import UNAVAILABLE_MESSAGE, private_path, private_root
 
 
@@ -438,8 +439,14 @@ async def download_bytes(url: str, max_bytes: int = MAX_LUT_BYTES) -> bytes:
 def _install_root(folder_paths_module=None) -> Path:
     if folder_paths_module is None:
         import folder_paths as folder_paths_module
-    root = Path(folder_paths_module.models_dir) / "luts" / "downloaded"
+    models_dir = Path(folder_paths_module.models_dir)
+    root = models_dir / "luts" / "downloaded"
     root.mkdir(parents=True, exist_ok=True)
+    # A linked "luts" or "downloaded" directory must not redirect installs outside models/.
+    try:
+        resolve_within_roots(root, [models_dir], "LUT install directory")
+    except ValueError as error:
+        raise LutCatalogError(str(error)) from error
     return root
 
 

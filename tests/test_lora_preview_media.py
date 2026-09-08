@@ -7,6 +7,7 @@ class Folders:
     def __init__(self, model): self.model=model
     def get_filename_list(self, folder): return [self.model.name]
     def get_full_path(self, folder, name): return str(self.model) if name==self.model.name else None
+    def get_folder_paths(self, folder): return [str(self.model.parent)]
 
 class LoraPreviewMediaTests(unittest.TestCase):
     def test_local_video_sidecars_are_discovered_without_downloads(self):

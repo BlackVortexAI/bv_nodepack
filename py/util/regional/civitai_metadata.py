@@ -11,6 +11,7 @@ from threading import Lock
 
 from .context import normalize_context
 from .lora_hooks import lora_path_approver
+from ..path_roots import configured_roots, contained_file
 from .lora_v3 import LORA_CAPABILITY_REGISTRY, materialized_lora_scopes
 from .v3_contracts import REGIONAL_V3_CAPABILITY_REGISTRY
 from ..prompt.category import ast_to_plain_text, parse_prompt_to_ast
@@ -264,6 +265,7 @@ def build_regional_metadata(
     model_resolver: Callable[[str], str | None] | None = None,
     hasher: Callable[[str], str] = _sha256,
     allowed_lora_roots: Any = None,
+    allowed_model_roots: Any = None,
 ) -> tuple[str | None, dict[str, Any]]:
     context = normalize_context(regional, registry=REGIONAL_V3_CAPABILITY_REGISTRY)
     core = context.core
@@ -306,9 +308,19 @@ def build_regional_metadata(
     if sampler is not None and sampler["model"]:
         model_path = model_resolver(sampler["model"]) if model_resolver else None
         model_metadata = {"name": Path(str(sampler["model"])).stem, "path": sampler["model"], "sha256": None}
-        if model_path and Path(model_path).is_file():
+        # Model hashes obey the same containment as LoRAs: inside the configured folders of the
+        # model's category, links resolved; unknown folders mean no hash rather than a read.
+        model_roots = allowed_model_roots
+        if model_roots is None and sampler["model_category"]:
             try:
-                model_metadata["sha256"] = hash_once(model_path)
+                import folder_paths
+                model_roots = configured_roots(folder_paths, sampler["model_category"])
+            except Exception:  # noqa: BLE001 - no ComfyUI folder registry available
+                model_roots = None
+        contained = contained_file(Path(model_path), model_roots) if model_path else None
+        if contained is not None:
+            try:
+                model_metadata["sha256"] = hash_once(str(contained))
             except OSError:
                 pass
     if sampler is not None:
