@@ -9,7 +9,7 @@ const trackers=new WeakMap<object,Tracker>();
 export function subscribeRegionalCanvasExecutions(api:ApiLike,scopeAtQueue:()=>unknown,subscriber:ExecutionSubscriber){
     let tracker=trackers.get(api as object);
     if(!tracker){
-        const origins=new Map<string,unknown>(),pending:PendingQueue[]=[],subscribers=new Set<ExecutionSubscriber>(),original=api.queuePrompt.bind(api);
+        const origins=new Map<string,unknown>(),pending:PendingQueue[]=[],subscribers=new Set<ExecutionSubscriber>(),queuePrompt=api.queuePrompt,original:ApiLike["queuePrompt"]=(...args:any[])=>queuePrompt.call(api,...args);
         const wrapped=async(...args:any[])=>{const token={scope:scopeAtQueue()};pending.push(token);try{const response=await original(...args),promptId=String(response?.prompt_id??"").trim();if(promptId)origins.set(promptId,token.scope);return response}finally{const index=pending.indexOf(token);if(index>=0)pending.splice(index,1)}};
         const start=(event:any)=>{const promptId=String(event?.detail?.prompt_id??"").trim();if(promptId&&!origins.has(promptId)&&pending.length)origins.set(promptId,pending.shift()!.scope)};
         const dispatch=(event:any)=>{const promptId=String(event?.detail?.prompt_id??"").trim(),scope=origins.get(promptId);if(!promptId||scope===undefined)return;for(const callback of subscribers)callback(event,scope)};

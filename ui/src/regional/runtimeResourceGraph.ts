@@ -47,7 +47,7 @@ export function connectRuntimeResource(owner:any,source:any,outputIndex:number,t
     if(!output||!input||(output.type&&input.type&&output.type!==input.type))return false;
     if(matchingLink(owner,source,outputIndex,target,inputIndex))return true;
     if(input.link!=null&&!disconnectRuntimeResource(owner,target,inputIndex))return false;
-    const result=withNativeGraphOwnership(owner,[source,target],()=>source.connect(outputIndex,target,inputIndex));
+    const result=withNativeGraphOwnership(owner,[source,target],()=>source.connect?.(outputIndex,target,inputIndex));
     return result!==false&&Boolean(matchingLink(owner,source,outputIndex,target,inputIndex));
 }
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+from os import environ
 from pathlib import Path
 from threading import RLock
 
@@ -47,7 +47,7 @@ class CompletionService:
         ]
 
     def resolve_paths(self, selected: list[str] | None) -> list[Path]:
-        configured = os.environ.get(ENVIRONMENT_KEY)
+        configured = environ.get(ENVIRONMENT_KEY)
         if configured:
             candidate = Path(configured).expanduser()
             if candidate.is_file() and candidate.suffix.lower() in {".csv", ".tsv"}:

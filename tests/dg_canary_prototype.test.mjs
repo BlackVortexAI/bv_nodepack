@@ -922,3 +922,17 @@ test("DG routing is rebuilt across nested graph changes without consuming ordina
   assert.equal(reconcileDgCanaryTopology(target),true);assert.equal(target.inputs[0].link,normal);
   assert.equal(target.inputs[0].type,"IMAGE");assert.equal(f.hostB.inputs[0].type,PROVIDER);
 });
+
+test("a native connect that returns false records __bvDgFailure without claiming success, and the next working connect clears it",()=>{
+  const f=hierarchyFixture(),source=f.sender(f.root,5,"Root Sender"),target=f.receiver(f.root,6,"Root Receiver"),normal=target.inputs[0].link;
+  const working=source.connect;let refused=0;
+  source.connect=function(){refused++;return false};
+  assert.equal(connectDgCanarySender(target,"root:5"),false);
+  assert.equal(refused,1);assert.equal(target.inputs[1].link,null);assert.equal(target.inputs[0].link,normal);assert.equal(f.root.links.size,0);
+  assert.equal(target.__bvDgFailure,`${PROVIDER}[0] -> ${PROVIDER}[1]`);assert.equal(target.__bvDgActiveRouteKey,undefined);
+  source.connect=function(){refused++;return null};
+  assert.equal(connectDgCanarySender(target,"root:5"),false);assert.equal(refused,2);assert.equal(target.inputs[1].link,null);assert.equal(target.__bvDgFailure,`${PROVIDER}[0] -> ${PROVIDER}[1]`);
+  source.connect=working;
+  assert.equal(connectDgCanarySender(target,"root:5"),true);
+  assert.notEqual(target.inputs[1].link,null);assert.equal(f.root.links.size,1);assert.equal(target.__bvDgFailure,undefined);assert.ok(target.__bvDgActiveRouteKey);assert.equal(target.inputs[0].link,normal);
+});

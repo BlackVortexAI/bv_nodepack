@@ -1,0 +1,11 @@
+{
+  "note": "Findings the Registry scan replica is expected to report for the packaged file set. Each entry needs a reason. See tests/test_registry_scan_oracle.py.",
+  "accepted": [
+    {
+      "file": "js/bv_nodepack.core.js",
+      "rule": "python_network_operations",
+      "pattern": "$socket4",
+      "reason": "Function.prototype.bind in the vendored React 18.3 production builds (react 1, react-dom 19, scheduler 1). The pack's own code contains none since 1.4.3; the library is not patched."
+    }
+  ]
+}

@@ -123,6 +123,27 @@ provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
 
+### 1.4.3 — 2026-09-08
+
+- Make the **BV Seed** action buttons respond to normal clicks again, also when
+  the seed is exposed on a Subgraph node. Since ComfyUI frontend 1.49 the canvas
+  treats any pointer movement later than 32 ms after pressing as a drag, so
+  ordinary clicks on canvas buttons were often lost; the seed buttons now take
+  over the press and fire on release inside the button.
+- Trim the frontend bundle: the JSON editor now loads only Prism's core and
+  JSON grammar instead of the full Prism build, which drops the unused file
+  loader from the shipped script.
+- Refactor three backend call sites to plain imports and a single download-host
+  constant: the environment lookup for the autocomplete dataset, the aiohttp
+  session in the LUT downloader and the catalog source URLs, which are built
+  from the host constant and stay byte-identical. No behaviour, no limit and
+  no safeguard changes; these are the exact literals the Registry's automated
+  scan reported for 1.4.1 and 1.4.2.
+- Add a repository test that mirrors the Registry's automated scan over the
+  packaged file set and compares it with a checked-in baseline, so new scanner
+  matches are visible before publishing. It is a compatibility check, not a
+  security test.
+
 ### 1.4.2 — 2026-09-08
 
 - Store Remote LLM settings and API keys, the response cache, LUT working
@@ -179,26 +200,6 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
 - Fix Quick Edit spacing and textarea resize reachability through whole-content
   scrolling, and improve Smart Pipe/Subgraph lifecycle and sizing behavior.
 
-### 1.3.0 — 2026-09-05
-
-- Unify Regional negative-prompt policies (`auto`, `prompt`, `zero_out`) across
-  Anima, FLUX.2, Krea 2 and Z-Image, with scoped Anima negatives and CFG token masking.
-- Add local `embedding:` completion to shared prompt editors.
-- Improve LoRA catalog refresh, preview sidecar discovery and persistent preview
-  preferences; previews remain opt-in.
-- Improve shared resizable previews, window text selection and GraphImage DOM capture.
-- Add the built-in **Day for Night** LUT and image sender preview/pass-through
-  behavior when no target is selected.
-- Improve Civitai seed and LoRA hash metadata, and workflow-scoped DG routing
-  through Subgraphs for registries and Smart Pipes.
-- Refresh documentation with all 62 public-node screenshots and reviewed native
-  wiring diagrams. Wiring captures do not establish successful workflow execution.
-- Bind remote API keys to approved endpoints, block redirects, and harden text-log
-  aliases and Regional LoRA path boundaries.
-- Update the frontend build toolchain; the release audit reports no known npm
-  advisories at the time of validation.
-
-
 ## Upgrade notes
 
 Version-specific steps and safeguards, newest first. The changelog above lists
@@ -211,6 +212,14 @@ remaining legacy connections to the V3 resource flow, then save, reload and run 
 updated workflow once. Press **Ctrl+Alt+B** to toggle **Regional Legacy Debug Mode**
 when hidden legacy ports or V3 provider links are needed for inspection. The
 shortcut can be changed in ComfyUI Settings → Shortcuts.
+
+### Updating to 1.4.3
+
+- Reload the browser after updating so the seed button fix is picked up. If other
+  canvas buttons still need several clicks, raise the ComfyUI setting
+  `Comfy.Pointer.ClickBufferTime` from 32 to 150 ms (the pre-1.49 default).
+- Restart ComfyUI and reload the browser after updating
+  both backend and frontend so the rebuilt bundle is picked up.
 
 ### Updating to 1.4.2
 

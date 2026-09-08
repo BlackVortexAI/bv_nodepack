@@ -38,6 +38,34 @@ function applyAction(owner, action, seedWidget, stateNode) {
   owner.graph?.setDirtyCanvas?.(true, true);
 }
 
+// ComfyUI's canvas pointer turns a press into a drag as soon as any pointer
+// movement arrives later than Comfy.Pointer.ClickBufferTime (32 ms since
+// frontend 1.49); a normal human click then never reaches the button's
+// onClick. Take over the pointer on press instead: one release handler for
+// both the click and the drag-end path, hit-tested with the node's own widget
+// geometry, and the press never starts a node drag. The pointer's finally
+// mirrors the core cleanup that processWidgetClick skips for this hook.
+function seedButtonPointerDown(pointer, node, canvas) {
+  if (!pointer || this.disabled || this.computedDisabled) return false;
+  const release = (event) => {
+    if (this.disabled || this.computedDisabled) return;
+    const position = event ?? pointer.eUp;
+    if (!position || !node) return;
+    if (node.getWidgetOnPos?.(position.canvasX, position.canvasY) !== this) return;
+    this.clicked = true;
+    this.callback?.(this.value, canvas, node, canvas?.graph_mouse, position);
+    canvas?.setDirty?.(true, true);
+  };
+  pointer.onClick = release;
+  pointer.onDragStart = () => {};
+  pointer.onDrag = () => {};
+  pointer.onDragEnd = release;
+  pointer.finally = () => {
+    if (canvas) canvas.node_widget = null;
+  };
+  return true;
+}
+
 function projectedButtonLabel(action, label, stateNode) {
   if (action !== "use-last") return label;
   const last = stateNode.properties?.bvLastQueuedSeed;
@@ -131,6 +159,7 @@ function patchSeedControl(owner, seedWidget, stateNode = owner) {
       if (action !== "use-last" || Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed)) applyAction(owner, action, seedWidget, stateNode);
     }, { serialize: false });
     if (!button) continue;
+    button.onPointerDown = seedButtonPointerDown;
     button.label = projectedButtonLabel(action, label, stateNode);
     button.serialize = false;
     button.disabled = action === "use-last" && !Number.isSafeInteger(stateNode.properties?.bvLastQueuedSeed);

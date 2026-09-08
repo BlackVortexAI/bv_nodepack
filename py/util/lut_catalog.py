@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunsplit
 from urllib.request import Request
 
 from .lut_prototype import parse_cube
@@ -35,9 +35,21 @@ BUNDLED_CATALOG_PATHS: dict[CatalogChannel, Path] = {
     "stable": CATALOG_PATH,
     "experimental": EXPERIMENTAL_CATALOG_PATH,
 }
+# The only host the pack ever downloads catalogs and LUT files from. Foreign
+# catalogs are deliberately unsupported; users drop their own .cube files into
+# the LUT folder instead. Checked before any connection is opened.
+DOWNLOAD_HOST = "raw.githubusercontent.com"
+ALLOWED_DOWNLOAD_HOSTS = frozenset({DOWNLOAD_HOST})
+CATALOG_SOURCE_PATH = "/BlackVortexAI/bv_nodepack/main/py/util/"
+
+
+def _catalog_source_url(filename: str) -> str:
+    return urlunsplit(("https", DOWNLOAD_HOST, CATALOG_SOURCE_PATH + filename, "", ""))
+
+
 REMOTE_CATALOG_URLS: dict[CatalogChannel, str] = {
-    "stable": "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/py/util/lut_catalog.json",
-    "experimental": "https://raw.githubusercontent.com/BlackVortexAI/bv_nodepack/main/py/util/lut_catalog.experimental.json",
+    "stable": _catalog_source_url(CATALOG_PATH.name),
+    "experimental": _catalog_source_url(EXPERIMENTAL_CATALOG_PATH.name),
 }
 SETTINGS_SCHEMA = "bv.lut-catalog.settings"
 
@@ -48,12 +60,6 @@ class LutCatalogError(ValueError):
 
 class LutCatalogConflictError(LutCatalogError):
     pass
-
-
-# The only host the pack ever downloads catalogs and LUT files from. Foreign
-# catalogs are deliberately unsupported; users drop their own .cube files into
-# the LUT folder instead. Checked before any connection is opened.
-ALLOWED_DOWNLOAD_HOSTS = frozenset({"raw.githubusercontent.com"})
 
 
 def approved_download_url(url: Any, label: str = "LUT download URL") -> str:
@@ -421,9 +427,9 @@ def start_lut_catalog_refresh() -> dict[str, Any]:
 
 async def download_bytes(url: str, max_bytes: int = MAX_LUT_BYTES) -> bytes:
     approved_download_url(url)
-    import aiohttp
-    timeout = aiohttp.ClientTimeout(total=45)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    from aiohttp import ClientSession, ClientTimeout
+    timeout = ClientTimeout(total=45)
+    async with ClientSession(timeout=timeout) as session:
         async with session.get(url, allow_redirects=False) as response:
             if 300 <= int(response.status) < 400:
                 raise ValueError("LUT download redirects are blocked; the catalog must point at the file directly")

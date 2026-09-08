@@ -1,7 +1,7 @@
 import React, { ChangeEvent, forwardRef, KeyboardEvent, ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { HexAlphaColorPicker, HexColorPicker } from "react-colorful";
 import EditorModule from "react-simple-code-editor";
-import Prism from "prismjs";
+import Prism from "prismjs/components/prism-core";
 import "prismjs/components/prism-json";
 import { Button } from "./actions";
 import { AdaptiveFieldPopover, AnchoredPopover } from "./overlays";

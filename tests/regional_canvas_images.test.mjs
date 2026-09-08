@@ -145,3 +145,18 @@ test("cached execution hydrates the matching current node output",()=>{
   assert.deepEqual(regionalCanvasExecutionOutputs({type:"execution_cached",detail:{nodes:["7","8"]}},{7:first,8:second}),[{nodeId:"7",output:first},{nodeId:"8",output:second}]);
   assert.deepEqual(regionalCanvasExecutionOutputs({type:"executed",detail:{node:"7",output:first}},undefined),[{nodeId:"7",output:first}]);
 });
+
+test("queue wrapper forwards this and every argument, propagates rejections and keeps working afterwards",async()=>{
+  const calls=[],listeners=new Map();let fail=false;
+  const api={tag:"api-1",queuePrompt(...args){calls.push({self:this,args});return fail?Promise.reject(new Error("queue refused")):Promise.resolve({prompt_id:`p-${calls.length}`,echo:args})},addEventListener(type,callback){listeners.set(type,callback)},removeEventListener(){}};
+  const original=api.queuePrompt,scope={},accepted=[];
+  subscribeRegionalCanvasExecutions(api,()=>scope,(event,owner)=>{if(owner===scope)accepted.push(event.detail.output)});
+  assert.notEqual(api.queuePrompt,original,"queuePrompt is wrapped");
+  const response=await api.queuePrompt(3,{prompt:"x"},"extra");
+  assert.deepEqual(calls[0].args,[3,{prompt:"x"},"extra"]);assert.equal(calls[0].self,api,"original runs with api as this");
+  assert.deepEqual(response,{prompt_id:"p-1",echo:[3,{prompt:"x"},"extra"]},"response passes through unchanged");
+  fail=true;await assert.rejects(()=>api.queuePrompt(1),/queue refused/);fail=false;
+  const again=await api.queuePrompt(2);assert.equal(again.prompt_id,"p-3");
+  listeners.get("executed")({type:"executed",detail:{prompt_id:"p-3",output:"after-reject"}});assert.deepEqual(accepted,["after-reject"]);
+  assert.equal(calls.length,3,"wrapper never re-reads api.queuePrompt (no recursion)");
+});

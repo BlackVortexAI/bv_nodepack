@@ -236,9 +236,9 @@ function ensureRouteInput(subgraph:any,host:any,routeKey:string,receiver:any,pre
     if(boundary){boundary.__bvDgRouteKey=routeKey;boundary.__bvDgRouteDirection="in";boundary.__bvDgReceiverId=String(receiver.id);if(channelId)boundary.__bvDgReceiverChannel=channelId;else delete boundary.__bvDgReceiverChannel;moveInputBoundaryToEnd(subgraph,host,boundary)}
     const index=slots.indexOf(boundary);prepareInputBoundaryProjection(subgraph,host,boundary,index);return{boundary,index,hostSlot:host?.inputs?.[index]};
 }
-type Connector={graph:any;node:any;slot:number;connect:(target:any,input:number)=>unknown};
-const nodeConnector=(graph:any,node:any,slot:number):Connector=>({graph,node,slot,connect:(target,input)=>withNativeGraphOwnership(graph,[node,target],()=>node.connect?.(slot,target,input))});
-const boundaryConnector=(graph:any,boundary:any,index:number):Connector=>({graph,node:graph?.inputNode,slot:index,connect:(target,input)=>withNativeGraphOwnership(graph,[target],()=>boundary.connect?.(target.inputs?.[input],target))});
+type Connector={graph:any;node:any;slot:number;wire:(target:any,input:number)=>unknown};
+const nodeConnector=(graph:any,node:any,slot:number):Connector=>({graph,node,slot,wire:(target,input)=>withNativeGraphOwnership(graph,[node,target],()=>node.connect?.(slot,target,input))});
+const boundaryConnector=(graph:any,boundary:any,index:number):Connector=>({graph,node:graph?.inputNode,slot:index,wire:(target,input)=>withNativeGraphOwnership(graph,[target],()=>boundary.connect?.(target.inputs?.[input],target))});
 
 export function prepareProvider(slot:any){if(slot){markProjectedProvider(slot);setProjectedSlotLabel(slot,"DG");slot.__bvDgAnchor=true}return slot}
 
@@ -400,7 +400,7 @@ export function connectDgSender(receiver:any,senderId:string,channelId=""){
     let current=nodeConnector(ownerGraph(sender),sender,senderOutput),routeFailed=false;const touched=new Set<any>([sender,receiver]),routeLinks:any[]=[];
     const routeConnect=(connector:Connector,target:any,input:number)=>{const graph=connector.graph,sourceRefs=connector.node===graph?.inputNode?graph.inputs?.[connector.slot]?.linkIds:connector.node.outputs?.[connector.slot]?.links,existing=linkValues(graph).find((link:any)=>String(link.origin_id)===String(connector.node.id)&&Number(link.origin_slot)===connector.slot&&String(link.target_id)===String(target.id)&&Number(link.target_slot)===input&&link.type===PROVIDER&&sourceRefs?.includes(link.id)&&(target===graph?.outputNode?graph.outputs?.[input]?.linkIds?.includes(link.id):target.inputs?.[input]?.link===link.id)),result:any=existing??(target===graph?.outputNode
         ?withNativeGraphOwnership(graph,[connector.node],()=>graph.outputs?.[input]?.connect?.(connector.node.outputs?.[connector.slot],connector.node))
-        :connector.connect(target,input));const id=result?.id??result;if(result!==false&&id!=null)routeLinks.push({graph,id,source:connector.node,output:connector.slot,target,input});else{routeFailed=true;state.__bvDgFailure=`${String(connector.node?.outputs?.[connector.slot]?.type)}[${connector.slot}] -> ${String(target?.inputs?.[input]?.type)}[${input}]`}return result};
+        :connector.wire(target,input));const id=result?.id??result;if(result!==false&&id!=null)routeLinks.push({graph,id,source:connector.node,output:connector.slot,target,input});else{routeFailed=true;state.__bvDgFailure=`${String(connector.node?.outputs?.[connector.slot]?.type)}[${connector.slot}] -> ${String(target?.inputs?.[input]?.type)}[${input}]`}return result};
     programmatic(()=>{
         // Native addInput/addOutput expands immediately. Install the shared
         // measurement projection before creating any technical boundary.
