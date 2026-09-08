@@ -94,31 +94,44 @@ def legacy_root(folder_paths_module: Any = None) -> Path | None:
 
 
 RECOVERY_SUFFIX = ".recovered"
+STAGING_MARKER = ".staging-"
 
 
 def _publish_exclusive(target: Path, payload: bytes) -> None:
-    """Create ``target`` with these bytes, or fail if anything already exists there.
+    """Publish ``payload`` under ``target`` atomically and exclusively.
 
-    Exclusive creation is the concurrency guard: two processes cannot both succeed,
-    so an existing private file is never overwritten. The written bytes are read back
-    before the caller may delete its source; on any failure the file this call
-    created is removed again so a retry starts from the same state.
+    The bytes are written, synced and verified in a uniquely named staging file
+    first; the final name is then created with a hard link, which fails when the
+    name already exists and never replaces anything. Other processes therefore
+    only ever see a complete, verified file under the final name, and a crash
+    can leave at most a staging file behind (never loaded, cleaned on the next
+    run). Once published, the file is never removed by this function.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    staging = target.with_name(f".{target.name}{STAGING_MARKER}{secrets.token_hex(6)}")
+    descriptor = os.open(staging, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        if target.read_bytes() != payload:
-            raise OSError(f"verification failed for {target}")
-    except BaseException:
+        if staging.read_bytes() != payload:
+            raise OSError(f"verification failed for {staging}")
+        os.link(staging, target)  # FileExistsError when the name is taken; no replace
+    finally:
         try:
-            target.unlink(missing_ok=True)
+            staging.unlink(missing_ok=True)
         except OSError:
             pass
-        raise
+
+
+def _clean_stale_staging(private: Path) -> None:
+    try:
+        for stale in private.rglob(f".*{STAGING_MARKER}*"):
+            if stale.is_file() and not stale.is_symlink():
+                stale.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def _recovery_path(target: Path) -> Path:
@@ -140,27 +153,31 @@ def _migrate_file(source: Path, target: Path) -> tuple[str, str]:
     except FileExistsError:
         pass
     else:
-        source.unlink()
+        source.unlink(missing_ok=True)
         return "migrated", ""
+    # Whatever holds the final name was published complete and verified (by this
+    # code or by the user); it is never touched here.
     if target.is_file() and not target.is_symlink() and target.read_bytes() == payload:
-        source.unlink()
+        source.unlink(missing_ok=True)
         return "removed", "private copy holds the same bytes"
     recovery = _recovery_path(target)
     _publish_exclusive(recovery, payload)
-    source.unlink()
+    source.unlink(missing_ok=True)
     return "recovered", f"private copy differs; public file kept as {recovery.name}"
 
 
 def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None = None) -> dict[str, list[str]]:
     """Move trusted files from the public tree into private storage, once and verifiably.
 
-    Contract: private files are never overwritten, not even by a concurrent
-    migration (exclusive creation). A public file is removed only after its bytes
-    are verified in private storage: as the new private file, as an identical
-    existing private file, or as a uniquely named recovery file that is never
-    loaded automatically. Regenerable caches are deleted, not copied. Symbolic links
-    are left alone and reported. Any failure leaves the public file in place and no
-    half-written private file behind, so the next start retries. Never raises.
+    Contract: private files are never overwritten or replaced, not even by a
+    concurrent migration (staging file, then exclusive hard-link publication), and
+    a name that exists in private storage always holds a complete file. A public
+    file is removed only after its bytes are verified in private storage: as the
+    new private file, as an identical existing private file, or as a uniquely
+    named recovery file that is never loaded automatically. Regenerable caches are
+    deleted, not copied. Symbolic links are left alone and reported. A failure
+    leaves the public file in place; at most a staging file (never loaded) remains
+    and is cleaned on the next run. Never raises.
     """
     report: dict[str, list[str]] = {"migrated": [], "removed": [], "recovered": [], "kept": [], "failed": []}
     legacy = legacy if legacy is not None else legacy_root()
@@ -172,6 +189,8 @@ def migrate_legacy_storage(*, legacy: Path | None = None, private: Path | None =
             return report
     except OSError:
         return report
+    if private.is_dir():
+        _clean_stale_staging(private)
     for relative in LEGACY_FILES:
         source = legacy / relative
         target = private / relative

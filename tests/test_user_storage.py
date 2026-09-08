@@ -146,12 +146,31 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse((self.legacy / "remote_llm_secrets.json").exists())
         self.assertEqual(list(self.private.glob("*.recovered")), [])
 
-    def test_readback_mismatch_removes_the_created_file(self):
+    def test_readback_mismatch_publishes_nothing_under_the_final_name(self):
         target = self.private / "remote_llm_secrets.json"
         with patch.object(Path, "read_bytes", return_value=b"tampered"):
             with self.assertRaisesRegex(OSError, "verification failed"):
                 user_storage._publish_exclusive(target, b"payload")
         self.assertFalse(target.exists())
+        self.assertEqual(list(self.private.glob(f".*{user_storage.STAGING_MARKER}*")), [], "staging file cleaned")
+
+    def test_final_name_only_appears_complete_and_is_never_removed_after_publication(self):
+        target = self.private / "remote_llm_secrets.json"
+        observed = []
+        original_fsync = os.fsync
+
+        def observing_fsync(descriptor):
+            observed.append(target.exists())  # the final name must not exist while the write is in flight
+            return original_fsync(descriptor)
+
+        with patch.object(os, "fsync", observing_fsync):
+            user_storage._publish_exclusive(target, b"payload")
+        self.assertEqual(observed, [False])
+        self.assertEqual(target.read_bytes(), b"payload")
+        # A failure after publication (here: the caller's own follow-up) leaves the file in place.
+        with self.assertRaises(FileExistsError):
+            user_storage._publish_exclusive(target, b"other")
+        self.assertEqual(target.read_bytes(), b"payload")
 
     def test_concurrent_publication_never_overwrites_the_other_process(self):
         original = user_storage._publish_exclusive
@@ -169,6 +188,39 @@ class MigrationTests(unittest.TestCase):
         recoveries = list(self.private.glob(f"remote_llm_secrets.json.legacy-*{user_storage.RECOVERY_SUFFIX}"))
         self.assertEqual([r.read_bytes() for r in recoveries], [self.files["remote_llm_secrets.json"]])
         self.assertEqual(len(report["recovered"]), 1)
+
+    def test_process_a_failing_after_flush_cannot_lose_the_file_to_process_b(self):
+        # A writes and flushes, B migrates completely meanwhile, then A's sync fails.
+        # B must see no unverified file under the final name; A must not delete B's result.
+        original_fsync = os.fsync
+        state = {"b_done": False}
+
+        def fsync_with_race(descriptor):
+            if not state["b_done"]:
+                state["b_done"] = True
+                report_b = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+                self.assertIn("remote_llm_secrets.json", report_b["migrated"] + [e.split(":")[0] for e in report_b["removed"]])
+                raise OSError("A: device error after flush")
+            return original_fsync(descriptor)
+
+        with patch.object(os, "fsync", fsync_with_race):
+            report_a = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), self.files["remote_llm_secrets.json"])
+        self.assertFalse((self.legacy / "remote_llm_secrets.json").exists())
+        self.assertEqual(list(self.private.glob(f".*{user_storage.STAGING_MARKER}*")), [])
+        self.assertEqual(len(report_a["failed"]), 1)
+        self.assertTrue(report_a["failed"][0].endswith("A: device error after flush"))
+        self.assertEqual(report_a["migrated"], [], "everything else was already migrated by B")
+        self.assertEqual(list(self.private.glob(f"*{user_storage.RECOVERY_SUFFIX}")), [], "no recovery file needed")
+
+    def test_stale_staging_files_from_a_crash_are_cleaned_and_never_promoted(self):
+        self.private.mkdir(parents=True)
+        stale = self.private / f".remote_llm_secrets.json{user_storage.STAGING_MARKER}deadbeef"
+        stale.write_bytes(b"partial")
+        report = migrate_legacy_storage(legacy=self.legacy, private=self.private)
+        self.assertFalse(stale.exists())
+        self.assertEqual((self.private / "remote_llm_secrets.json").read_bytes(), self.files["remote_llm_secrets.json"])
+        self.assertIn("remote_llm_secrets.json", report["migrated"])
 
     def test_symbolic_link_in_public_tree_is_left_alone(self):
         target = self.root / "outside.json"
