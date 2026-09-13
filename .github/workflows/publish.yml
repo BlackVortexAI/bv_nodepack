@@ -72,8 +72,12 @@ jobs:
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
         run: |
+          # A secret pasted with a trailing newline or space is passed verbatim through a quoted
+          # variable; the Registry then rejects it. Only the lengths are logged, never the value.
+          token="$(printf '%s' "$REGISTRY_ACCESS_TOKEN" | tr -d '[:space:]')"
+          echo "token length: stored=${#REGISTRY_ACCESS_TOKEN} used=${#token}"
           comfy --skip-prompt --no-enable-telemetry env
-          comfy node publish --token "$REGISTRY_ACCESS_TOKEN"
+          comfy node publish --token "$token"
 
       - name: Compare the uploaded archive with the manifest
         if: steps.version.outputs.publish == 'true'
