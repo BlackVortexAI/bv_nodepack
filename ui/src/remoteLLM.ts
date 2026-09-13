@@ -85,8 +85,8 @@ const applyProfile = (node: any, profiles: ProviderProfile[], previousLabel?: st
     node.setDirtyCanvas?.(true, true);
 };
 
-const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
-    const selected = profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
+const dialog = (api: any, node: any, profiles: ProviderProfile[], profileId?:string, onChanged?:()=>void) => {
+    const selected = profileId ? profiles.find(profile=>profile.id===profileId) : profiles.find(profile => profile.label === String(widget(node, "provider_profile")?.value ?? "")) ?? profiles[0];
     if (!selected) return;
     if (selected.auth_mode === "none") return;
     mountBvView(close => createElement(RemoteLlmApiKeyDialog, {
@@ -106,7 +106,8 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         selected.configured = true;
         selected.approved_endpoint = destination;
         selected.effective_endpoint = destination;
-        applyProfile(node, profiles);
+        if(node)applyProfile(node, profiles);
+        onChanged?.();
         loadProfiles(api, true);
       }, onDelete: async () => {
         const response = await fetch(api.apiURL(`/bv_nodepack/remote_llm/api_key/${encodeURIComponent(selected.id)}`), { method: "DELETE" });
@@ -114,11 +115,22 @@ const dialog = (api: any, node: any, profiles: ProviderProfile[]) => {
         selected.configured = false;
         selected.approved_endpoint = null;
         selected.effective_endpoint = selected.allow_custom_endpoint ? null : selected.endpoint;
-        applyProfile(node, profiles);
+        if(node)applyProfile(node, profiles);
+        onChanged?.();
         loadProfiles(api, true);
       }
     }),{scope:"global"});
 };
+
+export async function configureWritingProvider(api:any,profileId:string,onChanged:()=>void){
+    const catalog=await loadCatalog(api,true);
+    if(!catalog.management.allowed)throw new Error("Provider management is disabled on this server.");
+    if(!catalog.private_storage)throw new Error("Private credential storage is unavailable on this server.");
+    const profile=catalog.profiles.find(item=>item.id===profileId);
+    if(!profile)throw new Error("Choose a provider first.");
+    if(profile.auth_mode==="none")throw new Error("This local provider does not require an API key. Its endpoint is managed in the server settings.");
+    dialog(api,null,catalog.profiles,profileId,onChanged);
+}
 
 export const upgradeRemoteLLMProvider = (node: any, api: any) => {
     loadCatalog(api).then(catalog => {

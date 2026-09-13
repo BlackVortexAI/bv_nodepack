@@ -1,7 +1,18 @@
 # Development-only files excluded from Comfy Registry packages.
+# The packaged set is checked by tests/test_registry_package_set.py.
 .comfyignore
+.gitignore
 tests/
 ui/
 .tmp/
 user/
 .github/
+# Design references and brand sources: not read at runtime; README images stay.
+docs/design/
+docs/assets/brand/
+docs/assets/publishing/
+docs/assets/bv-nodepack-hero.svg
+docs/assets/registry/bv-nodepack-banner.svg
+docs/assets/registry/bv-nodepack-icon.svg
+# TypeScript declaration for development tooling only.
+js/bv_smart_pipe_merge_model.d.ts

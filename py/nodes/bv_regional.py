@@ -3,6 +3,7 @@ from ..util.regional.tool_settings import filter_tool_config, filter_legacy_bind
 
 import hashlib
 import json
+from pathlib import Path
 
 from nodes import PreviewImage, SaveImage
 
@@ -600,7 +601,18 @@ class BVRegionalDetailerMaskNode:
         ) + mask_bbox(mask) + (selected["id"], selected["name"])
 
 
-class BVRegionalNativeConditioningNode:
+class _GlobalLoraPreparation:
+    """Separate global weight preparation from changing regional conditioning."""
+    def __init__(self):
+        from ..util.lora_preparation_cache import LoraPreparationCache
+        self._global_lora_preparation = LoraPreparationCache()
+
+    def _prepare_global_loras(self, model, clip, regional):
+        return apply_global_patches(
+            model, clip, regional, preparation_cache=self._global_lora_preparation)
+
+
+class BVRegionalNativeConditioningNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -644,7 +656,7 @@ class BVRegionalNativeConditioningNode:
 
     def compile(self, regional, clip, region_strength_multiplier=1.0, native_composition="blend", hybrid_blend_ratio=0.35,
                 lora_registry=None, lora_bindings=None, model=None):
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -655,7 +667,7 @@ class BVRegionalNativeConditioningNode:
         return positive, negative, model
 
 
-class BVRegionalSDXLAttentionNode:
+class BVRegionalSDXLAttentionNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -691,7 +703,7 @@ class BVRegionalSDXLAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -710,7 +722,7 @@ class BVRegionalSDXLAttentionNode:
         return patched_model, positive, negative
 
 
-class BVRegionalZImageAttentionNode:
+class BVRegionalZImageAttentionNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -734,7 +746,7 @@ class BVRegionalZImageAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -748,7 +760,7 @@ class BVRegionalZImageAttentionNode:
         return patched_model, positive, negative
 
 
-class BVRegionalFlux2KleinAttentionNode:
+class BVRegionalFlux2KleinAttentionNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -775,7 +787,7 @@ class BVRegionalFlux2KleinAttentionNode:
 
     def apply(self, model, clip, regional, attention_strength, start_percent, end_percent,
               lora_registry=None, lora_bindings=None):
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -794,7 +806,7 @@ class BVRegionalFlux2KleinAttentionNode:
         return patched_model, positive, negative
 
 
-class BVRegionalKrea2AttentionNode:
+class BVRegionalKrea2AttentionNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -860,7 +872,7 @@ class BVRegionalKrea2AttentionNode:
     ):
         if regional_lora_mode not in {"multipass_legacy", "token_gated_singlepass"}:
             raise ValueError("regional_lora_mode must be multipass_legacy or token_gated_singlepass")
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         if mode not in {"generation", "identity_edit"}:
             raise ValueError("Krea mode must be generation or identity_edit")
@@ -917,7 +929,7 @@ class BVRegionalAnimaAdapterNode:
         return compile_anima_adapter(regional, clip)
 
 
-class BVRegionalAnimaConditioningNode:
+class BVRegionalAnimaConditioningNode(_GlobalLoraPreparation):
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -982,7 +994,7 @@ class BVRegionalAnimaConditioningNode:
                 "Update ComfyUI and verify the dependencies reported by the original import error."
             ) from error
 
-        model, clip = apply_global_patches(model, clip, regional)
+        model, clip = self._prepare_global_loras(model, clip, regional)
         document = context_document(regional)
         scope_stacks = resolve_stack_paths(_consumer_lora_scopes(regional, document, lora_registry, lora_bindings))
         hook_groups = create_hook_groups(scope_stacks)
@@ -1037,6 +1049,32 @@ class BVRegionalColorControlImageNode:
 
 
 class BVRegionalAnimaLLLiteNode:
+    def __init__(self):
+        self._model_patch_entry = None
+
+    @staticmethod
+    def _model_patch_key(name, loader_class):
+        import folder_paths
+
+        path = Path(folder_paths.get_full_path_or_raise("model_patches", name)).resolve()
+        stat = path.stat()
+        return (loader_class, str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size, stat.st_ino)
+
+    def _load_model_patch(self, name, loader_class):
+        try:
+            key = self._model_patch_key(name, loader_class)
+        except Exception:
+            self._model_patch_entry = None
+            raise
+        if self._model_patch_entry is not None and self._model_patch_entry[0] == key:
+            return self._model_patch_entry[1]
+        self._model_patch_entry = None
+        model_patch = loader_class().load_model_patch(name)[0]
+        # Retain only weights; native apply must create fresh image/parameter wrappers.
+        if self._model_patch_key(name, loader_class) == key:
+            self._model_patch_entry = (key, model_patch)
+        return model_patch
+
     @classmethod
     def INPUT_TYPES(cls):
         try:
@@ -1077,7 +1115,7 @@ class BVRegionalAnimaLLLiteNode:
             ) from error
 
         control_image, legend = compile_color_control(regional)
-        model_patch = ModelPatchLoader().load_model_patch(model_patch_name)[0]
+        model_patch = self._load_model_patch(model_patch_name, ModelPatchLoader)
         patched_model = AnimaLLLiteApply().apply_patch(
             model,
             model_patch,

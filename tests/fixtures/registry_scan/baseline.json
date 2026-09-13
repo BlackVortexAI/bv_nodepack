@@ -5,7 +5,8 @@
       "file": "js/bv_nodepack.core.js",
       "rule": "python_network_operations",
       "pattern": "$socket4",
-      "reason": "Function.prototype.bind in the vendored React 18.3 production builds (react 1, react-dom 19, scheduler 1). The pack's own code contains none since 1.4.3; the library is not patched."
+      "expected_count": 21,
+      "reason": "Function.prototype.bind in the vendored React 18.3 production builds (react 1, react-dom 19, scheduler 1). The pack's own code contains none since 1.4.3; the library is not patched. The count pins the vendored total so an additional match in this file cannot hide behind it."
     }
   ]
 }

@@ -68,7 +68,7 @@ RULE_SCOPE = {
 
 
 def packaged_files(root: Path) -> list[str] | None:
-    """Git-tracked files minus ``.comfyignore``, the way ``comfy node publish`` packs.
+    """Git-tracked and new unignored files minus ``.comfyignore``, the way ``comfy node publish`` packs a checkout.
 
     comfy-cli applies the ignore file with gitwildmatch semantics. ``pathspec`` is
     used when installed; otherwise only the plain directory and file-name patterns
@@ -76,7 +76,10 @@ def packaged_files(root: Path) -> list[str] | None:
     caller can skip instead of guessing.
     """
     try:
-        listed = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout
+        # Tracked files plus new files git does not ignore: what a clean CI checkout of
+        # the next commit will contain, so an unstaged new file is checked before it ships.
+        listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                                cwd=root, capture_output=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError):
         return None
     files = [entry.decode("utf-8") for entry in listed.split(b"\0") if entry]
@@ -94,14 +97,20 @@ def packaged_files(root: Path) -> list[str] | None:
     if pathspec is not None:
         spec = pathspec.PathSpec.from_lines("gitwildmatch", patterns)
         return [name for name in files if not spec.match_file(name)]
-    if any(any(char in pattern for char in "*?[]!\\") or "/" in pattern.rstrip("/") for pattern in patterns):
+    if any(any(char in pattern for char in "*?[]!\\") for pattern in patterns):
         return None
-    directories = {pattern.rstrip("/") for pattern in patterns if pattern.endswith("/")}
-    names = {pattern for pattern in patterns if not pattern.endswith("/")}
+    # Without pathspec: a bare name matches at any depth (gitwildmatch semantics for
+    # patterns without a slash); a pattern containing a slash is anchored at the root.
+    any_depth_dirs = {p.rstrip("/") for p in patterns if p.endswith("/") and "/" not in p.rstrip("/")}
+    any_depth_names = {p for p in patterns if not p.endswith("/") and "/" not in p}
+    rooted_dirs = {p.rstrip("/") for p in patterns if p.endswith("/") and "/" in p.rstrip("/")}
+    rooted_files = {p for p in patterns if not p.endswith("/") and "/" in p}
     kept = []
     for name in files:
         parts = name.split("/")
-        if any(part in directories for part in parts[:-1]) or parts[-1] in names:
+        if any(part in any_depth_dirs for part in parts[:-1]) or parts[-1] in any_depth_names:
+            continue
+        if name in rooted_files or any(name.startswith(prefix + "/") for prefix in rooted_dirs):
             continue
         kept.append(name)
     return kept
@@ -187,30 +196,52 @@ class RegistryScanOracleSelfTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
             subprocess.run(["git", "init", "-q"], cwd=root, check=True)
-            for relative in ("keep.py", "tests/a.py", "sub/tests/b.py", "ui/c.ts", ".comfyignore"):
+            for relative in ("keep.py", "tests/a.py", "sub/tests/b.py", "ui/c.ts", ".comfyignore",
+                             "docs/design/theme.json", "docs/assets/keep.png", "js/model.d.ts", "js/keep.js",
+                             "other/docs/design/nested.json"):
                 path = root / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("", encoding="utf-8")
-            (root / ".comfyignore").write_text("# dev only\n.comfyignore\ntests/\nui/\n", encoding="utf-8")
+            (root / ".comfyignore").write_text(
+                "# dev only\n.comfyignore\ntests/\nui/\ndocs/design/\njs/model.d.ts\n", encoding="utf-8")
             subprocess.run(["git", "add", "-A"], cwd=root, check=True)
-            self.assertEqual(packaged_files(root), ["keep.py"])
+            self.assertEqual(packaged_files(root),
+                             ["docs/assets/keep.png", "js/keep.js", "keep.py", "other/docs/design/nested.json"])
 
 
 class RegistryScanBaselineReport(unittest.TestCase):
-    """Informative: prints the replica's findings and warns on drift, never fails."""
+    """Compatibility gate: a match the baseline does not list fails; a vanished match only warns.
 
-    def test_report_packaged_set_against_baseline(self):
+    Failing on ``new`` protects the packaged set from silently regaining a pattern the
+    project removed on purpose. This is a lexical compatibility check with documented
+    exceptions, not a security test and not a prediction of the Registry's decision.
+    """
+
+    def test_packaged_set_has_no_match_outside_the_baseline(self):
         files = packaged_files(ROOT)
-        if files is None:
-            self.skipTest("packaged file set unavailable (git or unsupported .comfyignore pattern)")
+        self.assertIsNotNone(files, "packaged file set unavailable (git missing or unsupported .comfyignore pattern)")
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
         findings = scan_files(ROOT, files)
         diff = compare_with_baseline(findings, baseline)
         report = format_report(findings, diff)
         print("\n" + report)
-        if diff["new"] or diff["gone"]:
-            warnings.warn("Registry scan replica drifted from tests/fixtures/registry_scan/baseline.json:\n" + report
-                          + "\nUpdate the baseline only with a written reason per finding.", stacklevel=1)
+        if diff["gone"]:
+            warnings.warn("Registry scan replica: accepted findings no longer occur; prune the baseline:\n" + report,
+                          stacklevel=1)
+        self.assertEqual(diff["new"], [],
+                         "Registry scan replica found a pattern outside tests/fixtures/registry_scan/baseline.json:\n"
+                         + report + "\nRemove the match or add it to the baseline with a written reason per finding.")
+        # An accepted (file, rule, pattern) may carry an expected count: a further match of the
+        # same pattern in the same file (for example in the pack's own code inside the bundle)
+        # would otherwise hide behind the accepted vendored matches.
+        counts = {(item["file"], item["rule"], item["pattern"]): len(item["lines"]) for item in findings}
+        for accepted in baseline["accepted"]:
+            expected = accepted.get("expected_count")
+            if expected is not None:
+                key = (accepted["file"], accepted["rule"], accepted["pattern"])
+                self.assertEqual(counts.get(key, 0), expected,
+                                 f"{key}: expected {expected} matches, found {counts.get(key, 0)}; update the "
+                                 "baseline only with a written reason.")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from .regional.lora_hooks import apply_static_lora_stack, resolve_stack_paths
 OCCURRENCE_MARKER = "bv_automatic_lora_occurrences_v1"
 
 
-def apply_automatic_resources(model, clip, resources):
+def apply_automatic_resources(model, clip, resources, *, preparation_cache=None):
     """Apply each registry occurrence exactly once independently to MODEL and CLIP.
 
     A resource may travel through multiple Collectors without changing its origin.
@@ -33,11 +33,16 @@ def apply_automatic_resources(model, clip, resources):
             if strengths[0] or strengths[1]:
                 entries.append((path, *strengths))
     if not entries:
+        if preparation_cache is not None:
+            preparation_cache.clear()
         return model, clip
     if model is None and any(item[1] for resource in resources for item in resource["stack"]):
         raise ValueError("Automatic Global LoRAs require the Native Conditioning MODEL input and patched MODEL output")
     resolved = resolve_stack_paths({"automatic": entries})["automatic"]
-    result_model, result_clip = apply_static_lora_stack(model, clip, resolved)
+    if preparation_cache is None:
+        result_model, result_clip = apply_static_lora_stack(model, clip, resolved)
+    else:
+        result_model, result_clip = preparation_cache.apply(model, clip, resolved, apply_static_lora_stack)
     if result_model is not None:
         result_model.set_attachments(OCCURRENCE_MARKER, model_ledger)
     if result_clip is not None:
@@ -45,12 +50,14 @@ def apply_automatic_resources(model, clip, resources):
     return result_model, result_clip
 
 
-def apply_global_patches(model, clip, regional):
+def apply_global_patches(model, clip, regional, *, preparation_cache=None):
     from .regional.lora_v3 import LORA_CAPABILITY, LORA_CAPABILITY_REGISTRY
     from .regional.context import normalize_context
     context = normalize_context(regional, registry=LORA_CAPABILITY_REGISTRY)
     automatic = context.capabilities.get(LORA_CAPABILITY, {}).get("automatic", {})
     if automatic.get("enabled", True) is False:
+        if preparation_cache is not None:
+            preparation_cache.clear()
         for target in (model, clip.patcher if clip is not None else None):
             if target is not None and target.get_attachment(OCCURRENCE_MARKER):
                 raise ValueError("Global LoRAs are disabled for this editor, but its MODEL/CLIP is already globally patched. Use the original MODEL/CLIP input.")
@@ -60,4 +67,6 @@ def apply_global_patches(model, clip, regional):
         raise ValueError("Multiple active Global LoRA Registries; turn the intended Registry Global switch off and on again, or disable the other Global switches")
     if model is None and any(item[1] != 0 for resource in resources for item in resource["stack"]):
         raise ValueError("Automatic Global LoRAs require the Native Conditioning MODEL input and patched MODEL output")
-    return apply_automatic_resources(model, clip, resources) if resources else (model, clip)
+    if not resources and preparation_cache is not None:
+        preparation_cache.clear()
+    return apply_automatic_resources(model, clip, resources, preparation_cache=preparation_cache) if resources else (model, clip)

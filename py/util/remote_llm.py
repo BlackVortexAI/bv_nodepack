@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 import hashlib
+import http.client
 import ipaddress
 import re
+import socket
 import tempfile
 import threading
+import time
 from contextlib import nullcontext
 import urllib.error
 import urllib.parse
@@ -449,6 +452,25 @@ def load_user_defaults(
     return profile_user_defaults(by_id[str(root["default_profile_id"]).strip()], root)
 
 
+def profile_timeout_seconds(
+    profile_id: str,
+    *,
+    profiles: tuple[RemoteProviderProfile, ...] | None = None,
+    settings_path: Path | None = None,
+) -> int:
+    """The request budget the operator configured for a profile (``timeout_seconds``, default 60).
+
+    Editor actions such as writing assistance use the same budget as graph execution, so
+    a slow local provider that needs a longer ``timeout_seconds`` in the private settings
+    file gets it everywhere.
+    """
+    catalog = profiles or load_provider_catalog()
+    profile = next((item for item in catalog if profile_id in {item.id, item.label}), None)
+    if profile is None:
+        raise RemoteLLMConfigurationError(f"Unsupported remote LLM provider profile '{profile_id}'")
+    return profile_user_defaults(profile, _load_settings_root(catalog, settings_path)).timeout_seconds
+
+
 def resolve_profile_endpoint(
     profile: RemoteProviderProfile,
     *,
@@ -484,16 +506,220 @@ class _NoRemoteRedirects(urllib.request.HTTPRedirectHandler):
         raise RemoteLLMProviderError("Remote LLM redirects are blocked. Configure the final endpoint directly.")
 
 
+_TRANSPORT_CHUNK_BYTES = 65536
+_BUDGET_MESSAGE = "Remote LLM request exceeded the time budget"
+
+
+class _TransportWatchdog:
+    """Shuts the connection's socket down when the wall-clock budget is spent.
+
+    A socket timeout bounds one receive at a time. A peer that keeps sending one
+    byte per interval while the status line, the headers or a chunk header are
+    still being read never trips it. The watchdog therefore arms one timer for
+    the whole exchange and shuts the socket down when it fires, so every pending
+    or later receive fails and the transport reports the budget as spent.
+    """
+
+    def __init__(self, deadline: float) -> None:
+        self.deadline = deadline
+        self.expired = False
+        self._lock = threading.Lock()
+        self._sockets: list = []
+        self._timer: threading.Timer | None = None
+
+    def remaining(self) -> float:
+        return self.deadline - time.monotonic()
+
+    def arm(self, sock) -> None:
+        with self._lock:
+            self._sockets.append(sock)
+            if self.expired:
+                self._shutdown(sock)
+            elif self._timer is None:
+                self._timer = threading.Timer(max(0.0, self.remaining()), self._expire)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def _expire(self) -> None:
+        with self._lock:
+            self.expired = True
+            for sock in self._sockets:
+                self._shutdown(sock)
+
+    @staticmethod
+    def _shutdown(sock) -> None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+    def cancel(self) -> None:
+        with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+
+
+class _BudgetedTLSContext:
+    """Wraps an ``ssl.SSLContext`` so the TLS socket, not the detached plain socket, is watched.
+
+    ``ssl.SSLSocket`` takes over the file descriptor of the plain socket and leaves
+    the original object inert, so a watchdog that only knows the plain socket could
+    no longer end the connection. The proxy registers the TLS socket before the
+    handshake and runs the handshake itself, so a stalled handshake is cut off too.
+    Certificate and host-name verification stay exactly as the wrapped context does them.
+    """
+
+    def __init__(self, context, watchdog: _TransportWatchdog) -> None:
+        self._context = context
+        self._watchdog = watchdog
+
+    def wrap_socket(self, sock, **kwargs):
+        kwargs["do_handshake_on_connect"] = False
+        tls = self._context.wrap_socket(sock, **kwargs)
+        self._watchdog.arm(tls)
+        try:
+            if self._watchdog.remaining() <= 0:
+                raise TimeoutError(_BUDGET_MESSAGE)
+            tls.do_handshake()
+        except BaseException:
+            tls.close()  # not yet owned by the connection, so nobody else would close it
+            raise
+        return tls
+
+    def __getattr__(self, name):
+        return getattr(self._context, name)
+
+
+def _budgeted_connection(base, watchdog: _TransportWatchdog):
+    """A connection class whose sockets are registered with the watchdog as they are created.
+
+    http.client exposes the socket factory as the ``_create_connection`` attribute so
+    callers can substitute it. The replacement resolves the host name (name resolution
+    itself is outside the budget), then tries one numeric address at a time with the
+    remaining budget as that attempt's timeout, and hands every socket to the watchdog.
+    The address string from ``getaddrinfo`` is passed through unchanged, so a scoped
+    IPv6 address keeps its scope. For HTTPS the TLS context is proxied so the TLS
+    socket is watched as well.
+    """
+
+    class _Connection(base):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            context = getattr(self, "_context", None)
+            if context is not None:
+                self._context = _BudgetedTLSContext(context, watchdog)
+            create = self._create_connection  # the stdlib factory: one address, one timeout
+
+            def budgeted(address, timeout=None, source_address=None):
+                host, port = address
+                addresses = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+                last_error: OSError | None = None
+                for _family, _kind, _proto, _name, sockaddr in addresses:
+                    remaining = watchdog.remaining()
+                    if remaining <= 0 or watchdog.expired:
+                        raise TimeoutError(_BUDGET_MESSAGE)
+                    attempt = remaining if timeout is None else min(float(timeout), remaining)
+                    numeric_host = sockaddr[0]
+                    if len(sockaddr) == 4 and sockaddr[3] and "%" not in numeric_host:
+                        numeric_host = f"{numeric_host}%{sockaddr[3]}"  # keep the IPv6 scope id
+                    try:
+                        sock = create((numeric_host, sockaddr[1]), attempt, source_address)
+                    except OSError as error:
+                        last_error = error
+                        continue
+                    watchdog.arm(sock)
+                    return sock
+                if last_error is not None:
+                    raise last_error
+                raise OSError(f"no address found for {host}:{port}")
+
+            self._create_connection = budgeted
+
+    return _Connection
+
+
+class _BudgetedHTTPHandler(urllib.request.HTTPHandler):
+    def __init__(self, watchdog: _TransportWatchdog) -> None:
+        super().__init__()
+        self._watchdog = watchdog
+
+    def http_open(self, req):
+        return self.do_open(_budgeted_connection(http.client.HTTPConnection, self._watchdog), req)
+
+
+class _BudgetedHTTPSHandler(urllib.request.HTTPSHandler):
+    def __init__(self, watchdog: _TransportWatchdog) -> None:
+        super().__init__()
+        self._watchdog = watchdog
+
+    def https_open(self, req):
+        return self.do_open(
+            _budgeted_connection(http.client.HTTPSConnection, self._watchdog), req, context=self._context
+        )
+
+
+def _read_within_budget(response, watchdog: _TransportWatchdog, limit: int) -> bytes:
+    """Read up to ``limit`` bytes; stop when the budget is spent.
+
+    The watchdog closes the socket at the deadline, so a stalled or trickling
+    body ends in an error here instead of a hang. The size limit stops reading
+    early when a peer sends more than the pack accepts.
+    """
+    read_once = getattr(response, "read1", None) or response.read
+    payload = bytearray()
+    while len(payload) < limit:
+        if watchdog.expired or watchdog.remaining() <= 0:
+            raise RemoteLLMProviderError(_BUDGET_MESSAGE)
+        try:
+            chunk = read_once(min(_TRANSPORT_CHUNK_BYTES, limit - len(payload)))
+        except (TimeoutError, OSError, http.client.HTTPException) as error:
+            if watchdog.expired:
+                raise RemoteLLMProviderError(_BUDGET_MESSAGE) from error
+            raise
+        if not chunk:
+            break
+        payload.extend(chunk)
+    if watchdog.expired and len(payload) < limit:
+        raise RemoteLLMProviderError(_BUDGET_MESSAGE)
+    return bytes(payload)
+
+
 def _urllib_transport(url: str, headers: dict[str, str], body: bytes, timeout: int) -> tuple[int, bytes]:
+    """POST ``body`` and return the status and response bytes within one wall-clock budget.
+
+    ``timeout`` is the budget for the whole exchange after name resolution:
+    connecting, sending, the status line and headers, and the body. It is
+    enforced by a watchdog that shuts the socket down at the deadline; the body
+    is additionally capped in size.
+    """
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    watchdog = _TransportWatchdog(time.monotonic() + max(1, int(timeout)))
+    opener = urllib.request.build_opener(
+        _NoRemoteRedirects(), _BudgetedHTTPHandler(watchdog), _BudgetedHTTPSHandler(watchdog)
+    )
     try:
-        with urllib.request.build_opener(_NoRemoteRedirects()).open(request, timeout=timeout) as response:
-            payload = response.read(MAX_HTTP_RESPONSE_BYTES + 1)
-            return int(response.status), payload
-    except urllib.error.HTTPError as error:
-        return int(error.code), error.read(4097)
-    except (urllib.error.URLError, TimeoutError, OSError) as error:
-        raise RemoteLLMProviderError(f"Remote LLM request failed: {error}") from error
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                payload = _read_within_budget(response, watchdog, MAX_HTTP_RESPONSE_BYTES + 1)
+                return int(response.status), payload
+        except urllib.error.HTTPError as error:
+            with error:
+                try:
+                    return int(error.code), _read_within_budget(error, watchdog, 4097)
+                except (RemoteLLMProviderError, TimeoutError, OSError, http.client.HTTPException):
+                    return int(error.code), b""
+        except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException) as error:
+            # Every socket operation is limited to the remaining budget, so a failure with
+            # the budget (nearly) spent is the budget ending, whichever layer reported it.
+            if watchdog.expired or watchdog.remaining() <= 0.25:
+                raise RemoteLLMProviderError(_BUDGET_MESSAGE) from error
+            raise RemoteLLMProviderError(f"Remote LLM request failed: {error}") from error
+    finally:
+        watchdog.cancel()
 
 
 def _safe_error_text(payload: bytes, secret: str) -> str:
@@ -626,6 +852,10 @@ class OpenAICompatibleChatProvider:
                 Path(temporary_name).unlink(missing_ok=True)
 
     def generate(self, request: LLMRequest) -> LLMResponse:
+        return self.generate_structured(request, ENHANCEMENT_RESPONSE_SCHEMA, "bv_regional_enhancement")
+
+    def generate_structured(self, request: LLMRequest, response_schema: dict[str, Any], schema_name: str) -> LLMResponse:
+        """Use the same credential-bound transport for editor-only structured requests."""
         endpoint = _validated_endpoint(self.endpoint, "Remote LLM endpoint")
         self.validate_configuration(require_api_key=False)
         api_key = self._resolved_api_key(endpoint) if self.auth_mode == "bearer" else ""
@@ -638,9 +868,9 @@ class OpenAICompatibleChatProvider:
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
-                    "name": "bv_regional_enhancement",
+                    "name": schema_name,
                     "strict": True,
-                    "schema": ENHANCEMENT_RESPONSE_SCHEMA,
+                    "schema": response_schema,
                 },
             },
             "max_completion_tokens": request.max_output_tokens,

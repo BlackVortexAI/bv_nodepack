@@ -22,11 +22,35 @@ git clone https://github.com/BlackVortexAI/bv_nodepack.git
 
 Restart ComfyUI and hard-refresh the browser after installation or update.
 
-Registry review remains open in [issue #217](https://github.com/Comfy-Org/registry-backend/issues/217).
 Registry publication, security-review status and the version offered by Manager are
-separate states; Manager may offer an older version while review is pending.
+separate states. As of 2026-09-13 the Comfy Registry lists **1.4.3** and **1.4.2** as
+active after a manual review (`reviewed SAFE`); 1.3.0 to 1.4.1 and 1.0.1 to 1.2.3 are
+banned and 1.0.0 and older remain active. A Registry-based install offers the newest
+active version; a newly published version is scanned first and may be flagged until it
+is reviewed. The review history is in
+[issue #217](https://github.com/Comfy-Org/registry-backend/issues/217); the pack's
+security model is described in [SECURITY.md](SECURITY.md).
 
 ## Feature overview
+
+### Standalone text and writing assistance
+
+**BV Text** (`utils`) provides a native multiline text field and a STRING output,
+without a Regional document. Use the controls below the field to select a provider
+and model, translate or improve wording, and undo the last replacement. Provider
+credentials use the shared private backend storage; writing settings stay in the
+node's workflow properties. Assistance runs only when clicked. Queue execution
+returns the stored text unchanged. Newer manual edits are preserved if a response
+or Undo would overwrite them. Disconnect a linked text input before editing the
+local field with writing assistance.
+
+Writing settings include General, Krea 2 and Custom prompt profiles. Selecting a
+curated profile replaces the editable system prompt; the provider and language
+settings are independent. Edited templates are marked Customized. Saved workflows
+keep their actual system prompt until you explicitly select or reset a profile.
+The Krea 2 preset adapts the [official prompting guidance](https://github.com/krea-ai/krea-2/blob/main/docs/prompting.md)
+for conservative rewriting: natural language, existing details and quoted image
+lettering, without inventing scene content. Other model profiles remain pending.
 
 ### Regional prompting and LoRA routing
 
@@ -116,12 +140,54 @@ Report reproducible bugs and feature requests through
 ## License and notices
 
 BV Node Pack is licensed under [GPL-3.0](LICENSE). Third-party attribution and
-provenance are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+provenance, including every library bundled into the frontend, are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The security model of the pack's
+routes, files, downloads and release process is described in [SECURITY.md](SECURITY.md).
 
 ## Changelog
 
 The README keeps the four most recent version entries. The complete history is
 maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_wiki/reference/changelog).
+
+### 1.4.4 — 2026-09-13
+
+- Add **BV Text**, a native multiline text node with a STRING output and optional
+  writing assistance: translate or improve the field through the configured Remote
+  LLM provider, undo the last replacement, and switch between General, Krea 2 and
+  Custom prompt profiles. Assistance runs only when clicked; queue execution returns
+  the stored text unchanged. The assistance route is management-gated, reads at most
+  192 KiB, keeps one request in flight and can only reach the endpoint the stored API
+  key was approved for.
+- Reuse prepared MODEL/CLIP state for Krea 2 and Anima LLLite consumers across
+  repeated runs when the LoRA stack, strengths and files are unchanged, instead of
+  preparing again; any file, option or patch change invalidates the entry.
+- Give every Remote LLM request one wall-clock budget that covers connecting, the
+  status line and headers, chunked framing and the body. A provider that stalls or
+  trickles data is cut off at the configured timeout and the request fails; the
+  writing-assistance slot is freed for the next request. Writing assistance uses the
+  profile's configured `timeout_seconds` instead of a fixed 60 seconds.
+- Read every JSON request body of the pack's routes through one bounded reader with a
+  route-specific limit (completion search 16 KiB, catalog channel 1 KiB, LUT install
+  4 KiB, API key 16 KiB, writing assistance 192 KiB); oversized or malformed bodies
+  are refused with 413 or 400 before any work starts. Infinite or absurd `limit`
+  values in a completion search fall back to the default instead of failing.
+- Ship `SECURITY.md` with the pack's security model: management routes, private
+  storage, the deliberately public catalog refresh and startup fetch, file and
+  download boundaries, the frontend bundle and the release process.
+- Start the frontend bundle with a readable header naming the vendored libraries and
+  versions, and list all eight bundled libraries with license, copyright and lockfile
+  integrity in `THIRD_PARTY_NOTICES.md`. The libraries themselves are unchanged.
+- Turn the Registry scan replica into a hard test: a pattern match outside the
+  documented baseline fails the suite. Add a test of the packaged file set, and
+  exclude design references, brand sources and a TypeScript declaration from the
+  package. Both are compatibility and packaging checks, not security tests.
+- Publish only from a commit whose Validate run succeeded, through a publish job with
+  read-only permissions and a pinned comfy-cli, writing a manifest of the packaged
+  files before the upload and comparing the archive the Registry stored afterwards.
+  Validate additionally audits the UI dependencies and verifies that a rebuild emits
+  nothing but the committed bundle.
+- Record the Registry review status in the README and note that API keys saved before
+  1.4.2 on a server other machines could reach should be rotated.
 
 ### 1.4.3 — 2026-09-08
 
@@ -178,28 +244,6 @@ maintained in the [Wiki changelog](https://blackvortexai.github.io/bv_nodepack_w
   load unchanged apart from the dropped endpoint value.
 - Move internal design notes out of the Registry package.
 
-### 1.4.0 — 2026-09-08
-
-- Add reference-driven regional editing with **BV Reference Registry**, inline
-  `@` references, regional tool controls and the Krea 2 Identity Edit path.
-- Add an exclusive workflow-wide Global LoRA Registry and per-editor opt-out,
-  preserving legacy groups and manual selections. Share occurrence-aware automatic
-  MODEL/CLIP preparation across attention and Native Conditioning consumers.
-- Append Native Conditioning's MODEL input/output while retaining positive and
-  negative output ordinals; use the returned MODEL with the sampler.
-- Support official Krea 2 LoRA key mappings and header-based routing evidence.
-  Catalog routing distinguishes token candidates, multipass and unknown files;
-  target-model compatibility remains unknown without a concrete model check.
-- Autosave valid Registry edits, catalog additions and Undo/Redo. Keep peer Global
-  changes synchronized and preserve invalid drafts without replacing valid state.
-- Grow Registry nodes to a bounded content height before scrolling, respecting
-  manual dimensions. Enlarge the catalog and its preview pane and automatically
-  fill and paginate results. Persist header-check results across restarts, invalidate
-  them when a file changes, and continue reading local metadata and previews fresh.
-- Show validated Civitai links from local metadata and concise routing information.
-- Fix Quick Edit spacing and textarea resize reachability through whole-content
-  scrolling, and improve Smart Pipe/Subgraph lifecycle and sizing behavior.
-
 ## Upgrade notes
 
 Version-specific steps and safeguards, newest first. The changelog above lists
@@ -212,6 +256,20 @@ remaining legacy connections to the V3 resource flow, then save, reload and run 
 updated workflow once. Press **Ctrl+Alt+B** to toggle **Regional Legacy Debug Mode**
 when hidden legacy ports or V3 provider links are needed for inspection. The
 shortcut can be changed in ComfyUI Settings → Shortcuts.
+
+### Updating to 1.4.4
+
+- Restart ComfyUI and reload the browser after updating both backend and frontend so
+  the rebuilt bundle and the new **BV Text** node are picked up.
+- Remote LLM requests now fail at the configured timeout even when the provider keeps
+  sending data slowly. If a legitimate provider needs longer, raise `timeout_seconds`
+  in the private `remote_llm_settings.json`; the allowed range is unchanged.
+- Read [SECURITY.md](SECURITY.md) once: it describes which routes are public, what
+  the pack fetches at startup, and why. If an API key was saved before 1.4.2 on a
+  server other machines could reach, rotate it.
+- Writing-assistance settings, including the style guide, are stored in the node's
+  workflow properties and therefore travel with saved workflows and image metadata.
+  Do not put secrets into them.
 
 ### Updating to 1.4.3
 
@@ -266,30 +324,7 @@ shortcut can be changed in ComfyUI Settings → Shortcuts.
   Saved workflows load unchanged apart from the dropped endpoint value.
 - Restart ComfyUI and reload the browser after updating both backend and frontend.
 
-### Updating to 1.4.0
-
-- Enable **Global** in the intended LoRA Registry. Only one Registry may be active
-  across the workflow and its Subgraphs. New Registries start with Global off;
-  conflicting saved selections require an explicit choice, never a load-order winner.
-- The Regional Editor's **Globalen Stack anwenden** checkbox defaults to on.
-  Turning it off skips automatic Global LoRAs for that editor while preserving
-  manually selected normal stacks. Supply original MODEL/CLIP inputs when opting
-  out; already applied weights cannot be undone by this checkbox.
-- With **BV Regional Native Conditioning**, connect the source MODEL input and
-  use its **MODEL output (slot 2)** for the sampler when applying Global LoRAs.
-  Positive and negative outputs remain in slots 0 and 1. Model-specific attention
-  nodes prepare their own MODEL/CLIP through the same automatic service.
-- Existing basis groups retain their identities, order, strengths and enabled
-  states inside the Global area. Existing manual global assignments remain
-  separate; they are not copied into the fixed Global stack.
-- Registry dialog changes save immediately to the node configuration, including
-  Undo/Redo and catalog additions. Invalid drafts keep the last valid saved state.
-  Save the workflow separately to persist changes to disk.
-- Restart ComfyUI and reload the browser after updating both backend and frontend.
-  The catalog identifies an older running backend instead of presenting missing
-  routing fields as a compatibility result.
-
-The following safeguards from 1.3.0 to 1.4.2 apply together:
+The following safeguards from 1.3.0 to 1.4.4 apply together:
 
 - All BV runtime files (`remote_llm_settings.json`, `remote_llm_secrets.json`,
   `admin_settings.json`, LUT catalogs, caches) live in ComfyUI's private
@@ -321,10 +356,16 @@ The following safeguards from 1.3.0 to 1.4.2 apply together:
   BV Regional Image Save embeds as Civitai metadata, and the LUT install
   directory: links are resolved first, and a file that resolves outside its
   configured folders is never read or written.
+- Every Remote LLM request has one wall-clock budget; every JSON request body the
+  pack accepts is read with a route-specific size limit before it is parsed.
 - Text logs reject linked log files and linked `bv_logs` directories. Use an
   ordinary log directory below the configured ComfyUI output root. Log names
   must end with `.txt`, `.json` or `.log`; other endings are rejected.
 
 Keep ComfyUI and its settings routes restricted to trusted users, and review
 imported workflows before running them. These safeguards do not constitute
-Registry approval or a guarantee that arbitrary workflows are safe.
+Registry approval or a guarantee that arbitrary workflows are safe. If an API key
+was saved before 1.4.2 on a server that other machines could reach, rotate it: the
+1.4.2 migration moved the key out of the public tree but cannot tell whether it was
+read before. [SECURITY.md](SECURITY.md) describes the complete model, including the
+deliberately public catalog refresh and the startup catalog fetch.

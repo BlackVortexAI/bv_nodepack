@@ -7,8 +7,9 @@ below and in the README.
 
 ## Microsoft Fluent Emoji
 
-The cyclone artwork in `docs/assets/brand/` and the derived BV Node Pack brand
-graphics are based on the Flat variant of the Cyclone emoji from
+The cyclone artwork (kept in the repository under `docs/assets/brand/`, not part of
+the Registry package) and the derived BV Node Pack brand graphics such as the
+Registry icon and banner are based on the Flat variant of the Cyclone emoji from
 [`microsoft/fluentui-emoji`](https://github.com/microsoft/fluentui-emoji).
 
 MIT License
@@ -101,6 +102,50 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Bundled frontend libraries
+
+`js/bv_nodepack.core.js` is the pack's frontend, built by Vite from the TypeScript
+sources in `ui/src`. It is ordinary minified output, not obfuscated code: the sources,
+`ui/package.json`, `ui/package-lock.json` and `ui/vite.config.js` are in the repository,
+the build is reproducible, and the bundle starts with a readable header listing the
+libraries below. The versions and integrity hashes are the ones the lockfile resolved
+for the release; `npm ci` installs exactly these.
+
+| Library | Version | License | Copyright | Lockfile integrity (sha512, first 16 chars) |
+|---|---|---|---|---|
+| react | 18.3.1 | MIT | Facebook, Inc. and its affiliates | `wS+hAgJShR0KhEvP` |
+| react-dom | 18.3.1 | MIT | Facebook, Inc. and its affiliates | `5m4nQKp+rZRb09LN` |
+| scheduler | 0.23.2 | MIT | Facebook, Inc. and its affiliates | `UOShsPwz7NrMUqhR` |
+| flexlayout-react | 0.10.5 | MIT | 2017 Caplin Systems Ltd | `VP2AGJxERKeECmW1` |
+| prismjs | 1.30.0 | MIT | 2012 Lea Verou | `DEvV2ZF2r2/63V+t` |
+| react-colorful | 5.8.0 | MIT | 2020-present Vlad Shilov | `Wy9OzPfjSN9bF12O` |
+| react-simple-code-editor | 0.14.1 | MIT | 2018-2019 Satyajit Sahoo | `BR5DtNRy+AswWJEC` |
+| modern-screenshot | 4.7.0 | MIT | 2021-present wxm | `9YxN+ddPSMMlhylO` |
+
+The full integrity strings are in `ui/package-lock.json`. The libraries are included
+unmodified; BV does not patch them, including not to change how automated code scans
+read them. All eight are distributed under the MIT License reproduced below; the
+copyright line of each holder is given in the table.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## modern-screenshot
 

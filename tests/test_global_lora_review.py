@@ -233,9 +233,10 @@ class NativeGlobalPortReview(unittest.TestCase):
         self.assertEqual(cls.RETURN_NAMES[:2], ("positive", "negative"))
         self.assertEqual(list(cls.INPUT_TYPES()["optional"]), ["lora_registry", "lora_bindings", "model"])
         with patch.object(module, "apply_global_patches", return_value=("patched", "patched-clip")) as prepare, patch.object(module, "compile_native_conditioning", return_value=("pos", "neg")) as compile_native, patch.object(module, "_consumer_lora_scopes", return_value={}), patch.object(module, "create_hook_groups", return_value={}):
-            result = cls().compile(DOCUMENT, "clip", model="model")
+            node = cls()
+            result = node.compile(DOCUMENT, "clip", model="model")
         self.assertEqual(result, ("pos", "neg", "patched"))
-        prepare.assert_called_once_with("model", "clip", DOCUMENT)
+        prepare.assert_called_once_with("model", "clip", DOCUMENT, preparation_cache=node._global_lora_preparation)
         self.assertEqual(compile_native.call_args.args[1], "patched-clip")
 
 

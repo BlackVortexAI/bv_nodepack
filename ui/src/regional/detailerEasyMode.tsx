@@ -2,6 +2,7 @@ import { ResourcePicker, type ResourcePickerCollector } from "../ui/components";
 import { defaultConditioning, defaultDetection, parseDetailerPlanConfig, serializeDetailerPlanConfig, type DetailerPlanConfig, type DetailerPlanRegion } from "./detailerPlanConfig";
 import { detailerV3Catalog, scheduleDetailerPromptV3Reconcile } from "./detailerV3Graph";
 import { enableRegistryFamily } from "./registryDgFamilies";
+import {reconcileRegionalJobs} from "./regionalJobConfig";
 
 const widget=(node:any,name:string)=>node?.widgets?.find((item:any)=>item.name===name);
 export const emptyDetailerEasyConfig=():DetailerPlanConfig=>({version:1,jobs:[]});
@@ -9,8 +10,9 @@ export const readDetailerEasyConfig=(node:any,regions:DetailerPlanRegion[])=>par
 
 export function reconcileDetailerEasyConfig(config:DetailerPlanConfig,regions:DetailerPlanRegion[]){
     const eligible=regions.filter(region=>region.enabled!==false&&(region.usage==="detailer"||region.usage==="both"));
-    const byRegion=new Map(config.jobs.filter(job=>job.region_ids.length===1).map(job=>[job.region_ids[0],job]));
-    const jobs=eligible.map(region=>byRegion.get(region.id)??({id:crypto.randomUUID(),region_ids:[region.id],primary_region_id:region.id,mask_composition:"union" as const,prompt_composition:"context" as const,conditioning:defaultConditioning(),detector_assignments:[]}));
+    const jobs=reconcileRegionalJobs(config,{document_id:"",regions:eligible}).jobs;
+    const covered=new Set(jobs.flatMap(job=>job.region_ids));
+    for(const region of eligible)if(!covered.has(region.id))jobs.push({id:crypto.randomUUID(),region_ids:[region.id],primary_region_id:region.id,mask_composition:"union",prompt_composition:"context",conditioning:defaultConditioning(),detector_assignments:[]});
     return {...config,jobs};
 }
 

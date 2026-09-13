@@ -916,6 +916,7 @@ class RegionalNodeTests(unittest.TestCase):
 
         class FakeLoader:
             def load_model_patch(self, name):
+                calls["loads"] = calls.get("loads", 0) + 1
                 calls["name"] = name
                 return ("loaded-patch",)
 
@@ -927,10 +928,18 @@ class RegionalNodeTests(unittest.TestCase):
         fake_core = types.ModuleType("comfy_extras.nodes_model_patch")
         fake_core.ModelPatchLoader = FakeLoader
         fake_core.AnimaLLLiteApply = FakeApply
-        with unittest.mock.patch.dict(sys.modules, {"comfy_extras.nodes_model_patch": fake_core}):
-            result = self.module.BVRegionalAnimaLLLiteNode().apply(
+        with unittest.mock.patch.dict(sys.modules, {"comfy_extras.nodes_model_patch": fake_core}), mock.patch.object(
+            self.module.BVRegionalAnimaLLLiteNode, "_model_patch_key", return_value=(FakeLoader, "patch")
+        ):
+            node = self.module.BVRegionalAnimaLLLiteNode()
+            result = node.apply(
                 "source-model", fixture(), "anima-regional.safetensors", 0.75, 0.1, 0.8
             )
+            original_apply = calls["apply"]
+            node.apply("next-model", fixture(), "anima-regional.safetensors", 0.5, 0.2, 0.9)
+            self.assertEqual(calls["loads"], 1)
+            self.assertEqual(calls["apply"], ("next-model", "loaded-patch", (1, 1024, 1536, 3), 0.5, 0.2, 0.9, None))
+            calls["apply"] = original_apply
 
         self.assertIs(
             self.module.NODE_CLASS_MAPPINGS["BV Regional Anima LLLite"],
@@ -944,6 +953,48 @@ class RegionalNodeTests(unittest.TestCase):
     def test_anima_lllite_node_rejects_an_inverted_sampling_range(self):
         with self.assertRaisesRegex(ValueError, "start_percent must not exceed end_percent"):
             self.module.BVRegionalAnimaLLLiteNode().apply("model", fixture(), "patch.safetensors", 1, 0.9, 0.2)
+
+    def test_anima_lllite_loaded_weights_cache_is_bounded_and_invalidates(self):
+        node = self.module.BVRegionalAnimaLLLiteNode()
+        loader = mock.Mock()
+        loader.return_value.load_model_patch.side_effect = lambda name: (object(),)
+        with mock.patch.object(node, "_model_patch_key", side_effect=lambda name, cls: (cls, name)):
+            first = node._load_model_patch("a", loader)
+            self.assertIs(first, node._load_model_patch("a", loader))
+            node._load_model_patch("b", loader)
+            self.assertIsNot(first, node._load_model_patch("a", loader))
+            self.assertEqual(loader.return_value.load_model_patch.call_count, 3)
+            loader.return_value.load_model_patch.side_effect = RuntimeError("load failed")
+            with self.assertRaisesRegex(RuntimeError, "load failed"):
+                node._load_model_patch("b", loader)
+            self.assertIsNone(node._model_patch_entry)
+
+    def test_anima_lllite_does_not_retain_file_changed_during_load(self):
+        node = self.module.BVRegionalAnimaLLLiteNode()
+        loader = mock.Mock()
+        loader.return_value.load_model_patch.return_value = (object(),)
+        with mock.patch.object(node, "_model_patch_key", side_effect=[("before",), ("after",)]):
+            node._load_model_patch("a", loader)
+        self.assertIsNone(node._model_patch_entry)
+
+    def test_anima_lllite_file_key_tracks_resolved_file_state(self):
+        node = self.module.BVRegionalAnimaLLLiteNode()
+        paths = types.ModuleType("folder_paths")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "patch.safetensors"
+            path.write_bytes(b"a")
+            paths.get_full_path_or_raise = lambda category, name: str(path)
+            with mock.patch.dict(sys.modules, {"folder_paths": paths}):
+                key = node._model_patch_key("patch", object)
+                self.assertEqual(key, node._model_patch_key("patch", object))
+                path.write_bytes(b"changed")
+                self.assertNotEqual(key, node._model_patch_key("patch", object))
+                self.assertNotEqual(key, node._model_patch_key("patch", str))
+                path.unlink()
+                node._model_patch_entry = (key, object())
+                with self.assertRaises(FileNotFoundError):
+                    node._load_model_patch("patch", object)
+                self.assertIsNone(node._model_patch_entry)
 
     def test_image_sender_targets_document_and_preserves_image_passthrough(self):
         sender = self.module.BVRegionalImageSendNode()

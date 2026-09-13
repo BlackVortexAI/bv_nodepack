@@ -1,3 +1,5 @@
+import {PromptAssistContext,PromptAssistPanel,usePromptAssist} from "./PromptAssist";
+import {ASSIST_DOCUMENT_EVENT} from "./promptAssistState";
 import {GlobalLoraApplyControl} from "./GlobalLoraApplyControl";
 import ReferenceToolsPanel from "./ReferenceToolsPanel";
 import {regionalActiveTools} from "./regionalToolState";
@@ -23,6 +25,7 @@ import { LORA_V3_INVENTORY_CHANGED_EVENT } from "./loraV3Inventory";
 export type RegionalNodeRef = {
     id: number | string;
     title?: string;
+    properties?:Record<string,unknown>;
     widgets?: Array<{ name: string; value: unknown; callback?: (value: unknown) => void }>;
     graph?: { setDirtyCanvas?: (foreground: boolean, background: boolean) => void };
 };
@@ -61,6 +64,8 @@ const promptsFor = (document: RegionalDocument, target: string): PromptPair => t
 
 export default function QuickPromptEditor({ open, activationToken=0, activityScope, nodes, initialNode, loraStacks, onClose, onOpenEditor }: Props) {
     const [node, setNode] = useState<RegionalNodeRef | null>(initialNode);
+    const assist=usePromptAssist(node);
+    useEffect(()=>{const refresh=(event:Event)=>{if((event as CustomEvent).detail.node===node)setDocumentValue((event as CustomEvent).detail.next);};window.addEventListener(ASSIST_DOCUMENT_EVENT,refresh);return()=>window.removeEventListener(ASSIST_DOCUMENT_EVENT,refresh);},[node]);
     const [documentValue, setDocumentValue] = useState<RegionalDocument | null>(null);
     const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
     const [loraV3Config,setLoraV3Config]=useState<LoraV3Config>(()=>readNodeLoraV3Config(initialNode));
@@ -166,14 +171,15 @@ export default function QuickPromptEditor({ open, activationToken=0, activitySco
     const tools=documentValue?regionalActiveTools(documentValue,region,loraV3Config,loraBindings,lutConfig):[];
     const updateTools=(ids:string[])=>updateDocument(next=>{const scope=target==="global"||target==="background"?next:next.regions.find(item=>item.id===target);if(scope)scope.tool_settings={lora:ids.includes("lora"),lut:ids.includes("lut"),references:ids.includes("references")}});
     const menuVisible=useWindowMenuVisibility(node);
-    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>keyFor(item)===id);return kept?<BvMinimizedWindow key={id} title={`Quick Edit · ${kept.title||"BV Regional Prompt"} · #${kept.id}`} onRestore={()=>navigateNode(id,false,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="Regional Quick Edit" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} context={<BvWindowNavigator label="Regional Prompt Node" value={keyFor(node)} options={nodes.filter(item=>windowMenuVisible(item)).map(item=>({value:keyFor(item),label:`${item.title||"BV Regional Prompt"} · #${item.id}`}))} onNavigate={navigateNode}/>} allowWorkspace={false} initialGeometry={geometry} minSize={{width:360,height:320}} className="bv-quick-prompt-window bv-density-compact" onClose={onClose} onGeometry={nextGeometry=>{const next=clampQuickPromptGeometry(nextGeometry,{width:window.innerWidth,height:window.innerHeight});setGeometry(next);persistGeometry(next)}} status={<Badge tone="success" dot>Autosaved</Badge>} actions={<Button intent="primary" disabled={!node||!documentValue} onClick={() => node && onOpenEditor(node)}>Open Full Editor</Button>}>
+    return <PromptAssistContext.Provider value={{node,active:open,documentId:documentValue?.document_id}}><>{keptNodeIds.map(id=>{const kept=nodes.find(item=>keyFor(item)===id);return kept?<BvMinimizedWindow key={id} title={`Quick Edit · ${kept.title||"BV Regional Prompt"} · #${kept.id}`} onRestore={()=>navigateNode(id,false,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="Regional Quick Edit" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} context={<BvWindowNavigator label="Regional Prompt Node" value={keyFor(node)} options={nodes.filter(item=>windowMenuVisible(item)).map(item=>({value:keyFor(item),label:`${item.title||"BV Regional Prompt"} · #${item.id}`}))} onNavigate={navigateNode}/>} allowWorkspace={false} initialGeometry={geometry} minSize={{width:360,height:320}} className="bv-quick-prompt-window bv-density-compact" onClose={onClose} onGeometry={nextGeometry=>{const next=clampQuickPromptGeometry(nextGeometry,{width:window.innerWidth,height:window.innerHeight});setGeometry(next);persistGeometry(next)}} status={<Badge tone="success" dot>Autosaved</Badge>} actions={<Button intent="primary" disabled={!node||!documentValue} onClick={() => node && onOpenEditor(node)}>Open Full Editor</Button>}>
         <div className="bv-quick-prompt-body">
             {error ? <Callout tone="danger" title="Prompt document unavailable">{error}</Callout> : documentValue && prompts && targetExists(documentValue,target) && <>
                 <SelectField label="Prompt Target" value={target} onValue={selectTarget} options={[{value:"global",label:"Global"},{value:"background",label:"Background (Outside Regions)"},...documentValue.regions.map(region=>({value:region.id,label:region.name}))]}/>
                 <div className="bv-ui-stack">
                     {region&&<FieldFrame as="div" label="Usage"><SegmentedToggleGroup label="Region usage" required items={[{id:"generation",label:"Generation"},{id:"detailer",label:"Detailer"}]} value={region.usage==="both"?["generation","detailer"]:[region.usage]} onValue={ids=>updateDocument(next=>{const selected=next.regions.find(item=>item.id===target);if(selected){selected.usage=ids.length===2?"both":ids[0] as typeof selected.usage;setDetailerConfig(writeDetailerEasyConfig(node,reconcileDetailerEasyConfig(readDetailerEasyConfig(node,next.regions),next.regions)))}})}/></FieldFrame>}
                     {region&&(region.usage==="both"||region.usage==="detailer")&&<DetailerEasyRegionPicker node={node} config={detailerConfig} regionId={region.id} collectors={detailerV3Catalog(node)} onConfig={setDetailerConfig}/>}
-                    <ToolTabs key={target} label={region?"Region tools":"Global tools"} value={tools} onValue={updateTools} items={[
+                    <ToolTabs key={target} label={region?"Region tools":"Global tools"} value={[...tools,...(assist.config.enabled?["assist"]:[])]} onValue={ids=>{assist.onConfig({...assist.config,enabled:ids.includes("assist")});const next=ids.filter(id=>id!=="assist");if(JSON.stringify(next)!==JSON.stringify(tools))updateTools(next);}} items={[
+                        {id:"assist",label:"Writing",content:<PromptAssistPanel {...assist}/>},
                         {id:"lora",label:"LoRA",content:(usesLoraV3&&loraV3Target?<LoraV3ScopePicker {...loraV3ScopeProps} target={loraV3Target}/>:<SelectField label={target === "global" || target === "background" ? "Global LoRA Stack" : "Additional LoRA Stack"} help={target === "global" || target === "background" ? "Applied globally and inherited by every region." : "Added to the global stack for this region."} value={selectedStack} onValue={value=>updateLoraStack(value||null)} options={[{value:"",label:"None"},...loraStacks.map(stack=>({value:stack.id,label:stack.name}))]}/>)},
                         {id:"lut",label:"LUT",content:region?<LutEasyRegionPicker node={node} config={lutConfig} regionId={region.id} collectors={lutV3Catalog(node)} detectorCollectors={detailerV3Catalog(node)} onConfig={setLutConfig}/>:<LutEasyGlobalPicker node={node} config={lutConfig} collectors={lutV3Catalog(node)} detectorCollectors={detailerV3Catalog(node)} onConfig={setLutConfig}/>}
                         ,...(!region?[{id:"references",label:"References",content:<ReferenceToolsPanel node={node} value={documentValue.reference_images} onValue={images=>updateDocument(next=>{next.reference_images=images})}/>}]:[])
@@ -181,8 +187,8 @@ export default function QuickPromptEditor({ open, activationToken=0, activitySco
                 </div>
                 {target==="global"&&<GlobalLoraApplyControl node={node} config={loraV3Config} onConfig={setLoraV3Config}/>}
                 <ReferenceSearchToggle value={prompts.reference_editor===true} onValue={reference_editor=>updatePrompts({...prompts,reference_editor})}/>
-                <PromptPairFields key={target} value={prompts} onValue={updatePrompts} scope={target==="global"||target==="background"?target:"region"} choices={referenceChoices}/>
+                <PromptPairFields assistTarget={target} key={`${keyFor(node)}:${target}`} value={prompts} onValue={updatePrompts} scope={target==="global"||target==="background"?target:"region"} choices={referenceChoices}/>
             </>}
         </div>
-    </BvManagedWindow></>;
+    </BvManagedWindow></></PromptAssistContext.Provider>;
 }

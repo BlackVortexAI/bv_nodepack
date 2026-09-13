@@ -26,7 +26,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.5,<3"
-          python -m pip install "aiohttp>=3.10,<4" "numpy>=1.26,<3" "Pillow>=10,<13" "jsonschema>=4.20,<5"
+          python -m pip install "aiohttp>=3.10,<4" "numpy>=1.26,<3" "Pillow>=10,<13" "jsonschema>=4.20,<5" "pathspec>=0.12,<1"
+          # Test-only: the transport tests generate a throwaway TLS certificate.
+          python -m pip install "cryptography>=42,<60"
 
       - name: Validate Python syntax
         run: python -m compileall -q __init__.py py
@@ -45,6 +47,10 @@ jobs:
         working-directory: ui
         run: npm ci
 
+      - name: Audit UI dependencies
+        working-directory: ui
+        run: npm audit --audit-level=high
+
       - name: Run frontend behavior tests
         working-directory: ui
         run: npm test
@@ -57,5 +63,7 @@ jobs:
         working-directory: ui
         run: npm run build
 
-      - name: Verify committed UI bundle
-        run: git diff --exit-code -- js/bv_nodepack.core.js
+      - name: Verify committed UI bundle and that the build emitted nothing else
+        run: |
+          git diff --exit-code -- js/
+          test -z "$(git status --porcelain -- js/)"

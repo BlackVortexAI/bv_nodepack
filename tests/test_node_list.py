@@ -116,6 +116,7 @@ EXPECTED_NODE_NAMES_BY_CATEGORY = {
         "BV Hex Color To Int",
         "BV Inspect Any",
         "BV Seed",
+        "BV Text",
         "BV Text Log Writer",
     },
 }

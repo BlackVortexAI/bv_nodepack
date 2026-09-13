@@ -1,5 +1,6 @@
-import { parseLoraV3Config, serializeLoraV3Config } from "./loraV3Config";
+import { parseLoraV3Config, serializeLoraV3Config, reconcileRegionalLoraConfig } from "./loraV3Config";
 import { parseDocument, type RegionalDocument } from "./model";
+import {regionalJobCandidates} from "./regionalJobConfig";
 
 export const REGIONAL_DRAFT_PROPERTY = "bvRegionalEditorDraftV1";
 export const REGIONAL_MIGRATION_EVENT = "bv-regional-migration-report";
@@ -102,11 +103,13 @@ export function applyRegionalCanvasSize(document:RegionalDocument,canvas:Regiona
 export function migrateRegionalNode(node: NodeLike): RegionalMigrationResult {
     const result: RegionalMigrationResult = { nodeId: String(node.id ?? ""), nodeTitle: node.title || "BV Regional node", migrated: false, assumedDefaults: [] };
     const candidates: Array<{ target: Widget; value: string }> = [];
+    let ownedDocument:RegionalDocument|undefined;
     try {
         const documentWidget = widget(node, "regional_json");
         if (documentWidget) {
             const before = typeof documentWidget.value === "string" ? JSON.parse(documentWidget.value) : structuredClone(documentWidget.value);
             const document = parseDocument(before);
+            ownedDocument=document;
             const value = JSON.stringify(document);
             if (before?.version === 1) result.assumedDefaults.push("region usage = generation");
             if (String(documentWidget.value ?? "") !== value) candidates.push({ target: documentWidget, value });
@@ -114,17 +117,17 @@ export function migrateRegionalNode(node: NodeLike): RegionalMigrationResult {
         const loraWidget = widget(node, "lora_v3_config_json")
             ?? (nodeClass(node) === "BV Regional LoRA" ? widget(node, "config_json") : undefined);
         if (loraWidget && String(loraWidget.value ?? "").trim()) {
-            const parsed = parseLoraV3Config(loraWidget.value), value = serializeLoraV3Config(parsed);
+            const parsed = parseLoraV3Config(loraWidget.value), value = serializeLoraV3Config(ownedDocument?reconcileRegionalLoraConfig(parsed,ownedDocument):parsed);
             if (String(loraWidget.value ?? "") !== value) candidates.push({ target: loraWidget, value });
         }
+        if(ownedDocument)candidates.push(...regionalJobCandidates(node,ownedDocument));
     } catch (error) {
         result.error = error instanceof Error ? error.message : String(error);
         return result;
     }
-    for (const candidate of candidates) {
-        candidate.target.value = candidate.value;
-        candidate.target.callback?.(candidate.value);
-    }
+    // Callbacks must never observe a repaired document with the old sidecar.
+    for (const candidate of candidates) candidate.target.value = candidate.value;
+    for (const candidate of candidates) candidate.target.callback?.(candidate.value);
     result.migrated = candidates.length > 0;
     if (result.migrated) {
         node.graph?.change?.();

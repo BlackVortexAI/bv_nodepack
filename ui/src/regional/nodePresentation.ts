@@ -228,6 +228,7 @@ const POLICIES:Readonly<Record<string,NodePresentationPolicy>>={
         ],
         actions:["Configure Smart Pipe"],
     },
+    "BV Text":{},
     "BV Pipe":{
         ports:[
             {role:"dynamicReserve",prefixes:["v_","out_"]},

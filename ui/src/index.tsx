@@ -59,6 +59,7 @@ import { configurePresentationSizeLifecycle, presentationSize, setAutomaticPrese
 import { installExecutionResultPreview } from "./regional/executionResultPreview";
 import { hasNodePresentationPolicy } from "./regional/nodePresentation";
 import { installLoraRegistryUi } from "./regional/loraRegistryUi";
+import { installNativeTextNode } from "./regional/nativeTextNode";
 import { ExportDialog } from "./export/ExportDialog";
 import { installExporter } from "./export/install";
 import { openExportDialog } from "./export/events";
@@ -763,6 +764,7 @@ comfyApp.registerExtension({
     }],
     beforeRegisterNodeDef(nodeType: any, nodeData: any) {
         installNodePresentationLifecycle(nodeType,nodeData);
+        if(nodeData.name==="BV Text"){installNativeTextNode(nodeType);return}
         if(nodeData.name==="BV Inspect Any"){
             installExecutionResultPreview(nodeType,nodeData.name,{id:"bv-inspect-any",widgetName:"bv_inspect_any_preview",messageKey:"text",placeholder:"Run the workflow to inspect the value.",minHeight:140,maxHeight:420});
             return;

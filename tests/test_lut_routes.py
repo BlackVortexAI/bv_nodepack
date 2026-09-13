@@ -32,18 +32,22 @@ class RouteTable:
 
 
 class Request:
+    """aiohttp request stand-in: the routes stream ``content`` through the bounded reader."""
+
     def __init__(self, body=None, query=None, remote="127.0.0.1"):
         self.body = body or {}
         self.query = query or {}
         self.remote = remote
+        self.content = self
 
-    async def json(self):
-        return self.body
+    async def iter_chunked(self, _size):
+        yield json.dumps(self.body).encode("utf-8")
 
 
 class EmptyPostRequest(Request):
-    async def json(self):
+    async def iter_chunked(self, _size):
         raise AssertionError("manual refresh must not require or parse a JSON body")
+        yield b""  # pragma: no cover - keeps this an async generator
 
 
 class LutRouteTests(unittest.TestCase):

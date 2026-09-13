@@ -70,5 +70,6 @@
   "BV Subgraph Divider": "Add a persistent visual divider to a Subgraph interface.",
   "BV Subgraph Heading": "Add a persistent heading to a Subgraph interface.",
   "BV Subgraph Spacer": "Add persistent spacing to a Subgraph interface.",
+  "BV Text": "Write native text with optional manual translation, wording improvement and Undo; outputs the stored STRING without running an LLM during generation.",
   "BV Text Log Writer": "Preview and optionally write a text value to a safely named UTF-8 log file under the ComfyUI output directory."
 }

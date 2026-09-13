@@ -230,10 +230,10 @@ class EndpointBindingTests(unittest.TestCase):
         with patch.dict(sys.modules, {'server':server}):
             spec.loader.exec_module(routes)
         async def invoke(body, remote='127.0.0.1', listen=('127.0.0.1',)):
-            async def read(): return body
+            async def chunks(_size): yield json.dumps(body).encode()
             with patch.object(admin_gate, 'listen_addresses', return_value=list(listen)), \
                     patch.object(admin_gate, 'default_admin_settings_path', return_value=None):
-                return await routes.remote_llm_set_api_key(SimpleNamespace(json=read, remote=remote))
+                return await routes.remote_llm_set_api_key(SimpleNamespace(content=SimpleNamespace(iter_chunked=chunks), remote=remote))
         self.save()
         before = self.path.read_bytes()
         for body in [{'profile_id':'openai-compatible','endpoint':B},

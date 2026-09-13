@@ -258,9 +258,9 @@ test("detailer and detector lists start summary-first", () => {
     assert.match(detectorView, /<Accordion value=\{expanded\}/);
 });
 
-test("quick edit allocates remaining height to positive and negative prompts", () => {
-    assert.match(styles, /\.bv-prompt-editor-fields \{[^}]*grid-template-rows:minmax\(120px,3fr\) minmax\(100px,2fr\)/s);
-    assert.match(styles, /\.bv-prompt-editor-fields textarea \{[^}]*height:100%/s);
+test("prompt pairs allow independent vertical resizing", () => {
+    assert.match(styles, /\.bv-prompt-editor-fields \{[^}]*grid-auto-rows:auto[^}]*height:auto/s);
+    assert.match(styles, /\.bv-prompt-editor-fields textarea \{[^}]*resize:vertical/s);
 });
 
 test("managed windows separate rounded clipping from overlay escape", () => {

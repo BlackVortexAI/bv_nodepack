@@ -1,8 +1,10 @@
+import type {LoraV3Config} from "./LoraV3ResourcePickerPanel";
+import type {RegionalJobs} from "./regionalJobConfig";
 export type NamedLoraStack = { id: string; name: string; nodeId: string };
 // BV-LEGACY(marked=2026-08-25, remove-after=2026-10-25): Entire V2 LoRA bindings model.
 // Remove this module after workflow loading no longer accepts lora_bindings_json or sidecar wiring.
 export type RegionalLoraBindings = { schema: "bv.regional.lora_bindings"; version: 1; document_id: string; global_stack_id: string | null; regions: Record<string, string> };
-export type RegionalEditorSnapshot<T extends { document_id: string; regions: Array<{ id: string }> }> = { document: T; loraBindings: RegionalLoraBindings };
+export type RegionalEditorSnapshot<T extends { document_id: string; regions: Array<{ id: string }> }> = { document: T; loraBindings: RegionalLoraBindings; loraV3Config?:LoraV3Config; regionalJobs?:RegionalJobs };
 export const emptyLoraBindings = (documentId: string): RegionalLoraBindings => ({ schema: "bv.regional.lora_bindings", version: 1, document_id: documentId, global_stack_id: null, regions: {} });
 
 export function needsFreshStackId(nodeId: string, stackId: string, stacks: NamedLoraStack[]): boolean {
@@ -23,10 +25,12 @@ export function reconcileLoraBindings(bindings: RegionalLoraBindings, regionIds:
     const regions = Object.fromEntries(Object.entries(bindings.regions).filter(([regionId]) => regionIds.has(regionId)));
     return { ...bindings, regions };
 }
-export function createRegionalEditorSnapshot<T extends { document_id: string; regions: Array<{ id: string }> }>(document: T, bindings: RegionalLoraBindings): RegionalEditorSnapshot<T> {
+export function createRegionalEditorSnapshot<T extends { document_id: string; regions: Array<{ id: string }> }>(document: T, bindings: RegionalLoraBindings, loraV3Config?:LoraV3Config, regionalJobs?:RegionalJobs): RegionalEditorSnapshot<T> {
     const documentCopy = structuredClone(document);
     return {
         document: documentCopy,
+        ...(loraV3Config?{loraV3Config:structuredClone(loraV3Config)}:{}),
+        ...(regionalJobs?{regionalJobs:structuredClone(regionalJobs)}:{}),
         loraBindings: structuredClone(reconcileLoraBindings(bindings, new Set(documentCopy.regions.map(region => region.id)))),
     };
 }

@@ -1,3 +1,7 @@
+import {readRegionalJobs,regionalJobCandidates,restoreRegionalJobs} from "./regionalJobConfig";
+import {reconcileRegionalLoraConfig,restoreRegionalLoraConfig} from "./loraV3Config";
+import {PromptAssistContext,PromptAssistPanel,usePromptAssist} from "./PromptAssist";
+import {ASSIST_DOCUMENT_EVENT} from "./promptAssistState";
 import {GlobalLoraApplyControl} from "./GlobalLoraApplyControl";
 import ReferenceToolsPanel from "./ReferenceToolsPanel";
 import {Button} from "../ui/components";
@@ -29,7 +33,7 @@ import { getWindowSwitchMode } from "../ui/preferences";
 import { showBvToast } from "../ui/toastStore";
 import { bvWindowActivity } from "../ui/windowActivity";
 import { LoraV3ScopePicker, sameLoraTarget, type LoraV3Config, type LoraV3Target } from "./LoraV3ResourcePickerPanel";
-import { loraV3Resolved, readNodeLoraV3Config } from "./loraV3Ui";
+import { loraV3Resolved, readNodeLoraV3Config, writeNodeLoraV3Config } from "./loraV3Ui";
 import { regionalLoraScopeViewProps } from "./regionalLoraScopeActions";
 import { LORA_V3_INVENTORY_CHANGED_EVENT } from "./loraV3Inventory";
 import { DetailerEasyRegionPicker, emptyDetailerEasyConfig, readDetailerEasyConfig, reconcileDetailerEasyConfig, writeDetailerEasyConfig } from "./detailerEasyMode";
@@ -90,6 +94,7 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
     const canvasSelections=useRef(new WeakMap<object,Map<string,string>>()),[canvasSelection,setCanvasSelection]=useState(LAST_SENT_IMAGE_SELECTION);
     const [dockResetSignal, setDockResetSignal] = useState(0);
     const [keptNodeIds, setKeptNodeIds] = useState<string[]>([]);
+    const assist=usePromptAssist(node);
     const [loraBindings, setLoraBindings] = useState<RegionalLoraBindings>(() => emptyLoraBindings(""));
     const [loraV3Config,setLoraV3Config]=useState<LoraV3Config>(()=>readNodeLoraV3Config(initialNode));
     const [detailerEasyConfig,setDetailerEasyConfig]=useState<DetailerPlanConfig>(()=>emptyDetailerEasyConfig());
@@ -114,6 +119,21 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
         else if(requestedId)setKeptNodeIds(ids=>ids.filter(id=>id!==requestedId));
         transferredWindow.current=wasOpen?{mode:viewState.mode,geometry:activeWindowGeometry(viewState,{width:window.innerWidth,height:window.innerHeight})}:null;setNode(requested);
     },[activationToken,initialNode,nodes,open]);
+    // Hooks must also run while the window is closed. Gate the subscription,
+    // not the hook, so opening the editor cannot change its hook sequence.
+    useEffect(() => {
+        if (!open || !node) return;
+        const refresh = (event: Event) => {
+            const detail = (event as CustomEvent).detail;
+            if (detail.node !== node) return;
+            const snapshot=createRegionalEditorSnapshot(detail.before,loraBindings,readNodeLoraV3Config(node),readRegionalJobs(node));
+            setHistory(items => [...items.slice(-99), snapshot]);
+            setFuture([]);
+            setDocumentValue(detail.next);
+        };
+        window.addEventListener(ASSIST_DOCUMENT_EVENT, refresh);
+        return () => window.removeEventListener(ASSIST_DOCUMENT_EVENT, refresh);
+    }, [node, open, loraBindings]);
     useEffect(() => { setSelectedGeometryId(null); }, [node, open]);
     useEffect(()=>{if(!open||!node)return;const refresh=()=>setLoraV3Config(readNodeLoraV3Config(node));window.addEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(LORA_V3_INVENTORY_CHANGED_EVENT,refresh);},[node,open]);
     useEffect(()=>{if(!open||!node||!documentValue)return;const refresh=()=>setDetailerEasyConfig(readDetailerEasyConfig(node,documentValue.regions));window.addEventListener(DETAILER_V3_INVENTORY_CHANGED_EVENT,refresh);return()=>window.removeEventListener(DETAILER_V3_INVENTORY_CHANGED_EVENT,refresh);},[node,open,documentValue]);
@@ -122,6 +142,9 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
         if (!open || !node) return;
         try {
             const next = parseDocument(getWidget(node)?.value); next.regions = regionsInPriorityOrder(next.regions); syncPriorities(next.regions);
+            const jobChanges=regionalJobCandidates(node,next);
+            for(const change of jobChanges)change.target.value=change.value;
+            for(const change of jobChanges)change.target.callback?.(change.value);
             const parsedBindings = parseLoraBindings(getBindingsWidget(node)?.value, next.document_id);
             const nextBindings = reconcileLoraBindings(parsedBindings, new Set(next.regions.map(region => region.id)));
             const bindingsWidget = getBindingsWidget(node);
@@ -130,6 +153,8 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
                 bindingsWidget.callback?.(bindingsWidget.value);
                 node.graph?.setDirtyCanvas?.(true, true);
             }
+            const loadedV3=readNodeLoraV3Config(node), reconciledV3=reconcileRegionalLoraConfig(loadedV3,next);
+            if(JSON.stringify(loadedV3)!==JSON.stringify(reconciledV3))writeNodeLoraV3Config(node,reconciledV3);
             const stored = loadEditorState(next.document_id), regionId = next.regions.some(region => region.id === stored.selectedRegionId) ? stored.selectedRegionId : next.regions[0]?.id ?? null;
             const transfer=transferredWindow.current;transferredWindow.current=null;if(transfer){stored.mode=transfer.mode;stored.windows[transfer.mode]=transfer.geometry;}
             const region = next.regions.find(item => item.id === regionId), layerId = region && geometryLayers(region).some(layer => layer.id === stored.selectedLayerId) ? stored.selectedLayerId : null;
@@ -177,14 +202,28 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
         : selectedOperations;
     const selectionBounds = activeOperations.length && documentValue ? boundsOfLayer(activeOperations, documentValue.canvas) : null;
 
-    const persist = useCallback((next: RegionalDocument, record = true, bindings = loraBindings) => {
+    const persist = useCallback((next: RegionalDocument, record = true, bindings = loraBindings, v3 = readNodeLoraV3Config(node), jobs = readRegionalJobs(node)) => {
         if (!node) return;
-        if (record && documentValue) { setHistory(items => [...items.slice(-99), createRegionalEditorSnapshot(documentValue, loraBindings)]); setFuture([]); }
+        if (record && documentValue) { const snapshot=createRegionalEditorSnapshot(documentValue,loraBindings,readNodeLoraV3Config(node),readRegionalJobs(node)); setHistory(items => [...items.slice(-99), snapshot]); setFuture([]); }
+        const jobChanges=regionalJobCandidates(node,next,jobs);
         const nextBindings = reconcileLoraBindings(bindings, new Set(next.regions.map(region => region.id)));
-        setDocumentValue(next); const widget = getWidget(node);
-        if (widget) { widget.value = JSON.stringify(next); widget.callback?.(widget.value); }
+        setDocumentValue(next);
+        const nextV3=reconcileRegionalLoraConfig(v3,next);
+        setLoraV3Config(nextV3);
+        const v3Widget=node.widgets?.find((item:any)=>item.name==="lora_v3_config_json");
+        // Publish the complete document/sidecar state before invoking callbacks.
+        if(v3Widget)v3Widget.value=JSON.stringify(nextV3);
+        const widget = getWidget(node);
+        if (widget) widget.value = JSON.stringify(next);
         setLoraBindings(nextBindings); const bindingsWidget = getBindingsWidget(node);
-        if (bindingsWidget) { bindingsWidget.value = JSON.stringify(nextBindings); bindingsWidget.callback?.(bindingsWidget.value); }
+        if (bindingsWidget) bindingsWidget.value = JSON.stringify(nextBindings);
+        for(const change of jobChanges)change.target.value=change.value;
+        widget?.callback?.(widget.value);
+        bindingsWidget?.callback?.(bindingsWidget.value);
+        v3Widget?.callback?.(v3Widget.value);
+        for(const change of jobChanges)change.target.callback?.(change.value);
+        setLutEasyConfig(readLutEasyConfig(node));
+        setDetailerEasyConfig(readDetailerEasyConfig(node,next.regions));
         node.graph?.setDirtyCanvas?.(true, true);
     }, [documentValue, loraBindings, node]);
     const mutate = useCallback((fn: (value: RegionalDocument) => void, record = true) => { if (!documentValue) return; const next = clone(documentValue); fn(next); persist(next, record); }, [documentValue, persist]);
@@ -213,8 +252,8 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
         mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId); if (region) region.geometry.push(...final); });
         cancelGesture();
     }, [cancelGesture, draft, mutate, selectedRegionId]);
-    const undo = useCallback(() => { if (!documentValue || !history.length) return; const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setFuture([createRegionalEditorSnapshot(documentValue, loraBindings), ...future]); persist(clone(previous.document), false, clone(previous.loraBindings)); }, [documentValue, future, history, loraBindings, persist]);
-    const redo = useCallback(() => { if (!documentValue || !future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory([...history, createRegionalEditorSnapshot(documentValue, loraBindings)]); persist(clone(next.document), false, clone(next.loraBindings)); }, [documentValue, future, history, loraBindings, persist]);
+    const undo = useCallback(() => { if (!documentValue || !history.length) return; const previous = history[history.length - 1]; setHistory(history.slice(0, -1)); setFuture([createRegionalEditorSnapshot(documentValue, loraBindings, readNodeLoraV3Config(node),readRegionalJobs(node)), ...future]); persist(clone(previous.document), false, clone(previous.loraBindings), restoreRegionalLoraConfig(readNodeLoraV3Config(node),documentValue,previous.document,previous.loraV3Config),restoreRegionalJobs(readRegionalJobs(node),documentValue,previous.document,previous.regionalJobs)); }, [documentValue, future, history, loraBindings, persist]);
+    const redo = useCallback(() => { if (!documentValue || !future.length) return; const next = future[0]; setFuture(future.slice(1)); setHistory([...history, createRegionalEditorSnapshot(documentValue, loraBindings, readNodeLoraV3Config(node),readRegionalJobs(node))]); persist(clone(next.document), false, clone(next.loraBindings), restoreRegionalLoraConfig(readNodeLoraV3Config(node),documentValue,next.document,next.loraV3Config),restoreRegionalJobs(readRegionalJobs(node),documentValue,next.document,next.regionalJobs)); }, [documentValue, future, history, loraBindings, persist]);
 
     const deleteLayer = (id: string) => { updateLayer(id, (_operations, region) => { region.geometry = region.geometry.filter(item => geometryLayerId(item) !== id); }); if (selectedLayerIds.includes(id)) replaceLayerSelection(null); };
     const toggleGeometry = (id: string) => mutate(value => { const region = value.regions.find(item => item.id === selectedRegionId), geometry = region?.geometry.find(item => item.id === id); if (geometry) geometry.enabled = geometry.enabled === false; });
@@ -376,8 +415,10 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
     const globalLutSettings=<LutEasyGlobalPicker node={node} config={lutEasyConfig} collectors={node?lutV3Catalog(node):[]} detectorCollectors={node?detailerV3Catalog(node):[]} onConfig={setLutEasyConfig}/>;
     const documentSettings=documentValue?<div className="bv-ui-stack" data-bv-regional-section="document"><div data-bv-regional-field="title"><TextField label="Title" value={String(primitiveDraft?.raw.title??documentValue.title)} error={draftIssue("title")} onValue={value=>updatePrimitiveDraft("title",value)}/></div><div data-bv-regional-field="canvas.width"><TextField label="Canvas width" value={String(primitiveDraft?.raw["canvas.width"]??documentValue.canvas.width)} error={draftIssue("canvas.width")} onValue={value=>updatePrimitiveDraft("canvas.width",value)}/></div><div data-bv-regional-field="canvas.height"><TextField label="Canvas height" value={String(primitiveDraft?.raw["canvas.height"]??documentValue.canvas.height)} error={draftIssue("canvas.height")} onValue={value=>updatePrimitiveDraft("canvas.height",value)}/></div></div>:null;
     const activeTools=(region:Region|null)=>documentValue?regionalActiveTools(documentValue,region,loraV3Config,loraBindings,lutEasyConfig):[];
-    const optionsPanel = (mode: "selection" | "region" | "document") => documentValue ? <OptionsPanel mode={mode} globalLoraApplyControl={<GlobalLoraApplyControl node={node} config={loraV3Config} onConfig={setLoraV3Config}/>} referenceEditor={<ReferenceToolsPanel node={node} value={documentValue.reference_images} onValue={images=>mutate(value=>{value.reference_images=images})}/>} referenceChoices={referenceChoices} lutEasyGlobalEditor={globalLutSettings} globalTools={activeTools(null)} regionTools={activeTools(selectedRegion)} onGlobalTools={ids=>mutate(value=>{value.tool_settings={lora:ids.includes("lora"),lut:ids.includes("lut"),references:ids.includes("references")};})} onRegionTools={ids=>updateRegion(region=>{region.tool_settings={lora:ids.includes("lora"),lut:ids.includes("lut"),references:ids.includes("references")};})} region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} loraBindings={loraBindings} loraStacks={loraStacks} loraV3GlobalEditor={<LoraV3ScopePicker {...v3ScopeProps} target={{scope:"global"}}/>} loraV3RegionEditor={selectedRegion?<LoraV3ScopePicker key={selectedRegion.id} {...v3ScopeProps} target={{scope:"region",document_id:documentValue.document_id,region_id:selectedRegion.id}}/>:null} lutEasyRegionEditor={selectedRegion?<LutEasyRegionPicker node={node} config={lutEasyConfig} regionId={selectedRegion.id} collectors={node?lutV3Catalog(node):[]} detectorCollectors={node?detailerV3Catalog(node):[]} onConfig={setLutEasyConfig}/>:null} detailerEasyRegionEditor={selectedRegion&&(selectedRegion.usage==="detailer"||selectedRegion.usage==="both")?<DetailerEasyRegionPicker node={node} config={detailerEasyConfig} regionId={selectedRegion.id} collectors={node?detailerV3Catalog(node):[]} onConfig={setDetailerEasyConfig}/>:null} onGlobalLoraStack={setGlobalLoraStack} onRegionLoraStack={setRegionLoraStack} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/> : null;
-    return <>{keptNodeIds.map(id=>{const kept=nodes.find(item=>keyFor(item)===id);return kept?<BvMinimizedWindow key={id} title={`Regional Editor · ${kept.title||"BV Regional Prompt"} · #${kept.id}`} onRestore={()=>navigateNode(id,false,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="BV Regional Editor" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} context={<BvWindowNavigator label="Regional prompt document" value={keyFor(node)} onNavigate={navigateNode} options={nodes.filter(item=>windowMenuVisible(item)).map(item => ({ value:keyFor(item), label: `${item.title || "BV Regional Prompt"} · #${item.id}` }))}/>} center={<EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 2, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/>} mode={viewState.mode} initialGeometry={windowGeometry} minSize={{width:780,height:520}} className="bv-regional-shell" bodyClassName="bv-regional-window-body" onModeChange={mode=>setViewState(current=>({...current,mode}))} onGeometry={geometry=>setViewState(current=>({...current,windows:{...current.windows,floating:geometry}}))} onClose={onClose} status={documentValue?<><span>{loraWarnings[0] ? `⚠ ${loraWarnings[0]}` : `✓ ${loraSummary}`}</span><span>{documentValue.regions.length} regions · layout adjusted for this session</span></>:null} actions={documentValue?<ResetLayoutButton storageId={`regional-editor:${documentValue.document_id}`} editorType="regional" signature="regional:v2:bv.regional.regions,bv.regional.selection,bv.regional.canvas,bv.regional.global,bv.regional.region,bv.regional.document" onClick={() => setDockResetSignal(value => value + 1)}/>:null}>
+    const assistTools=(ids:string[])=>[...ids,...(assist.config.enabled?["assist"]:[])];
+    const toggleAssistTools=(ids:string[],region:boolean)=>{assist.onConfig({...assist.config,enabled:ids.includes("assist")});const next=ids.filter(id=>id!=="assist"),previous=activeTools(region?selectedRegion:null);if(JSON.stringify(next)===JSON.stringify(previous))return;const settings={lora:next.includes("lora"),lut:next.includes("lut"),references:next.includes("references")};if(region)updateRegion(item=>{item.tool_settings=settings;});else mutate(value=>{value.tool_settings=settings;});};
+    const optionsPanel = (mode: "selection" | "region" | "document") => documentValue ? <OptionsPanel mode={mode} assistEditor={<PromptAssistPanel {...assist}/> } globalLoraApplyControl={<GlobalLoraApplyControl node={node} config={loraV3Config} onConfig={setLoraV3Config}/>} referenceEditor={<ReferenceToolsPanel node={node} value={documentValue.reference_images} onValue={images=>mutate(value=>{value.reference_images=images})}/>} referenceChoices={referenceChoices} lutEasyGlobalEditor={globalLutSettings} globalTools={assistTools(activeTools(null))} regionTools={assistTools(activeTools(selectedRegion))} onGlobalTools={ids=>toggleAssistTools(ids,false)} onRegionTools={ids=>toggleAssistTools(ids,true)} region={selectedRegion} layer={selectedLayer} bounds={selectionBounds} canvas={documentValue.canvas} automaticRegionColor={selectedRegion ? automaticRegionColor(documentValue.regions.indexOf(selectedRegion)) : null} globalPrompts={documentValue.prompts.global} backgroundPrompts={documentValue.prompts.background} negativeMode={documentValue.negative_mode} promptSections={viewState.promptSections} loraBindings={loraBindings} loraStacks={loraStacks} loraV3GlobalEditor={<LoraV3ScopePicker {...v3ScopeProps} target={{scope:"global"}}/>} loraV3RegionEditor={selectedRegion?<LoraV3ScopePicker key={selectedRegion.id} {...v3ScopeProps} target={{scope:"region",document_id:documentValue.document_id,region_id:selectedRegion.id}}/>:null} lutEasyRegionEditor={selectedRegion?<LutEasyRegionPicker node={node} config={lutEasyConfig} regionId={selectedRegion.id} collectors={node?lutV3Catalog(node):[]} detectorCollectors={node?detailerV3Catalog(node):[]} onConfig={setLutEasyConfig}/>:null} detailerEasyRegionEditor={selectedRegion&&(selectedRegion.usage==="detailer"||selectedRegion.usage==="both")?<DetailerEasyRegionPicker node={node} config={detailerEasyConfig} regionId={selectedRegion.id} collectors={node?detailerV3Catalog(node):[]} onConfig={setDetailerEasyConfig}/>:null} onGlobalLoraStack={setGlobalLoraStack} onRegionLoraStack={setRegionLoraStack} onPromptSection={(section, open) => setViewState(current => ({ ...current, promptSections: { ...current.promptSections, [section]: open } }))} onNegativeMode={negativeMode => mutate(value => { value.negative_mode = negativeMode; })} onGlobalPrompts={prompts => mutate(value => { value.prompts.global = prompts; })} onBackgroundPrompts={prompts => mutate(value => { value.prompts.background = prompts; })} onRegion={updateRegion} onLayerBounds={bounds => selectedLayerId && updateLayer(selectedLayerId, (operations, region) => { const replacements = new Map(setLayerBounds(operations, bounds, documentValue.canvas).map(item => [item.id, item])); region.geometry = region.geometry.map(item => replacements.get(item.id) ?? item); })} onBrushSetting={(field, setting) => selectedLayerId && updateLayer(selectedLayerId, operations => operations.forEach(item => { if (item.type === "brush_stroke") Object.assign(item, { [field]: setting }); }))}/> : null;
+    return <PromptAssistContext.Provider value={{node,active:open,documentId:documentValue?.document_id}}><>{keptNodeIds.map(id=>{const kept=nodes.find(item=>keyFor(item)===id);return kept?<BvMinimizedWindow key={id} title={`Regional Editor · ${kept.title||"BV Regional Prompt"} · #${kept.id}`} onRestore={()=>navigateNode(id,false,false)} onClose={()=>setKeptNodeIds(ids=>ids.filter(value=>value!==id))}/>:null})}<BvManagedWindow open={open} activationToken={activationToken} title="BV Regional Editor" menuVisible={menuVisible} onMenuVisible={visible=>setWindowMenuVisible(node,visible)} context={<BvWindowNavigator label="Regional prompt document" value={keyFor(node)} onNavigate={navigateNode} options={nodes.filter(item=>windowMenuVisible(item)).map(item => ({ value:keyFor(item), label: `${item.title || "BV Regional Prompt"} · #${item.id}` }))}/>} center={<EditorMenus openMenu={viewState.openMenu} onOpenMenu={updateOpenMenu} displayOpacity={displayOpacity} backgroundOpacity={backgroundOpacity} isolate={isolate} binaryMaskPreview={viewState.binaryMaskPreview} hasSelection={!!selectedLayerId} onDisplayOpacity={setDisplayOpacity} onBackgroundOpacity={setBackgroundOpacity} onToggleIsolate={() => setIsolate(value => !value)} onToggleBinaryMaskPreview={() => { cancelGesture(); setViewState(current => ({ ...current, binaryMaskPreview: !current.binaryMaskPreview })); }} onExportDocument={() => documentValue && downloadJson(`${documentValue.title || "bv-regional"}.json`, documentValue)} onExportRegions={() => documentValue && downloadJson(`${documentValue.title || "bv-regions"}.regions.json`, { schema: "bv.regions", version: 2, canvas: documentValue.canvas, regions: documentValue.regions })} onImportDocument={importDocument} onImportRegions={importRegions} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} canvas={documentValue?.canvas ?? { width: 1024, height: 1024 }} onCanvas={canvas => mutate(value => { value.canvas = canvas; })}/>} mode={viewState.mode} initialGeometry={windowGeometry} minSize={{width:780,height:520}} className="bv-regional-shell" bodyClassName="bv-regional-window-body" onModeChange={mode=>setViewState(current=>({...current,mode}))} onGeometry={geometry=>setViewState(current=>({...current,windows:{...current.windows,floating:geometry}}))} onClose={onClose} status={documentValue?<><span>{loraWarnings[0] ? `⚠ ${loraWarnings[0]}` : `✓ ${loraSummary}`}</span><span>{documentValue.regions.length} regions · layout adjusted for this session</span></>:null} actions={documentValue?<ResetLayoutButton storageId={`regional-editor:${documentValue.document_id}`} editorType="regional" signature="regional:v2:bv.regional.regions,bv.regional.selection,bv.regional.canvas,bv.regional.global,bv.regional.region,bv.regional.document" onClick={() => setDockResetSignal(value => value + 1)}/>:null}>
         {error ? <div className="bv-regional-error">{error}</div> : documentValue && <>
             <main className="bv-regional-dock-host">
               <BvDockLayout storageId={`regional-editor:${documentValue.document_id}`} resetSignal={dockResetSignal} defaultModel={{ global:{ tabEnableClose:false, tabEnablePopout:false, tabEnablePopoutIcon:false, tabEnablePopoutFloatIcon:true, tabSetMinWidth:180, tabSetMinHeight:120 }, borders:[], layout:{ type:"row", children:[
@@ -405,5 +446,5 @@ export default function RegionalEditor({ open, activationToken=0, activityScope,
               ]}/>
             </main>
         </>}
-    </BvManagedWindow>{destructive.dialog}</>;
+    </BvManagedWindow>{destructive.dialog}</></PromptAssistContext.Provider>;
 }
